@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Signoff PL tests</title>
+<style>
+  body { font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; margin: 32px; background: #f5f5f7; color: #1d1d1f; }
+  .pass { color: #248a3d; } .fail { color: #d70015; font-weight: 600; }
+  #summary { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+  pre { margin: 2px 0 8px 18px; color: #515154; }
+</style>
+</head>
+<body>
+<div id="summary">Running…</div>
+<div id="out"></div>
+<script>
+// Load fresh on every run, so a browser cache never tests old code.
+['config', 'vendor/model', 'vendor/github', 'pl', 'reader', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
+</script>
+<script>
+/* Unit tests for the PL model and the summary reader, against a fake GitHub API.
+   Open this file over http; the title shows PASS or FAIL. */
+(async function () {
+  var M = Signoff.model, P = Signoff.pl, results = [];
+  function ok(cond, name, detail) { results.push({ ok: !!cond, name: name, detail: detail }); }
+  function eq(a, b, name) { ok(JSON.stringify(a) === JSON.stringify(b), name, 'got ' + JSON.stringify(a) + ', want ' + JSON.stringify(b)); }
+  function at(s) { return '2099-01-01T' + s + 'Z'; }   // later than any node's creation stamp
+  function node(p, f) { var n = P.newNode(p, f, 'ann'); p.nodes[n.id] = n; return n; }
+
+  // ── Documents and merge ──
+  var proj = P.newProject({ name: 'Water Monitor', number: 'WM-1' }, 'ann');
+  ok(proj.id.indexOf('pl') === 0 && proj.meta.phase === 'EVT' && proj.slug === 'water-monitor', 'new project has a pl id, the first phase and a slug');
+  var top = node(proj, { kind: 'assembly', name: 'Top' });
+  var a = node(proj, { parent: top.id, name: 'Main board', source: 'ee', ref: { tool: 'ee', id: 'p1' }, massG: 50 });
+  var b = node(proj, { parent: top.id, name: 'Housing', source: 'me', ref: { tool: 'me', id: 'm1' }, massG: 400 });
+  ok(a.order === 1 && b.order === 2, 'new nodes go after their siblings');
+
+  var mine = JSON.parse(JSON.stringify(proj)), theirs = JSON.parse(JSON.stringify(proj));
+  mine.nodes[a.id] = Object.assign({}, a, { name: 'Main board rev B', updatedAt: at('10:00:00') });
+  theirs.nodes[b.id] = Object.assign({}, b, { deleted: true, updatedAt: at('10:00:01') });
+  var c = Object.assign({}, a, { id: 'nNEW', name: 'Display', updatedAt: at('10:00:02') }); theirs.nodes.nNEW = c;
+  var merged = P.merge(mine, theirs);
+  ok(merged.nodes[a.id].name === 'Main board rev B' && merged.nodes[b.id].deleted && merged.nodes.nNEW, 'merge keeps both sides’ node edits, deletions and additions');
+  var older = JSON.parse(JSON.stringify(mine)); older.nodes[a.id].name = 'Stale'; older.nodes[a.id].updatedAt = at('09:00:00');
+  eq(P.merge(older, mine).nodes[a.id].name, 'Main board rev B', 'the newer node record wins');
+  eq(Object.keys(merged).sort(), ['createdAt', 'createdBy', 'id', 'meta', 'nodes', 'schema', 'slug'], 'a merged document carries only PL fields');
+
+  // ── Tree: order, orphans, cycles, moves ──
+  var t = P.tree(proj);
+  eq(t.roots, [top.id], 'one root');
+  eq(t.children[top.id], [a.id, b.id], 'children in order');
+  eq(t.depth[a.id], 1, 'depth');
+  var orph = JSON.parse(JSON.stringify(proj)); orph.nodes[top.id].deleted = true;
+  var to = P.tree(orph);
+  ok(to.roots.length === 2 && to.flags[a.id] === 'orphan' && to.flags[b.id] === 'orphan', 'children of a deleted assembly move to the top, flagged');
+  var cyc = JSON.parse(JSON.stringify(proj));
+  var x = node(cyc, { kind: 'assembly', name: 'X' }), y = node(cyc, { kind: 'assembly', name: 'Y', parent: x.id });
+  cyc.nodes[x.id].parent = y.id;   // two merged moves made X and Y each other's parent
+  var tc = P.tree(cyc), cut = [x.id, y.id].sort()[0], other = cut === x.id ? y.id : x.id;
+  ok(tc.flags[cut] === 'cycle' && tc.roots.indexOf(cut) >= 0 && tc.parent[other] === cut, 'a cycle is broken at its lowest id', JSON.stringify(tc));
+  ok(P.flatten(tc).length === P.liveNodes(cyc).length, 'every live node appears once after breaking a cycle');
+  var self = JSON.parse(JSON.stringify(proj)); self.nodes[a.id].parent = a.id;
+  ok(P.tree(self).flags[a.id] === 'cycle', 'a node that is its own parent is flagged');
+  ok(!P.canMove(t, top.id, a.id) && !P.canMove(t, top.id, top.id) && P.canMove(t, a.id, '') && P.canMove(t, b.id, top.id), 'a node can’t move under itself or its descendants');
+  eq(P.path(t, a.id).map(function (n) { return n.name; }), ['Top'], 'path to a node');
+
+  // ── Part status and roll-up ──
+  function summary(total, reviewed, open, stage, list) {
+    return { v: 1, tool: 'ee', name: 'D', stage: stage || 'Layout', total: total, reviewed: reviewed, pct: Math.round(100 * reviewed / total),
+      checklists: {}, issues: { open: open, fixed: 1, waived: 0 }, open: list, reqs: null, at: at('08:00:00'), by: 'bob' };
+  }
+  var index = { entries: {
+    'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: summary(100, 50, { critical: 1, major: 0, minor: 2 }, 'Layout',
+      [{ id: 'i1', severity: 'minor', text: 'm' }, { id: 'i2', severity: 'critical', text: 'c' }]) },
+    'me:m1': { tool: 'me', id: 'm1', name: 'Housing', summary: summary(300, 0, { critical: 0, major: 1, minor: 0 }, 'Prototype (EVT)') }
+  }, errors: [] };
+  var r = P.rollup(proj, index);
+  eq([r[''].total, r[''].reviewed, r[''].pct], [400, 50, 13], 'progress is reviewed over total checks across designs');
+  eq(r[''].open, { critical: 1, major: 1, minor: 2 }, 'open issues add up by severity');
+  eq(r[top.id].openTotal, 4, 'an assembly rolls up its Parts');
+  eq(r[a.id].pct, 50, 'a Part shows its own design');
+  eq(r[''].massG, 450, 'mass adds up over Parts that have one');
+  eq(Object.keys(r[''].stages).sort(), ['ee:Layout', 'me:Prototype (EVT)'], 'stages are kept per tool, not mapped');
+
+  var p2 = JSON.parse(JSON.stringify(proj));
+  var twin = node(p2, { parent: top.id, name: 'Main board (second)', source: 'ee', ref: { tool: 'ee', id: 'p1' }, qty: 2, massG: 50 });
+  var r2 = P.rollup(p2, index);
+  ok(r2[''].total === 400 && r2[''].designs === 2 && r2[''].massG === 550, 'a design used twice counts once; mass uses quantity');
+  var bought = node(p2, { parent: top.id, name: 'Battery', source: 'purchased' });
+  var fw = node(p2, { parent: top.id, name: 'Firmware', source: 'fw' });
+  var loose = node(p2, { parent: top.id, name: 'Unlinked board', source: 'ee' });
+  var gone = node(p2, { parent: top.id, name: 'Moved away', source: 'ee', ref: { tool: 'ee', id: 'pGONE' } });
+  var r3 = P.rollup(p2, index);
+  ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].unlinked === 1 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
+    'purchased, firmware, unlinked and missing Parts are counted but not in progress', JSON.stringify(r3['']));
+  eq(P.partStatus(p2.nodes[gone.id], index).state, 'notfound', 'a link to a project no repo holds is not found');
+  eq(P.partStatus(p2.nodes[gone.id], { entries: {}, errors: [{ tool: 'ee' }] }).state, 'error', 'a link whose tool failed to read is an error, not missing');
+  var noSum = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: null } }, errors: [] };
+  eq(P.partStatus(proj.nodes[a.id], noSum).state, 'nosummary', 'a project file without a summary is “not summarized yet”');
+  ok(P.rollup(proj, noSum)[''].total === 0 && P.rollup(proj, noSum)[''].attention === 2, '…and isn’t counted as 0% reviewed');
+
+  var iss = P.issues(p2, index);
+  eq(iss.map(function (i) { return i.id; }), ['i2', 'i1'], 'issues are listed worst first, a shared design once');
+  ok(iss[0].node.id === a.id && iss[0].projectId === 'p1', 'each issue knows its Part and design');
+  eq(P.unlistedIssues(proj, index), 1, 'issues from a summary without a list are counted as unlisted');
+
+  // ── Reader ──
+  var hub = new FakeHub();
+  function file(id, name, sum) { var d = { id: id, meta: { name: name, board: 'B-' + id, revision: 'A', stage: 'Layout' }, items: {} }; if (sum) d.summary = sum; return M.stableStringify(d); }
+  hub.makeRepo('own/ee_design_review_data', { 'projects/p1.json': file('p1', 'Main', summary(100, 50, { critical: 0, major: 0, minor: 0 })), 'users.json': '{}' }, ['own']);
+  hub.makeRepo('own/review-ee-sensor', { 'projects/p2.json': file('p2', 'Sensor', null) }, ['own']);
+  hub.makeRepo('own/review-me-housing', { 'projects/m1.json': file('m1', 'Housing', summary(300, 30, { critical: 0, major: 0, minor: 0 })) }, ['own']);
+  hub.makeRepo('own/unrelated', { 'projects/z.json': file('z', 'Not a review', null) }, ['own']);
+  var tools = Signoff.config.tools;
+  var reader = new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: hub.fetchFor('tok-own') });
+  var ix = await reader.refresh(null);
+  eq(Object.keys(ix.entries).sort(), ['ee:p1', 'ee:p2', 'me:m1'], 'reads the data repo and prefixed repos of each tool, nothing else');
+  ok(ix.entries['ee:p2'].summary === null && ix.entries['ee:p2'].number === 'B-p2' && ix.entries['ee:p1'].repo === 'own/ee_design_review_data', 'keeps meta, the summary (or null) and the repo');
+  eq(ix.errors, [], 'a tool without a data repo yet is not an error');
+  ok(!JSON.stringify(ix).includes('"items"'), 'only meta and summary are kept');
+
+  var before = hub.calls.length;
+  var ix2 = await reader.refresh(ix);
+  ok(!hub.calls.slice(before).some(function (c) { return /\/git\/blobs\//.test(c); }), 'unchanged files aren’t downloaded again');
+  ok(Object.keys(ix2.entries).length === 3, '…and are still in the index');
+
+  // p1 is shared with a contractor: it moves out of the data repo into its own repo.
+  hub.makeRepo('own/review-ee-main', { 'projects/p1.json': file('p1', 'Main', summary(100, 60, { critical: 0, major: 0, minor: 0 })) }, ['own']);
+  var ix3 = await reader.refresh(ix2);
+  ok(ix3.entries['ee:p1'].repo === 'own/review-ee-main' && ix3.entries['ee:p1'].summary.reviewed === 60, 'a project in both repos (move in progress) resolves to the shared copy');
+  hub.push('own/ee_design_review_data', { 'users.json': '{}' });
+  var ix4 = await reader.refresh(ix3);
+  ok(ix4.entries['ee:p1'].repo === 'own/review-ee-main', 'after the move a Part still finds its design');
+  eq(P.partStatus(proj.nodes[a.id], ix4).state, 'ok', '…and its status is ok');
+
+  hub.repos['own/review-me-housing'].collaborators = [];   // token loses access
+  var ix5 = await reader.refresh(ix4);
+  ok(!ix5.entries['me:m1'] && ix5.errors.length === 0, 'a repo the token can no longer list drops out quietly');
+  eq(P.partStatus(proj.nodes[b.id], ix5).state, 'notfound', '…and its Part shows as not found');
+  hub.makeRepo('own/review-ee-broken', { 'projects/p9.json': '{ not json' }, ['own']);
+  var ix6 = await reader.refresh(ix5);
+  ok(ix6.errors.some(function (e) { return e.repo === 'own/review-ee-broken'; }) && ix6.entries['ee:p1'], 'an unreadable file is reported and the rest still load');
+  eq(Signoff.plReader.designs(ix6, 'ee').map(function (d) { return d.id; }).sort(), ['p1', 'p2'], 'designs() lists one tool’s projects');
+
+  // ── PL's own documents through the engine store ──
+  hub.makeRepo('own/signoff_pl_data', { 'README.md': '#' }, ['own']);
+  var plStore = function () { return new Signoff.GitHubStore({ owner: 'own', repo: 'signoff_pl_data', branch: 'main', dataPath: '', token: 'tok-own', merge: P.merge }, hub.fetchFor('tok-own')); };
+  var one = {}; one[proj.id] = proj;
+  var s1 = await plStore().sync(one, null, {}, {});
+  var onGit = JSON.parse(hub.files('own/signoff_pl_data')['projects/' + proj.id + '.json']);
+  ok(onGit.nodes[a.id] && !onGit.summary && !onGit.items, 'a PL project syncs through the engine store with PL’s merge');
+  var remoteEdit = JSON.parse(JSON.stringify(onGit)); remoteEdit.nodes[b.id].name = 'Housing (remote)'; remoteEdit.nodes[b.id].updatedAt = at('12:00:00');
+  var f = hub.files('own/signoff_pl_data'); f['projects/' + proj.id + '.json'] = M.stableStringify(remoteEdit); hub.push('own/signoff_pl_data', f);
+  var localEdit = JSON.parse(JSON.stringify(s1.projects[proj.id])); localEdit.nodes[a.id].name = 'Main (local)'; localEdit.nodes[a.id].updatedAt = at('12:00:01');
+  var one2 = {}; one2[proj.id] = localEdit;
+  await plStore().sync(one2, null, s1.cache, {});
+  var both = JSON.parse(hub.files('own/signoff_pl_data')['projects/' + proj.id + '.json']);
+  ok(both.nodes[a.id].name === 'Main (local)' && both.nodes[b.id].name === 'Housing (remote)', 'two people’s edits to different nodes both survive a sync');
+
+  // ── Demo ──
+  var demo = Signoff.plDemo.build();
+  var dr = P.rollup(demo.project, demo.index);
+  ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs >= 3 && dr[''].attention === 1 && dr[''].purchased === 2,
+    'the demo builds a product with linked, unsummarized and purchased Parts', JSON.stringify(dr['']));
+
+  var failed = results.filter(function (r) { return !r.ok; });
+  document.getElementById('out').innerHTML = results.map(function (r) {
+    return '<div class="' + (r.ok ? 'pass' : 'fail') + '">' + (r.ok ? '✓ ' : '✗ ') + r.name + '</div>' + (r.ok ? '' : '<pre>' + (r.detail || '') + '</pre>');
+  }).join('');
+  document.getElementById('summary').textContent = (failed.length ? 'FAIL: ' + failed.length + ' of ' : 'PASS: all ') + results.length + ' tests';
+  document.title = failed.length ? 'FAIL' : 'PASS';
+})().catch(function (e) {
+  document.getElementById('summary').textContent = 'ERROR: ' + e.message;
+  document.title = 'ERROR';
+  console.error(e);
+});
+</script>
+</body>
+</html>
