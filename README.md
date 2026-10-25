@@ -1,5 +1,7 @@
 # Signoff PL — project lead
 
+**User guide:** [docs/guide.md](docs/guide.md) (a customer-shareable overview, then an FTE section). **Roadmap:** [docs/roadmap.md](docs/roadmap.md).
+
 Signoff PL is the product-level tool of the Dovetail Signoff suite. A **PL project** is a whole
 product. It is structured as a tree of **assemblies** whose leaves are **Parts**:
 
@@ -68,8 +70,9 @@ Nothing is read from GitHub.
   - move a node by changing **Inside**. A node can't be moved under itself.
 
   Deleting an assembly deletes what's inside it. Linked reviews are never touched.
-- **Issues:** every open issue across the linked designs, worst first, with its Part and a link
-  to the design. A design used by several Parts is listed once.
+- **Issues:** every open issue across the linked designs, worst first, with its Part. Clicking
+  an issue opens that exact check in its tool (`?project=<id>&item=<check>`). A design used by
+  several Parts is listed once.
 
 ### How a Part stands
 
@@ -155,9 +158,5 @@ path. Firmware Parts then link like EE and ME ones.
 
 ## Roadmap
 
-1. **Done:** product tree, Parts linked to EE and ME reviews, roll-up, combined issue list.
-2. Product requirements allocated down to EE and ME requirements, with verification rolled
-   back up.
-3. Interfaces between Parts (board to enclosure, display to firmware). EVT, DVT and PVT gates
-   whose criteria come from the Part summaries. A project-level checklist covering integration,
-   certification, labeling and packaging.
+Phases 0 and 1 are done. Requirements allocation, interfaces, EVT/DVT/PVT gates and Signoff FW
+are next; see [docs/roadmap.md](docs/roadmap.md).
