@@ -179,7 +179,7 @@
     if (DEMO) { dot.dataset.tone = 'idle'; title.textContent = 'Demo mode'; sub.textContent = 'Changes stay in this browser'; return; }
     if (state === 'busy' || syncing) { dot.dataset.tone = 'busy'; title.textContent = 'Syncing…'; sub.textContent = settings.owner; return; }
     if (!getToken()) { dot.dataset.tone = n ? 'warn' : 'idle'; title.textContent = n ? plural(n, 'unsynced change') : 'Local only'; sub.textContent = 'Set up Git sync'; return; }
-    if (lastSync && lastSync.dataRepo === 'missing') { dot.dataset.tone = 'warn'; title.textContent = n ? plural(n, 'change') + ' kept here' : 'Designs read'; sub.textContent = settings.dataRepo + ' doesn’t exist yet'; return; }
+    if (lastSync && lastSync.dataRepo === 'missing') { dot.dataset.tone = 'warn'; title.textContent = n ? plural(n, 'change') + ' kept here' : 'Designs read'; sub.textContent = settings.dataRepo + ' not found, or your token can’t open it'; return; }
     if (n) { dot.dataset.tone = 'warn'; title.textContent = plural(n, 'unsynced change'); sub.textContent = 'Click to sync'; return; }
     var errs = lastSync && lastSync.errors && lastSync.errors.length;
     dot.dataset.tone = errs ? 'warn' : lastSync ? 'ok' : 'idle';
@@ -517,8 +517,8 @@
   }
 
   // ── Sync ─────────────────────────────────────────────────
-  // 1. PL projects: the data repo, merged with PL's merge. A missing repo isn't an error yet:
-  //    projects stay in this browser. 2. Designs: read again from EE and ME.
+  // 1. PL projects: the data repo, merged with PL's merge. A 404 (no repo, or the token can't open
+  //    it) isn't an error yet: projects stay in this browser. 2. Designs: read again from EE and ME.
   function sync() {
     if (DEMO) { toast('Demo mode keeps everything in this browser'); return; }
     if (syncing) return;
@@ -555,7 +555,7 @@
         save('cache', cache); save('index', index); save('lastSync', lastSync); persist();
         if (!projects[ui.slug]) ui.slug = firstSlug();
         render();
-        if (dataState === 'missing') toast(settings.dataRepo + ' doesn’t exist yet: PL projects stay in this browser. Designs were read.');
+        if (dataState === 'missing') toast(settings.owner + '/' + settings.dataRepo + ' not found, or your token can’t open it: PL projects stay in this browser. Designs were read.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
       })

@@ -33,8 +33,9 @@ same origin, so signing in once covers them all. The token must reach:
 - every `review-ee-…` and `review-me-…` repo
 
 **Sync** (or Ctrl+S) does two things:
-1. It pulls, merges and pushes the PL projects in the data repo. If that repo doesn't exist yet,
-   projects stay in this browser and the sync pill says so.
+1. It pulls, merges and pushes the PL projects in the data repo. If GitHub returns 404
+   (the repo is missing, or the token can't open it), projects stay in this browser and the sync
+   pill says so.
 2. It reads the designs again from Signoff EE and ME:
    - It lists each tool's data repo and every repo starting with its prefix (`config.tools`).
    - It keeps only `meta` and `summary` from each project file.
