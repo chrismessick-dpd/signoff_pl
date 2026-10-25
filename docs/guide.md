@@ -44,6 +44,8 @@ browser.
 
 PL is FTE-only, so there are no shared `review-pl-…` repos. Adding an FTE in Signoff EE or ME
 invites them to both PL repos, because the PL repos are listed in each tool's `repos.suite`.
+Anyone else who opens PL (a contractor, say) sees a page saying it's for FTEs, and none of the
+projects, even ones an FTE left in that browser.
 
 ### Architecture
 

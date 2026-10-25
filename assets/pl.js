@@ -269,10 +269,36 @@
     return n;
   }
 
+  // ── Access ───────────────────────────────────────────────
+  // PL is for FTEs: anyone whose token opens the PL data repo. The browser keeps a working copy
+  // of the projects, so it's shown only while the token in use is the one a sync last confirmed
+  // as an FTE's, against the data repo in Settings.
+  // access: { login, tag: tokenTag(token), repo: 'owner/name', state: 'fte' | 'none' | '' (not checked) }.
+
+  // A short fingerprint of the token (FNV-1a), so a token changed in another Signoff tool is
+  // noticed before the next sync. It can't be turned back into the token.
+  function tokenTag(token) {
+    var h = 0x811c9dc5;
+    token = String(token || '');
+    for (var i = 0; i < token.length; i++) { h ^= token.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return ('0000000' + h.toString(16)).slice(-8);
+  }
+  function canSee(access, token, repo) {
+    return !!token && !!access && access.state === 'fte' && access.tag === tokenTag(token) && access.repo === repo;
+  }
+  // The data repo said no (404): drop the projects it already holds, and keep unsynced ones
+  // (hidden) so an FTE's next sync from this browser still pushes them.
+  function lockOut(projects, dirty) {
+    var out = {};
+    Object.keys(projects || {}).forEach(function (k) { if (dirty && dirty[projects[k].id]) out[k] = projects[k]; });
+    return out;
+  }
+
   S.pl = {
     SEVERITIES: SEVERITIES, sources: sources, toolById: toolById,
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path,
-    refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues
+    refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
+    tokenTag: tokenTag, canSee: canSee, lockOut: lockOut
   };
 })(window.Signoff = window.Signoff || {});

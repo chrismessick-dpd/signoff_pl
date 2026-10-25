@@ -36,8 +36,10 @@ This repo is public: no client data, tokens or commit messages naming clients.
 
 Notes on behavior:
 - **Merging.** PL's merge is passed to the engine's `GitHubStore` as `cfg.merge`.
-- **Missing data repo.** If `signoff_pl_data` is missing, projects stay in the browser and
-  designs are still read.
+- **FTE lockout.** Projects show only while `P.canSee(access, token, repo)`: a sync confirmed
+  this token (by fingerprint) can open the data repo set in Settings. A 404 there locks PL,
+  drops the synced projects from the browser (`P.lockOut`) and keeps unsynced ones hidden. No
+  designs are read for non-FTEs. There's no local-only mode.
 - **Roll-up rules:**
   - A design used by several Parts counts once.
   - Purchased and firmware Parts are left out of progress.
@@ -48,7 +50,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (50 tests as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (58 tests as of
    2026-10-25).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the

@@ -32,11 +32,20 @@ same origin, so signing in once covers them all. The token must reach:
 - Signoff EE's and ME's data repos
 - every `review-ee-…` and `review-me-…` repo
 
-**Sync** (or Ctrl+S) does two things:
-1. It pulls, merges and pushes the PL projects in the data repo. If GitHub returns 404
-   (the repo is missing, or the token can't open it), projects stay in this browser and the sync
-   pill says so.
-2. It reads the designs again from Signoff EE and ME:
+**Who sees what.** An FTE is anyone whose token can open the PL data repo. PL shows projects only
+while a sync has confirmed that for the token in use:
+- PL remembers the login and a fingerprint of the token (`access` in its storage). A token
+  changed in any Signoff tool, or a different data repo in Settings, hides the projects until
+  the next sync confirms it.
+- If the data repo returns 404, PL locks: it says who's signed in and how to get FTE access. It
+  drops the projects the repo already holds and keeps unsynced ones, hidden, so an FTE's next
+  sync from that browser pushes them. Designs aren't read.
+- Signed out, PL shows nothing either.
+
+**Sync** (or Ctrl+S) does three things:
+1. It reads who the token belongs to (`/user`).
+2. It pulls, merges and pushes the PL projects in the data repo. A 404 locks PL, as above.
+3. For FTEs, it reads the designs again from Signoff EE and ME:
    - It lists each tool's data repo and every repo starting with its prefix (`config.tools`).
    - It keeps only `meta` and `summary` from each project file.
    - It downloads only files whose blob sha changed.

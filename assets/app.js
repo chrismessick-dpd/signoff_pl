@@ -44,7 +44,8 @@
   var dirty = load('dirty', {});          // project id -> time of last unsynced edit
   var cache = load('cache', {});          // blob shas in the PL data repo as of the last sync
   var index = load('index', null);        // designs read from EE/ME (reader.js)
-  var lastSync = load('lastSync', null);  // { at, errors, dataRepo: 'ok' | 'missing' }
+  var lastSync = load('lastSync', null);  // { at, errors }
+  var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
   var ui = Object.assign({ slug: '', view: 'overview', closed: {} }, load('ui', {}));
   var syncing = false;
 
@@ -61,6 +62,10 @@
   function persist() { save('projects', projects); save('dirty', dirty); }
   function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed }); }
   function me() { return settings.user || 'Anonymous'; }
+  // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
+  function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
+  function allowed() { return DEMO || P.canSee(access, getToken(), dataRepo()); }
+  function denied() { var t = getToken(); return !!t && access.state === 'none' && access.tag === P.tokenTag(t) && access.repo === dataRepo(); }
 
   // ── Small helpers ────────────────────────────────────────
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -133,7 +138,7 @@
   }
 
   // ── Current project ──────────────────────────────────────
-  function current() { return projects[ui.slug] || null; }
+  function current() { return allowed() ? projects[ui.slug] || null : null; }
   function touch(p) {
     p.meta.updatedAt = M.now(); p.meta.updatedBy = me();
     dirty[p.id] = M.now();
@@ -149,7 +154,7 @@
   // ── Sidebar ──────────────────────────────────────────────
   function renderSidebar() {
     var q = ($('#project-search').value || '').toLowerCase();
-    var list = Object.keys(projects).map(function (k) { return projects[k]; })
+    var list = (allowed() ? Object.keys(projects) : []).map(function (k) { return projects[k]; })
       .filter(function (p) { return !q || [p.meta.name, p.meta.client, p.meta.number].join(' ').toLowerCase().indexOf(q) >= 0; })
       .sort(function (a, b) { return (b.meta.updatedAt || '').localeCompare(a.meta.updatedAt || ''); });
     var html = list.filter(function (p) { return !p.meta.archived; }).map(function (p) {
@@ -158,13 +163,14 @@
         ring(r.pct, 26, 3.5) + '<span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span>' +
         '<span class="proj-sub">' + esc([p.meta.number, p.meta.phase].filter(Boolean).join(' · ')) + '</span></span>' +
         (dirty[p.id] ? '<span class="proj-dirty" title="Not synced yet"></span>' : '') + '</button>';
-    }).join('') || '<div class="side-empty">' + (q ? 'No matching projects.' : 'No projects yet.') + '</div>';
+    }).join('') || (allowed() ? '<div class="side-empty">' + (q ? 'No matching projects.' : 'No projects yet.') + '</div>' : '');
     var archived = list.filter(function (p) { return p.meta.archived; });
     if (archived.length) {
       html += '<div class="side-archived"><div class="side-head"><span class="side-label">Archived</span></div>' +
         archived.map(function (p) { return '<button class="proj" data-act="open-project" data-slug="' + esc(p.slug) + '"><span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span></span></button>'; }).join('') + '</div>';
     }
     $('#project-list').innerHTML = html;
+    $('.side-head [data-act="new-project"]').hidden = !allowed();
     if (DEMO) {
       document.querySelectorAll('#side-tools a.side-link').forEach(function (a) {
         var href = a.getAttribute('href');
@@ -178,8 +184,9 @@
     var n = Object.keys(dirty).length;
     if (DEMO) { dot.dataset.tone = 'idle'; title.textContent = 'Demo mode'; sub.textContent = 'Changes stay in this browser'; return; }
     if (state === 'busy' || syncing) { dot.dataset.tone = 'busy'; title.textContent = 'Syncing…'; sub.textContent = settings.owner; return; }
-    if (!getToken()) { dot.dataset.tone = n ? 'warn' : 'idle'; title.textContent = n ? plural(n, 'unsynced change') : 'Local only'; sub.textContent = 'Set up Git sync'; return; }
-    if (lastSync && lastSync.dataRepo === 'missing') { dot.dataset.tone = 'warn'; title.textContent = n ? plural(n, 'change') + ' kept here' : 'Designs read'; sub.textContent = settings.dataRepo + ' not found, or your token can’t open it'; return; }
+    if (!getToken()) { dot.dataset.tone = 'idle'; title.textContent = 'Signed out'; sub.textContent = 'Add your GitHub token'; return; }
+    if (denied()) { dot.dataset.tone = 'warn'; title.textContent = 'No access'; sub.textContent = '@' + access.login + ' isn’t an FTE'; return; }
+    if (!allowed()) { dot.dataset.tone = 'idle'; title.textContent = 'Not checked yet'; sub.textContent = 'Click to sync'; return; }
     if (n) { dot.dataset.tone = 'warn'; title.textContent = plural(n, 'unsynced change'); sub.textContent = 'Click to sync'; return; }
     var errs = lastSync && lastSync.errors && lastSync.errors.length;
     dot.dataset.tone = errs ? 'warn' : lastSync ? 'ok' : 'idle';
@@ -208,7 +215,7 @@
   function renderPage() {
     var p = current(), page = $('#page'), scroll = $('#main').scrollTop;
     renderToolbar();
-    if (!p) { page.innerHTML = emptyPage(); return; }
+    if (!p) { page.innerHTML = allowed() ? emptyPage() : lockedPage(); return; }
     if (ui.view === 'structure') page.innerHTML = structurePage(p);
     else if (ui.view === 'issues') page.innerHTML = issuesPage(p);
     else page.innerHTML = overviewPage(p);
@@ -223,6 +230,19 @@
         : 'Choose a project from the sidebar, or start a new one.') + '</p>' +
       '<button class="btn btn-primary" data-act="new-project">New project</button>' +
       (none && !DEMO ? ' <button class="btn" data-act="sync">Pull from GitHub</button>' : '') + '</div></div>';
+  }
+
+  // Shown instead of the projects until a sync confirms an FTE's token (see allowed()).
+  function lockedPage() {
+    var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
+    var head = !getToken() ? ['Sign in to Signoff PL', 'Signoff PL is for Dovetail FTEs. Add your GitHub token in Settings; PL shows the projects once it confirms the token can open ' + repo + '.']
+      : denied() ? ['Signoff PL is for Dovetail FTEs', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + '. An FTE adds you from People in Signoff EE. Accept GitHub’s invitation, then sync again.']
+      : ['Not checked yet', 'PL shows the projects once a sync confirms your token can open ' + repo + '.'];
+    return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
+      (getToken() ? '<button class="btn btn-primary" data-act="sync">' + (denied() ? 'Sync again' : 'Sync') + '</button> <button class="btn" data-act="settings">Settings</button>'
+        : '<button class="btn btn-primary" data-act="settings">Settings</button>') +
+      (denied() && kept ? '<p class="note" style="margin-top:16px">' + plural(kept, 'unsynced project') + ' from an earlier sign-in ' + (kept === 1 ? 'stays' : 'stay') + ' in this browser, hidden. ' + (kept === 1 ? 'It’s' : 'They’re') + ' pushed the next time an FTE syncs here.</p>' : '') +
+      '</div></div>';
   }
 
   function headBlock(p, eyebrow) {
@@ -517,19 +537,29 @@
   }
 
   // ── Sync ─────────────────────────────────────────────────
-  // 1. PL projects: the data repo, merged with PL's merge. A 404 (no repo, or the token can't open
-  //    it) isn't an error yet: projects stay in this browser. 2. Designs: read again from EE and ME.
+  // 1. Who's signed in: a new token or login hides the projects until this sync confirms it.
+  // 2. PL projects: the data repo, merged with PL's merge. A 404 means the token can't open it,
+  //    so this isn't an FTE: PL locks and drops the projects the repo holds (P.lockOut).
+  // 3. Designs: read again from EE and ME, for FTEs only.
   function sync() {
     if (DEMO) { toast('Demo mode keeps everything in this browser'); return; }
     if (syncing) return;
     if (!getToken()) { settingsSheet(); return; }
     syncing = true; renderSyncState('busy');
-    var token = getToken(), started = Object.assign({}, dirty), errors = [], dataState = 'ok', pushed = 0;
-    var byId = {}; Object.keys(projects).forEach(function (k) { byId[projects[k].id] = projects[k]; });
+    var token = getToken(), tag = P.tokenTag(token), signedIn = false, started = {}, errors = [], pushed = 0;
     var store = new S.GitHubStore({ owner: settings.owner, repo: settings.dataRepo, branch: settings.branch, dataPath: '', token: token, merge: P.merge });
-    var names = Object.keys(dirty).map(function (id) { return byId[id] ? byId[id].meta.name : id; });
-    store.sync(byId, null, cache, { message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' })
+    store.user()
+      .then(function (u) {
+        var login = String(u.login || '').toLowerCase();
+        signedIn = true;
+        if (access.tag !== tag || access.login !== login || access.repo !== dataRepo()) { access = { login: login, tag: tag, repo: dataRepo(), state: '' }; save('access', access); render(); }
+        started = Object.assign({}, dirty);
+        var byId = {}; Object.keys(projects).forEach(function (k) { byId[projects[k].id] = projects[k]; });
+        var names = Object.keys(dirty).map(function (id) { return byId[id] ? byId[id].meta.name : id; });
+        return store.sync(byId, null, cache, { message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' });
+      })
       .then(function (res) {
+        access.state = 'fte';
         pushed = res.pushed; cache = res.cache;
         var nowById = {}; Object.keys(projects).forEach(function (k) { nowById[projects[k].id] = projects[k]; });
         var next = {};
@@ -542,25 +572,29 @@
         projects = next;
         Object.keys(started).forEach(function (k) { if (dirty[k] === started[k]) delete dirty[k]; });
       }, function (err) {
-        if (err.status === 404) { dataState = 'missing'; return; }
-        errors.push({ repo: settings.dataRepo, message: err.message });
+        if (!signedIn) throw err;   // /user failed: the token itself doesn't work
+        if (err.status !== 404) { errors.push({ repo: settings.dataRepo, message: err.message }); return; }
+        access.state = 'none';
+        projects = P.lockOut(projects, dirty); cache = {}; index = null;
       })
       .then(function () {
+        save('access', access);
+        if (access.state !== 'fte') return;
         return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: token }).refresh(index)
           .then(function (ix) { index = ix; errors = errors.concat(ix.errors); });
       })
       .then(function () {
         syncing = false;
-        lastSync = { at: M.now(), errors: errors, dataRepo: dataState };
+        lastSync = { at: M.now(), errors: errors };
         save('cache', cache); save('index', index); save('lastSync', lastSync); persist();
         if (!projects[ui.slug]) ui.slug = firstSlug();
         render();
-        if (dataState === 'missing') toast(settings.owner + '/' + settings.dataRepo + ' not found, or your token can’t open it: PL projects stay in this browser. Designs were read.');
+        if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ': Signoff PL is for Dovetail FTEs.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
       })
       .catch(function (err) {
-        syncing = false; renderSyncState();
+        syncing = false; render();
         toast('Sync failed: ' + err.message);
       });
   }
@@ -597,6 +631,7 @@
   }
   if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', function () { applyTheme(settings.theme); });
   window.addEventListener('storage', function (e) {
+    if (e.key === TOKEN_KEY) { render(); return; }   // signed in or out in another Signoff tool
     var t = e.key === THEME_KEY && sharedSettings().theme;
     if (t && t !== settings.theme) { settings.theme = t; applyTheme(t); }
   });
@@ -615,6 +650,7 @@
     var el = e.target.closest('[data-act]');
     if (!el || el.closest('#sheet')) return;
     var act = el.dataset.act, id = el.dataset.id;
+    if (!allowed() && ['nav', 'theme', 'settings', 'sync'].indexOf(act) < 0) return;
     switch (act) {
       case 'nav': toggleSidebar(); break;
       case 'theme':
@@ -652,7 +688,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); sync(); return; }
     if (e.target.closest('input,textarea,select') || $('#sheet')) return;
     if (e.key === '[') toggleSidebar();
-    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); projectSheet(null); }
+    if (allowed() && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); projectSheet(null); }
   });
   function resetDemo() {
     Object.keys(localStorage).forEach(function (k) { if (k.indexOf(C.storage.demoNs) === 0) localStorage.removeItem(k); });

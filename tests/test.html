@@ -158,6 +158,32 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var both = JSON.parse(hub.files('own/signoff_pl_data')['projects/' + proj.id + '.json']);
   ok(both.nodes[a.id].name === 'Main (local)' && both.nodes[b.id].name === 'Housing (remote)', 'two people’s edits to different nodes both survive a sync');
 
+  // ── Access: PL is for FTEs ──
+  var tagOwn = P.tokenTag('tok-own'), tagCon = P.tokenTag('tok-con');
+  ok(/^[0-9a-f]{8}$/.test(tagOwn) && tagOwn === P.tokenTag('tok-own') && tagOwn !== tagCon, 'a token fingerprint is stable and differs between tokens');
+  var plRepo = 'own/signoff_pl_data', fte = { login: 'own', tag: tagOwn, repo: plRepo, state: 'fte' };
+  ok(P.canSee(fte, 'tok-own', plRepo), 'a token a sync confirmed as an FTE’s sees the projects');
+  ok(!P.canSee(fte, 'tok-con', plRepo), 'after a token change (another login) nothing shows until a sync confirms it');
+  ok(!P.canSee(fte, 'tok-own', 'con/my_own_repo'), '…nor after the data repo in Settings changes');
+  ok(!P.canSee(fte, '', plRepo) && !P.canSee({ login: 'own', tag: tagOwn, repo: plRepo, state: '' }, 'tok-own', plRepo) && !P.canSee({ login: 'con', tag: tagCon, repo: plRepo, state: 'none' }, 'tok-con', plRepo),
+    'signed out, not checked yet, or not an FTE: nothing shows');
+
+  // This browser holds the synced project and one not pushed yet; then a contractor signs in.
+  var unsynced = P.newProject({ name: 'Unsynced product' }, 'ann');
+  var browser = {}; browser[proj.slug] = JSON.parse(JSON.stringify(both)); browser[unsynced.slug] = unsynced;
+  var unsyncedEdits = {}; unsyncedEdits[unsynced.id] = M.now();
+  var browserById = {}; browserById[proj.id] = browser[proj.slug]; browserById[unsynced.id] = unsynced;
+  var conStore = new Signoff.GitHubStore({ owner: 'own', repo: 'signoff_pl_data', branch: 'main', dataPath: '', token: 'tok-con', merge: P.merge }, hub.fetchFor('tok-con'));
+  var denied = await conStore.sync(browserById, null, s1.cache, {}).then(function () { return null; }, function (e) { return e; });
+  ok(denied && denied.status === 404, 'a token that can’t open the PL data repo gets a 404 (a contractor isn’t an FTE)');
+  var kept = P.lockOut(browser, unsyncedEdits);
+  eq(Object.keys(kept), [unsynced.slug], 'locking drops the projects the repo holds and keeps unsynced ones');
+  var keptById = {}; keptById[unsynced.id] = kept[unsynced.slug];
+  var back = await plStore().sync(keptById, null, {}, {});
+  ok(back.projects[proj.id] && back.projects[unsynced.id] && hub.files('own/signoff_pl_data')['projects/' + unsynced.id + '.json'] &&
+    M.stableStringify(JSON.parse(hub.files('own/signoff_pl_data')['projects/' + proj.id + '.json'])) === M.stableStringify(both),
+    'an FTE’s next sync pushes the kept project, brings the dropped one back and leaves it untouched');
+
   // ── Demo ──
   var demo = Signoff.plDemo.build();
   var dr = P.rollup(demo.project, demo.index);
