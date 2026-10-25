@@ -171,6 +171,8 @@
     }
     $('#project-list').innerHTML = html;
     $('.side-head [data-act="new-project"]').hidden = !allowed();
+    // People & access lives in Signoff EE, whose list decides who's an FTE across the suite.
+    $('#people-link').hidden = DEMO || !allowed();
     if (DEMO) {
       document.querySelectorAll('#side-tools a.side-link').forEach(function (a) {
         var href = a.getAttribute('href');

@@ -275,14 +275,9 @@
   // as an FTE's, against the data repo in Settings.
   // access: { login, tag: tokenTag(token), repo: 'owner/name', state: 'fte' | 'none' | '' (not checked) }.
 
-  // A short fingerprint of the token (FNV-1a), so a token changed in another Signoff tool is
-  // noticed before the next sync. It can't be turned back into the token.
-  function tokenTag(token) {
-    var h = 0x811c9dc5;
-    token = String(token || '');
-    for (var i = 0; i < token.length; i++) { h ^= token.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-    return ('0000000' + h.toString(16)).slice(-8);
-  }
+  // tokenTag is the engine's token fingerprint (model.js), so a token changed in another Signoff
+  // tool is noticed before the next sync.
+  var tokenTag = M.tokenTag;
   function canSee(access, token, repo) {
     return !!token && !!access && access.state === 'fte' && access.tag === tokenTag(token) && access.repo === repo;
   }
