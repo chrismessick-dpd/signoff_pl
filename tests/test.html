@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'reader', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'pl', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -161,8 +161,34 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   // ── Demo ──
   var demo = Signoff.plDemo.build();
   var dr = P.rollup(demo.project, demo.index);
-  ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs >= 3 && dr[''].attention === 1 && dr[''].purchased === 2,
-    'the demo builds a product with linked, unsummarized and purchased Parts', JSON.stringify(dr['']));
+  ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs === 4 && dr[''].attention === 0 && dr[''].unlinked === 0 &&
+    dr[''].purchased === 3 && dr[''].manual === 1, 'the demo product links four designs, three purchased Parts and firmware', JSON.stringify(dr['']));
+  ok(Signoff.config.demo.tree.filter(function (r) { return r.link; }).every(function (r) { return Signoff.plDemo.snapshot.designs[r.link]; }), 'every demo link has a design in the snapshot');
+  eq(dr[''].massG, 205.2, 'demo mass matches the 205 g in the ME enclosure’s mass requirement');
+  ok(P.issues(demo.project, demo.index).length === 13, 'the demo lists every open issue from the four designs');
+  ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
+
+  // The snapshot must match what Signoff EE's and ME's demos build today (when they're served
+  // next to this folder). Times differ by design, so they're left out.
+  var live = await new Promise(function (resolve) {
+    var f = document.createElement('iframe'); f.style.display = 'none'; f.src = '../tools/demo_designs.html?t=' + Date.now();
+    document.body.appendChild(f);
+    var tries = 0, t = setInterval(function () {
+      var r = f.contentWindow && f.contentWindow.result;
+      if (r || ++tries > 40) { clearInterval(t); f.remove(); resolve(r || null); }
+    }, 250);
+  });
+  function strip(designs) {
+    var out = {};
+    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; out[k] = d; });
+    return M.stableStringify(out);
+  }
+  if (live) {
+    var liveData = JSON.parse(live.slice(live.indexOf('{'), live.lastIndexOf(';')));
+    ok(strip(liveData.designs) === strip(Signoff.plDemo.snapshot.designs), 'demo-designs.js matches the EE and ME demos (regenerate it with tools/demo_designs.html if not)');
+  } else {
+    ok(true, 'skipped: EE and ME aren’t served next to this folder, so the demo snapshot wasn’t compared');
+  }
 
   var failed = results.filter(function (r) { return !r.ok; });
   document.getElementById('out').innerHTML = results.map(function (r) {

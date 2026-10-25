@@ -48,11 +48,14 @@
   var ui = Object.assign({ slug: '', view: 'overview', closed: {} }, load('ui', {}));
   var syncing = false;
 
-  if (DEMO && !Object.keys(projects).length) {
+  // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
+  // product in config.js), so a browser that saw an older demo doesn't keep it.
+  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name;
+  if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
-    projects[demo.project.slug] = demo.project;
-    index = demo.index;
-    save('projects', projects); save('index', index);
+    projects = {}; projects[demo.project.slug] = demo.project;
+    index = demo.index; dirty = {}; ui.slug = demo.project.slug; ui.closed = {};
+    save('projects', projects); save('index', index); save('dirty', dirty); save('demoVersion', DEMO_VERSION);
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
@@ -119,12 +122,14 @@
     var t = st && STATE_TEXT[st.state];
     return t ? '<span class="pstate ' + t[0] + '" title="' + esc(t[2]) + '">' + t[1] + '</span>' : '';
   }
-  // Where a linked design opens. Demo designs are made up, so they open the tool's demo.
-  function designUrl(node) {
+  // Where a linked design opens: its project in its tool, and with `item` that check. In the
+  // demo the links open the other tools' demos, whose projects these Parts are.
+  function designUrl(node, item) {
     var tool = P.toolById(node.source);
     if (!tool) return '';
-    if (DEMO) return tool.app + '?demo';
-    return tool.app + (node.ref && node.ref.id ? '?project=' + encodeURIComponent(node.ref.id) : '');
+    var q = (DEMO ? ['demo'] : []).concat(node.ref && node.ref.id ? ['project=' + encodeURIComponent(node.ref.id)] : [])
+      .concat(item ? ['item=' + encodeURIComponent(item)] : []);
+    return tool.app + (q.length ? '?' + q.join('&') : '');
   }
 
   // ── Current project ──────────────────────────────────────
@@ -325,11 +330,11 @@
     html += '<div class="card" style="overflow-x:auto"><table class="table"><thead><tr><th>Severity</th><th>Issue</th><th>Part</th><th>Owner</th><th></th></tr></thead><tbody>' +
       list.map(function (i) {
         var where = P.path(t, i.node.id).map(function (n) { return n.name; }).concat([i.node.name]).join(' › ');
-        return '<tr data-act="edit-node" data-id="' + esc(i.node.id) + '"><td><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span></td>' +
+        return '<tr data-act="open-url" data-url="' + esc(designUrl(i.node, i.id)) + '"><td><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span></td>' +
           '<td>' + esc(i.text) + '<div class="muted">' + esc([i.checklist, i.ref].filter(Boolean).join(' · ')) + '</div></td>' +
           '<td>' + srcChip(i.tool) + ' ' + esc(i.node.name) + '<div class="muted">' + esc(where) + '</div></td>' +
           '<td class="muted">' + esc(i.assignee || '—') + '</td>' +
-          '<td><a class="open-link" href="' + esc(designUrl(i.node)) + '" target="_blank" rel="noopener" data-stop="1">Open ›</a></td></tr>';
+          '<td><a class="open-link" href="' + esc(designUrl(i.node, i.id)) + '" target="_blank" rel="noopener" data-stop="1">Open ›</a></td></tr>';
       }).join('') + '</tbody></table></div></div>';
     return html;
   }
@@ -353,7 +358,7 @@
     var m = p ? p.meta : { name: '', client: '', number: '', description: '', phase: (C.phases || [])[0] };
     var w = sheet('<div class="sheet-head"><h2>' + (p ? 'Project details' : 'New project') + '</h2><p>A PL project is the whole product. Its Parts link to their design reviews in Signoff EE and ME.</p></div>' +
       '<div class="sheet-body">' +
-      '<div class="field"><label for="f-name">Product name</label><input class="input" id="f-name" value="' + esc(m.name) + '" placeholder="e.g. Water quality buoy" maxlength="120"></div>' +
+      '<div class="field"><label for="f-name">Product name</label><input class="input" id="f-name" value="' + esc(m.name) + '" placeholder="e.g. Smart thermostat" maxlength="120"></div>' +
       '<div class="row2"><div class="field"><label for="f-client">Client</label><input class="input" id="f-client" value="' + esc(m.client) + '" placeholder="Optional"></div>' +
       '<div class="field"><label for="f-number">Product number</label><input class="input" id="f-number" value="' + esc(m.number) + '" placeholder="e.g. PRD-1042"></div></div>' +
       '<div class="field"><label for="f-phase">Build phase</label><select class="input" id="f-phase">' + (C.phases || []).map(function (s) { return '<option' + (s === m.phase ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
@@ -623,6 +628,7 @@
       case 'add-node': nodeSheet(null, {}); break;
       case 'add-child': e.stopPropagation(); nodeSheet(null, { parent: id }); break;
       case 'edit-node': nodeSheet(id); break;
+      case 'open-url': if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener'); break;
       case 'toggle-node': e.stopPropagation(); if (ui.closed[id]) delete ui.closed[id]; else ui.closed[id] = 1; saveUi(); renderPage(); break;
       case 'move-up': e.stopPropagation(); move(id, -1); break;
       case 'move-down': e.stopPropagation(); move(id, 1); break;

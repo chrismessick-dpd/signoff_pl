@@ -40,8 +40,19 @@ same origin, so signing in once covers them all. The token must reach:
    - It rebuilds the project-to-repo map every time, so a Part keeps working when its review
      moves into a shared repo.
 
-**Demo mode:** `index.html?demo` shows a made-up product with made-up designs, and nothing is
-read from GitHub.
+**Demo mode:** `index.html?demo` shows the suite's made-up demo product, a Smart Thermostat.
+Nothing is read from GitHub.
+- Its EE and ME Parts are the Signoff EE and ME demo projects: two boards, an enclosure and a
+  wall bracket. Every link, including each issue, opens that design or that check in the other
+  tool's demo.
+- Their summaries are a snapshot in `assets/demo-designs.js`, so PL's demo still works on its
+  own.
+- When EE's or ME's demo changes, regenerate the snapshot:
+  1. Serve the tools folder.
+  2. Open `tools/demo_designs.html`, download the file, and save it over
+     `assets/demo-designs.js`.
+
+  `tests/test.html` fails while the snapshot is out of date.
 
 ### Views
 
@@ -122,7 +133,8 @@ There are no shared `review-pl-…` repos.
 | `assets/config.js` | PL settings: repos, storage namespace, the tools a Part can link to, phases, demo data |
 | `assets/pl.js` | Data model: documents, merge, tree (cycles, orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads design summaries from the EE and ME repos |
-| `assets/demo.js` | Builds the demo product from `config.js` |
+| `assets/demo.js` | Builds the demo product from `config.js`, linked to the designs in `demo-designs.js` |
+| `assets/demo-designs.js`, `tools/demo_designs.html` | Snapshot of the EE and ME demo designs' summaries, and the page that generates it |
 | `assets/pl.css` | The few PL-only styles |
 | `assets/suite.css`, `assets/vendor/model.js`, `assets/vendor/github.js` | Vendored from Signoff EE by `tools/sync_vendor.py` (don't edit here) |
 | `tools/stamp_version.py` | Stamps `assets/version.js` and the `?v=` cache-busters in `index.html` |
