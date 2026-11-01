@@ -18,7 +18,9 @@ This repo is public: no client data, tokens or commit messages naming clients.
   project.
 - **Access.** FTE-only. There are two repos, `signoff_pl` (public, Pages) and `signoff_pl_data`
   (private), and no `review-pl-*` repos.
-- **Words.** The children are called **Parts**. EE and ME still say "Projects" on screen.
+- **Words.** The children are called **Parts**. Since 2026-11-01 EE says **Boards** and ME says
+  **Parts** on screen, and "project" means the client project (`meta.project`, also in each
+  summary as `project`).
 - **Gates.** EVT / DVT / PVT. PL never maps one tool's stage names onto another's.
 - **Independence.** PL stands on its own like EE and ME. It vendors the engine instead of
   depending on sibling folders at runtime.

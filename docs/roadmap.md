@@ -2,7 +2,8 @@
 
 Decisions made so far (2026-10-25):
 - PL is **FTE-only**.
-- Its children are called **Parts**. Signoff EE and ME still say "Projects" on screen.
+- Its children are called **Parts**. Signoff EE says **Boards** and ME says **Parts** (2026-11-01);
+  a design's summary carries its client `project`, which PL could use to match designs to a product.
 - Gates use **EVT / DVT / PVT**.
 - Each tool keeps its own stage names. Gates will tie them together; PL never maps one tool's
   stages onto another's.
