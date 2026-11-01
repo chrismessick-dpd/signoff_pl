@@ -51,7 +51,7 @@
 
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
   // product in config.js), so a browser that saw an older demo doesn't keep it.
-  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name;
+  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {});
   if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
@@ -225,6 +225,7 @@
     else if (ui.view === 'issues') page.innerHTML = issuesPage(p);
     else page.innerHTML = overviewPage(p);
     $('#main').scrollTop = scroll;
+    loadPictures(page);
   }
 
   function emptyPage() {
@@ -333,19 +334,244 @@
     return '<svg viewBox="0 0 120 76" aria-hidden="true"><text class="pa-fw" x="60" y="47" text-anchor="middle">{ }</text></svg>';
   }
 
+  // ── Pictures ─────────────────────────────────────────────
+  // A design's stored picture (reader.js, keepPreview) is fetched with the token the first time a
+  // tile shows it, kept in IndexedDB by blob sha, and shown from an object URL. Until it arrives,
+  // and wherever there's none, the tile keeps its plain drawing.
+  var pvUrls = {}, pvWaiting = {}, pvDbOpen = null;
+  function pvDb() {
+    if (!pvDbOpen) pvDbOpen = new Promise(function (resolve) {
+      try {
+        var req = indexedDB.open('signoff-pl-pictures', 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore('img'); };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+    return pvDbOpen;
+  }
+  function pvGet(sha) {
+    return pvDb().then(function (db) {
+      return db ? new Promise(function (resolve) {
+        try { var r = db.transaction('img').objectStore('img').get(sha); r.onsuccess = function () { resolve(r.result || null); }; r.onerror = function () { resolve(null); }; } catch (e) { resolve(null); }
+      }) : null;
+    });
+  }
+  function pvPut(sha, blob) {
+    pvDb().then(function (db) { try { if (db) db.transaction('img', 'readwrite').objectStore('img').put(blob, sha); } catch (e) { /* not kept */ } });
+  }
+  function pictureUrl(repo, img) {
+    if (pvUrls[img.sha]) return Promise.resolve(pvUrls[img.sha]);
+    if (!pvWaiting[img.sha]) {
+      pvWaiting[img.sha] = pvGet(img.sha).then(function (blob) {
+        if (blob || !repo || !getToken()) return blob;
+        return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: getToken() }).image(repo, img)
+          .then(function (b) { pvPut(img.sha, b); return b; });
+      }).then(function (blob) { return blob ? (pvUrls[img.sha] = URL.createObjectURL(blob)) : null; }, function () { return null; })
+        .then(function (url) { if (!url) delete pvWaiting[img.sha]; return url; });
+    }
+    return pvWaiting[img.sha];
+  }
+  // Pictures are client data: they go when PL locks or the token changes, like the projects do.
+  function clearPictures() {
+    Object.keys(pvUrls).forEach(function (k) { try { URL.revokeObjectURL(pvUrls[k]); } catch (e) { /* gone */ } });
+    pvUrls = {}; pvWaiting = {};
+    var open = pvDbOpen; pvDbOpen = null;
+    (open || Promise.resolve(null)).then(function (db) {
+      try { if (db) db.close(); indexedDB.deleteDatabase('signoff-pl-pictures'); } catch (e) { /* storage blocked */ }
+    });
+  }
+  function pictureOf(entry, key) {
+    var pv = entry && entry.preview;
+    return pv ? pv.images.filter(function (i) { return i.key === (key || pv.hero); })[0] || pv.images[0] : null;
+  }
+  // The picture of a Part (or of a design in the picker), or its plain drawing.
+  function art(n, big, entry, key) {
+    var img = pictureOf(entry, key);
+    if (!img) return partArt(n, big);
+    var url = img.src || pvUrls[img.sha];
+    if (url) return '<img class="pv" alt="" src="' + esc(url) + '">';
+    return '<img class="pv" alt="" data-sha="' + esc(img.sha) + '" data-type="' + esc(img.type) + '" data-repo="' + esc(entry.preview.repo) + '">' + partArt(n, big);
+  }
+  function loadPictures(root) {
+    if (DEMO || !allowed()) return;
+    (root || document).querySelectorAll('img.pv[data-sha]').forEach(function (el) {
+      var img = { sha: el.dataset.sha, type: el.dataset.type };
+      el.removeAttribute('data-sha');
+      pictureUrl(el.dataset.repo, img).then(function (url) {
+        if (!url) return;
+        el.src = url;
+        var svg = el.parentNode && el.parentNode.querySelector('svg');
+        if (svg) svg.remove();
+      });
+    });
+  }
+
   function structurePage(p) {
     var t = P.tree(p), rolls = P.rollup(p, index), ids = P.flatten(t);
-    var map = ui.layout !== 'list';
+    var layout = LAYOUTS.some(function (l) { return l[0] === ui.layout; }) ? ui.layout : 'map', map = layout !== 'list';
     if (map && ui.sel && !t.nodes[ui.sel]) ui.sel = '';
     var html = '<div class="page' + (map ? ' page-map' + (ui.sel ? ' has-sel' : '') : '') + '"><div class="map-main"><div class="cl-head"><div><div class="eyebrow">' + esc(p.meta.name) + '</div><h1 class="page-title">Structure</h1>' +
       '<div class="page-sub"><span>' + plural(rolls[''].parts, 'Part') + '</span><span class="sep">·</span><span>' + fmtMass(rolls[''].massG) + '</span></div></div>' +
-      '<div class="cl-head-acts"><div class="seg" role="tablist" aria-label="Layout">' + [['map', 'Map'], ['list', 'List']].map(function (l) {
-        return '<button role="tab" class="' + ((map ? 'map' : 'list') === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
+      '<div class="cl-head-acts"><div class="seg" role="tablist" aria-label="Layout">' + LAYOUTS.map(function (l) {
+        return '<button role="tab" class="' + (layout === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
       }).join('') + '</div><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div></div>';
-    if (!ids.length) return html + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Start with the top assembly.</p><button class="btn btn-primary" data-act="add-node">Add</button></div></div></div>';
-    if (map) return html + mapLanes(p, t, rolls, ids) + '</div>' + (ui.sel ? inspector(p, t, ui.sel) : '') + '</div>';
+    if (!ids.length) return html + (trayHtml(p) || '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Start with the top assembly.</p><button class="btn btn-primary" data-act="add-node">Add</button></div>') + '</div></div>';
+    if (map) return html + (layout === 'gallery' ? gallery(p, t, ids) : layout === 'exploded' ? exploded(p, t, ids) : mapLanes(p, t, rolls, ids)) + '</div>' + (ui.sel ? inspector(p, t, ui.sel) : '') + '</div>';
     return html + listTable(t, rolls, ids) + '</div></div>';
   }
+
+  // Structure layouts. Map is the default; Gallery and Exploded show the stored pictures.
+  var LAYOUTS = [['map', 'Map'], ['gallery', 'Gallery'], ['exploded', 'Exploded'], ['list', 'List']];
+
+  // The groups of the map (one per lane), as [{ id, name, parts: [node ids] }], in tree order.
+  function laneGroups(t, ids) {
+    var top = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
+    var level = top ? t.children[top] || [] : t.roots, out = [], loose = [];
+    level.forEach(function (id) {
+      if (t.nodes[id].kind !== 'assembly') { loose.push(id); return; }
+      var inside = P.descendants(t, id);
+      out.push({ id: id, name: t.nodes[id].name || 'Unnamed', parts: ids.filter(function (x) { return inside[x] && t.nodes[x].kind !== 'assembly'; }) });
+    });
+    if (loose.length) out.push({ id: top, name: top ? t.nodes[top].name : 'Top level', parts: loose });
+    return out;
+  }
+
+  // Big pictures, a section per assembly.
+  function gallery(p, t, ids) {
+    return trayHtml(p) + '<div class="gal">' + laneGroups(t, ids).map(function (g) {
+      if (!g.parts.length) return '';
+      return '<section class="gal-sec" data-drop="' + esc(g.id) + '"><div class="map-group-name static">' + esc(g.name) + '</div><div class="gal-grid">' + g.parts.map(function (id) {
+        var n = t.nodes[id], st = P.partStatus(n, index), e = st.entry || {};
+        return '<button class="gal-tile' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
+          '<div class="gal-art map-art">' + art(n, true, st.entry) + '</div><div class="map-name">' + esc(n.name || 'Unnamed') + (n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '') + '</div>' +
+          '<div class="map-meta"><span>' + esc(e.number || n.number || n.mpn || '') + (e.revision ? ' · Rev ' + esc(e.revision) : '') + '</span>' + srcChip(n.source) + '</div></button>';
+      }).join('') + '</div></section>';
+    }).join('') + '</div>';
+  }
+
+  // The Parts that have a stored picture, stacked in tree order and pulled apart by the slider.
+  // Parts without one are named below rather than drawn, so nothing on the stack is made up.
+  function exploded(p, t, ids) {
+    var parts = ids.filter(function (id) { return t.nodes[id].kind !== 'assembly'; });
+    var shown = parts.filter(function (id) { return pictureOf(P.partStatus(t.nodes[id], index).entry); });
+    var missing = parts.filter(function (id) { return shown.indexOf(id) < 0 && P.toolById(t.nodes[id].source); });
+    if (!shown.length) {
+      return '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No pictures yet</h2><p>The exploded view stacks the Parts that have a picture. A board gets one when its Fabcheck run is stored with its review (Send to Signoff).</p></div>';
+    }
+    var gap = ui.spread == null ? 60 : ui.spread;
+    return '<div class="xp card"><div class="xp-stage"><div class="xp-stack" style="--gap:' + gap + 'px">' + shown.slice().reverse().map(function (id, i) {
+      var n = t.nodes[id];
+      return '<button class="xp-layer' + (ui.sel === id ? ' sel' : '') + '" style="--i:' + i + '" data-act="select-node" data-id="' + esc(id) + '" aria-label="' + esc(n.name) + '">' +
+        art(n, true, P.partStatus(n, index).entry) + '<span class="xp-label">' + esc(n.name) + '</span></button>';
+    }).join('') + '</div></div>' +
+      '<div class="xp-ctl"><label for="xp-spread">Assembled</label><input type="range" id="xp-spread" min="0" max="120" value="' + gap + '"><span>Exploded</span></div>' +
+      '<p class="note">Top of the stack is the first Part in the structure. Reorder Parts in the Map or List to change it.' +
+      (missing.length ? ' Not shown, no picture yet: ' + esc(missing.map(function (id) { return t.nodes[id].name; }).join(', ')) + '.' : '') + '</p></div>';
+  }
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'xp-spread') return;
+    ui.spread = Number(e.target.value);
+    var st = document.querySelector('.xp-stack');
+    if (st) st.style.setProperty('--gap', ui.spread + 'px');
+  });
+
+  // ── Building from the client project ─────────────────────
+  // Each EE and ME summary names its client project. The designs of this product's client project
+  // that no Part links to yet wait in a tray above the map: drag one onto an assembly, click it to
+  // add it with the Part sheet, or add them all (boards under Electronics, parts under Mechanical).
+  function clientProjects() {
+    var seen = {};
+    Object.keys((index && index.entries) || {}).forEach(function (k) { var s = index.entries[k].summary; if (s && s.project) seen[s.project] = 1; });
+    return Object.keys(seen).sort();
+  }
+  function clientProjectOf(p) { return String(p.meta.clientProject || p.meta.name || '').trim(); }
+  function unplaced(p) {
+    var want = clientProjectOf(p).toLowerCase(), used = {}, t = P.tree(p);
+    if (!want) return [];
+    P.flatten(t).forEach(function (id) { if (t.nodes[id].ref) used[P.refKey(t.nodes[id].ref)] = 1; });
+    return C.tools.reduce(function (all, tool) { return all.concat(S.plReader.designs(index, tool.id)); }, []).filter(function (d) {
+      return !d.archived && !used[d.tool + ':' + d.id] && d.summary && String(d.summary.project || '').toLowerCase() === want;
+    });
+  }
+  function trayHtml(p) {
+    var list = unplaced(p);
+    if (!list.length) return '';
+    return '<section class="map-tray"><div class="map-tray-head"><div><b>' + plural(list.length, 'design') + ' in ' + esc(clientProjectOf(p)) + (list.length === 1 ? ' isn’t' : ' aren’t') + ' in the product yet</b>' +
+      '<span>Drag one onto an assembly, or click it to add it.</span></div><button class="btn btn-primary" data-act="place-all">Add ' + (list.length === 1 ? 'it' : 'all ' + list.length) + '</button></div>' +
+      '<div class="map-tray-cards">' + list.map(function (d) {
+        var s = d.summary;
+        return '<button class="pick" draggable="true" data-drag-design="' + esc(d.tool + ':' + d.id) + '" data-act="place-design" data-key="' + esc(d.tool + ':' + d.id) + '">' +
+          '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
+          '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span><span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span></div>' +
+          '<div class="pick-tags">' + srcChip(d.tool) + '</div></div></button>';
+      }).join('') + '</div></section>';
+  }
+  function designPart(p, key, parent) {
+    var d = index && index.entries[key];
+    if (!d) return null;
+    var node = P.newNode(p, { kind: 'part', name: d.name || d.id, number: d.number || '', parent: parent || '', source: d.tool, ref: { tool: d.tool, id: d.id }, qty: 1 }, me());
+    p.nodes[node.id] = node;
+    return node;
+  }
+  var GROUPS = { ee: 'Electronics', me: 'Mechanical' };   // where "Add all" puts each tool's designs
+  function placeAll(p) {
+    var list = unplaced(p), t = P.tree(p);
+    var top = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
+    if (!t.roots.length) {
+      var root = P.newNode(p, { kind: 'assembly', name: p.meta.name, number: p.meta.number || '', parent: '' }, me());
+      p.nodes[root.id] = root; top = root.id;
+    }
+    var asm = {};
+    list.forEach(function (d) {
+      var name = GROUPS[d.tool] || (P.toolById(d.tool) || {}).name || 'Parts', k = name.toLowerCase();
+      if (!asm[k]) {
+        var tt = P.tree(p), hit = (top ? tt.children[top] || [] : tt.roots).filter(function (x) { return tt.nodes[x].kind === 'assembly' && String(tt.nodes[x].name).toLowerCase() === k; })[0];
+        if (!hit) { var a = P.newNode(p, { kind: 'assembly', name: name, parent: top }, me()); p.nodes[a.id] = a; hit = a.id; }
+        asm[k] = hit;
+      }
+      designPart(p, d.tool + ':' + d.id, asm[k]);
+    });
+    if (list.length) { toast('Added ' + plural(list.length, 'Part')); touch(p); }
+  }
+  // Dragging: a design from the tray adds a Part, a tile moves its Part. Drop targets are lanes and
+  // the assembly groups inside them (data-drop is the assembly's id; '' is the top level).
+  var dragging = null;
+  document.addEventListener('dragstart', function (e) {
+    var d = e.target.closest && e.target.closest('[data-drag-design],[data-drag-node]');
+    if (!d) return;
+    dragging = d.dataset.dragDesign ? { design: d.dataset.dragDesign } : { node: d.dataset.dragNode };
+    e.dataTransfer.effectAllowed = dragging.design ? 'copy' : 'move';
+    try { e.dataTransfer.setData('text/plain', d.dataset.dragDesign || d.dataset.dragNode); } catch (err) { /* some browsers refuse */ }
+    document.body.classList.add('dragging');
+  });
+  function dragDone() {
+    dragging = null; document.body.classList.remove('dragging');
+    document.querySelectorAll('.drop-on').forEach(function (x) { x.classList.remove('drop-on'); });
+  }
+  document.addEventListener('dragend', dragDone);
+  function dropTarget(e) {
+    var z = e.target.closest && e.target.closest('[data-drop]');
+    return dragging && z ? z : null;
+  }
+  document.addEventListener('dragover', function (e) {
+    var z = dropTarget(e);
+    document.querySelectorAll('.drop-on').forEach(function (x) { if (x !== z) x.classList.remove('drop-on'); });
+    if (!z) return;
+    e.preventDefault(); z.classList.add('drop-on');
+  });
+  document.addEventListener('drop', function (e) {
+    var z = dropTarget(e), p = current(), what = dragging;
+    if (!z || !p) return;
+    e.preventDefault();
+    var parent = z.dataset.drop;
+    dragDone();
+    if (what.design) { var n = designPart(p, what.design, parent); if (n) { ui.sel = n.id; saveUi(); touch(p); } return; }
+    var t = P.tree(p), id = what.node;
+    if (!t.nodes[id] || (t.parent[id] || '') === parent) return;
+    if (!P.canMove(t, id, parent)) { toast('An assembly can’t go inside itself'); return; }
+    setNode(id, { parent: parent, order: P.nextOrder(p, parent) });
+  });
 
   // One lane per assembly under the top assembly (or per top-level assembly when there are
   // several). Parts at the top level share a lane; deeper assemblies are headed groups in their lane.
@@ -364,22 +590,22 @@
         '<span class="map-lane-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') +
         '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button></div>';
     }
-    var html = '<div class="map-lanes">' + lanes.map(function (lane) {
+    var html = trayHtml(p) + '<div class="map-lanes">' + lanes.map(function (lane) {
       var inside = P.descendants(t, lane), groups = [{ id: lane, parts: [] }];
       ids.forEach(function (id) {
         if (!inside[id]) return;
         if (t.nodes[id].kind === 'assembly') groups.push({ id: id, parts: [] });
         else groups.filter(function (g) { return g.id === t.parent[id]; }).concat(groups.slice(-1))[0].parts.push(id);
       });
-      return '<section class="map-lane">' + laneHead(lane, t.nodes[lane].name || 'Unnamed', rolls[lane]) +
+      return '<section class="map-lane" data-drop="' + esc(lane) + '">' + laneHead(lane, t.nodes[lane].name || 'Unnamed', rolls[lane]) +
         groups.map(function (g, k) {
           if (!k) return tiles(g.parts);
-          return '<div class="map-group"><button class="map-group-name" data-act="edit-node" data-id="' + esc(g.id) + '">' + esc(t.nodes[g.id].name || 'Unnamed') + '</button>' +
+          return '<div class="map-group" data-drop="' + esc(g.id) + '"><button class="map-group-name" data-act="edit-node" data-id="' + esc(g.id) + '">' + esc(t.nodes[g.id].name || 'Unnamed') + '</button>' +
             (g.parts.length ? tiles(g.parts) : '<div class="map-empty">Empty</div>') + '</div>';
         }).join('') + (Object.keys(inside).length ? '' : '<div class="map-empty">No Parts yet</div>') + '</section>';
     }).join('');
     if (loose.length) {
-      html += '<section class="map-lane"><div class="map-lane-head"><span class="map-lane-name static">' + esc(top ? t.nodes[top].name : 'Top level') + '</span>' +
+      html += '<section class="map-lane" data-drop="' + esc(top) + '"><div class="map-lane-head"><span class="map-lane-name static">' + esc(top ? t.nodes[top].name : 'Top level') + '</span>' +
         '<span class="map-lane-sub">' + plural(loose.length, 'Part') + '</span></div>' + tiles(loose) + '</section>';
     }
     return html + '</div>';
@@ -390,10 +616,10 @@
     var cls = 'map-tile' + (tool ? '' : ' small') + (ui.sel === n.id ? ' sel' : '');
     var qty = n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '';
     if (!tool) {
-      return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
+      return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
         '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
     }
-    return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '"><div class="map-art">' + partArt(n, true) + '</div>' +
+    return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true, st.entry) + '</div>' +
       '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div>' +
       (s ? '<div class="bar"><i style="width:' + pct(s.pct) + '%"></i></div>' : '') +
       '<div class="map-meta">' + (s ? '<span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : stateChip(st)) + srcChip(n.source) + '</div></button>';
@@ -410,7 +636,11 @@
         '<div class="map-ins-acts"><button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button></div></aside>';
     }
     var e = st.entry || {}, s = st.summary;
-    html += '<div class="map-ins-art">' + partArt(n, true) + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
+    var pv = e.preview, side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
+    html += '<div class="map-ins-art">' + art(n, true, e, side) +
+      (pv && pv.images.length > 1 ? '<div class="seg map-ins-flip">' + pv.images.map(function (i) {
+        return '<button class="' + ((side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
+      }).join('') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
       '<p class="map-ins-sub">' + esc([e.number || n.number || n.mpn, e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
     if (s) {
       var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
@@ -502,6 +732,9 @@
       '<div class="field"><label for="f-name">Product name</label><input class="input" id="f-name" value="' + esc(m.name) + '" placeholder="e.g. Smart thermostat" maxlength="120"></div>' +
       '<div class="row2"><div class="field"><label for="f-client">Client</label><input class="input" id="f-client" value="' + esc(m.client) + '" placeholder="Optional"></div>' +
       '<div class="field"><label for="f-number">Product number</label><input class="input" id="f-number" value="' + esc(m.number) + '" placeholder="e.g. PRD-1042"></div></div>' +
+      '<div class="field"><label for="f-cproj">Client project in Signoff EE and ME</label><input class="input" id="f-cproj" list="f-cproj-list" value="' + esc(m.clientProject || '') + '" placeholder="' + esc(m.name || 'Same as the product name') + '" autocomplete="off">' +
+        '<datalist id="f-cproj-list">' + clientProjects().map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
+        '<p class="note">The boards and parts tagged with this project are offered on the Structure page. Leave it empty to use the product name.</p></div>' +
       '<div class="field"><label for="f-phase">Build phase</label><select class="input" id="f-phase">' + (C.phases || []).map(function (s) { return '<option' + (s === m.phase ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><label for="f-desc">Description</label><textarea class="input" id="f-desc" placeholder="What the product is and where the project stands">' + esc(m.description) + '</textarea></div>' +
       '</div><div class="sheet-foot">' + (p ? '<button class="btn btn-danger" data-sheet="archive">' + (m.archived ? 'Unarchive' : 'Archive') + '</button><span class="spacer"></span>' : '<span class="spacer"></span>') +
@@ -512,7 +745,7 @@
       if (b.dataset.sheet === 'archive') { p.meta.archived = !p.meta.archived; closeSheet(); touch(p); return; }
       var name = val(w, '#f-name');
       if (!name) { w.querySelector('#f-name').focus(); return; }
-      var fields = { name: name, client: val(w, '#f-client'), number: val(w, '#f-number'), phase: val(w, '#f-phase'), description: val(w, '#f-desc') };
+      var fields = { name: name, client: val(w, '#f-client'), clientProject: val(w, '#f-cproj'), number: val(w, '#f-number'), phase: val(w, '#f-phase'), description: val(w, '#f-desc') };
       if (p) { Object.assign(p.meta, fields); closeSheet(); touch(p); return; }
       var doc = P.newProject(fields, me()), slug = doc.slug, k = 2;
       while (projects[slug]) slug = doc.slug + '-' + k++;
@@ -570,7 +803,7 @@
       function card(d) {
         var s = d.summary, key = d.tool + ':' + d.id, on = key === linked;
         return '<button type="button" class="pick' + (on ? ' on' : '') + (d.archived ? ' archived' : '') + '" data-pick="' + esc(key) + '" aria-pressed="' + on + '">' +
-          '<div class="map-art">' + partArt({ source: d.tool, number: d.number }, false) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
+          '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
           '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span>' +
           (s ? '<span>' + esc(s.stage || d.stage || '') + (s.stage || d.stage ? ' · ' : '') + pct(s.pct) + '%</span>' : '<span>Not summarized yet</span>') + '</div>' +
           '<div class="pick-tags">' + srcChip(d.tool) + (s && s.project && here.indexOf(d) < 0 ? '<span>' + esc(s.project) + '</span>' : '') +
@@ -584,7 +817,7 @@
     }
     function refreshPicks() {
       var box = w.querySelector('#f-ref-list'), qEl = w.querySelector('#f-ref-q');
-      if (box) box.innerHTML = pickCards(qEl ? qEl.value.trim().toLowerCase() : '');
+      if (box) { box.innerHTML = pickCards(qEl ? qEl.value.trim().toLowerCase() : ''); loadPictures(box); }
     }
     function linkFields() {
       var box = w.querySelector('#f-link');
@@ -604,6 +837,7 @@
             : !list.length ? '<p class="note">No designs found in ' + esc(C.tools.map(function (x) { return x.name; }).join(' or ')) + '. Sync to read them again.</p>' : '') + '</div>';
       }
       box.innerHTML = html;
+      loadPictures(box);
     }
     function partFields() {
       linkFields();
@@ -713,7 +947,9 @@
       settings.user = val(w, '#s-user'); settings.theme = theme;
       if (!DEMO) {
         settings.owner = val(w, '#s-owner') || C.repos.owner; settings.branch = val(w, '#s-branch') || 'main'; settings.dataRepo = val(w, '#s-data') || C.repos.dataRepo;
+        var was = getToken();
         setToken(w.querySelector('#s-token').value, w.querySelector('#s-remember').checked);
+        if (getToken() !== was) clearPictures();
       }
       save('settings', settings); saveSharedTheme(theme);
       closeSheet(); render();
@@ -760,7 +996,7 @@
         if (!signedIn) throw err;   // /user failed: the token itself doesn't work
         if (err.status !== 404) { errors.push({ repo: settings.dataRepo, message: err.message }); return; }
         access.state = 'none';
-        projects = P.lockOut(projects, dirty); cache = {}; index = null;
+        projects = P.lockOut(projects, dirty); cache = {}; index = null; clearPictures();
       })
       .then(function () {
         save('access', access);
@@ -849,9 +1085,15 @@
       case 'add-node': nodeSheet(null, {}); break;
       case 'add-child': e.stopPropagation(); nodeSheet(null, { parent: id }); break;
       case 'edit-node': nodeSheet(id); break;
-      case 'select-node': ui.sel = ui.sel === id ? '' : id; saveUi(); renderPage(); break;
+      case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; saveUi(); renderPage(); break;
+      case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'close-ins': ui.sel = ''; saveUi(); renderPage(); break;
       case 'layout': ui.layout = el.dataset.layout; saveUi(); renderPage(); break;
+      case 'place-all': placeAll(current()); break;
+      case 'place-design': (function () {
+        var d = index && index.entries[el.dataset.key];
+        if (d) nodeSheet(null, { source: d.tool, ref: { tool: d.tool, id: d.id }, name: d.name || d.id, number: d.number || '' });
+      })(); break;
       case 'open-url': if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener'); break;
       case 'toggle-node': e.stopPropagation(); if (ui.closed[id]) delete ui.closed[id]; else ui.closed[id] = 1; saveUi(); renderPage(); break;
       case 'move-up': e.stopPropagation(); move(id, -1); break;

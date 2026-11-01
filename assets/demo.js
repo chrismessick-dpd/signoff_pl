@@ -23,6 +23,11 @@
       var summary = d.summary ? Object.assign({}, d.summary, { at: shifted(d.summary.at) }) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
+      // The demo boards' pictures stand in for the previews Fabcheck stores with a run.
+      var pv = (D.previews || {})[key];
+      if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], images: pv.map(function (x) {
+        return { key: x[0], w: x[1], h: x[2], src: 'assets/demo-previews/' + key.slice(at + 1) + '-' + x[0] + '.svg' };
+      }) };
     });
     (D.tree || []).forEach(function (r) {
       var link = r.link ? r.link.split(':') : null;

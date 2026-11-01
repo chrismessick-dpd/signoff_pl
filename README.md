@@ -55,6 +55,10 @@ while a sync has confirmed that for the token in use:
    - It downloads only files whose blob sha changed.
    - It rebuilds the project-to-repo map every time, so a Part keeps working when its review
      moves into a shared repo.
+   - It reads the pictures a checker stored next to each review: Fabcheck's board previews,
+     `fabcheck/<id>/preview/index.json` (EE's `docs/fabcheck-link.md`, *Board previews*). Only the
+     image names and blob shas go in the index. A tile fetches its image the first time it shows
+     it, and the image is kept in IndexedDB (`signoff-pl-pictures`) by sha.
 
 **Demo mode:** `index.html?demo` shows the suite's made-up demo product, a Smart Thermostat.
 Nothing is read from GitHub.
@@ -63,6 +67,8 @@ Nothing is read from GitHub.
   tool's demo.
 - Their summaries are a snapshot in `assets/demo-designs.js`, so PL's demo still works on its
   own.
+- The two boards' pictures are made-up drawings in `assets/demo-previews/`, standing in for
+  Fabcheck's stored previews (`config.demo.previews`). The ME parts have none, as in real use.
 - When EE's or ME's demo changes, regenerate the snapshot:
   1. Serve the tools folder.
   2. Open `tools/demo_designs.html`, download the file, and save it over
@@ -77,13 +83,27 @@ Nothing is read from GitHub.
   - Part counts, mass, and Parts that need attention
   - one card per linked design, with a link that opens it in its tool (`?project=<id>`)
   - stages, listed per tool
-- **Structure:** the tree. Click a row to edit it. You can:
-  - collapse assemblies
-  - add a Part or assembly inside an assembly (+)
-  - reorder siblings (↑ ↓)
-  - move a node by changing **Inside**. A node can't be moved under itself.
+- **Structure** has four layouts:
+  - **Map** (the default): one lane per assembly, a tile per Part with its picture (or a plain
+    drawing until it has one), progress, stage and open issues. Click a tile for the inspector:
+    the picture (Top/Bottom for boards), checklists, the worst open issues, and links. Drag a tile
+    onto another lane or assembly group to move it.
+  - **Gallery:** big pictures, a section per assembly.
+  - **Exploded:** the Parts that have a picture, stacked in 3D in structure order; the slider pulls
+    them apart. Parts without a picture are named, not drawn.
+  - **List:** the table. Click a row to edit it, collapse assemblies, add inside an assembly (+),
+    reorder siblings (↑ ↓), or move a node by changing **Inside**.
 
-  Deleting an assembly deletes what's inside it. Linked reviews are never touched.
+  **Building from the client project.** A design whose summary names this product's client
+  project (Project details, *Client project*; the product name when empty) and that no Part links
+  to yet waits in a tray above the map. Drag it onto an assembly, click it to add it with the
+  Part sheet, or **Add all**: boards go under *Electronics* and parts under *Mechanical*, made if
+  missing.
+
+  **Adding a Part** asks first whether it's an existing EE or ME design (cards, this client
+  project's first) or a generic Part (purchased or firmware). Picking a design fills in its name
+  and number. A node can't be moved under itself. Deleting an assembly deletes what's inside it.
+  Linked reviews are never touched.
 - **Issues:** every open issue across the linked designs, worst first, with its Part. Clicking
   an issue opens that exact check in its tool (`?project=<id>&item=<check>`). A design used by
   several Parts is listed once.
@@ -114,7 +134,7 @@ A PL project is one JSON document in the PL data repo (`projects/<id>.json`):
 
 ```json
 { "schema": 1, "id": "pl…", "slug": "…", "createdAt": "…", "createdBy": "…",
-  "meta":  { "name", "client", "number", "description", "phase": "EVT", "archived", "updatedAt", "updatedBy" },
+  "meta":  { "name", "client", "clientProject", "number", "description", "phase": "EVT", "archived", "updatedAt", "updatedBy" },
   "nodes": { "n…": { "id", "parent": "" , "order": 1, "kind": "assembly | part", "name", "number",
                      "source": "ee | me | fw | purchased", "ref": { "tool": "ee", "id": "p…" },
                      "qty": 1, "massG": 64, "supplier", "mpn", "envelopeMm", "notes",

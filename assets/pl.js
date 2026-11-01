@@ -43,6 +43,7 @@
       meta: {
         name: fields.name || 'Untitled project',
         client: fields.client || '',
+        clientProject: fields.clientProject || '',
         number: fields.number || '',
         description: fields.description || '',
         phase: fields.phase || (C.phases || [])[0] || '',

@@ -7,6 +7,8 @@
    repos:       where PL keeps its own projects (FTEs only; there are no shared PL repos).
    tools:       the Signoff tools a Part can link to. PL reads each project file's `summary`
                 from the tool's data repo and from every repo starting with its prefix.
+                `previews` is the folder a checker stores pictures in (Fabcheck's board
+                previews, ee_design_review/docs/fabcheck-link.md).
                 Adding Signoff FW later is one more entry here.
    phases:      build phases, for gates (Phase 3 of the plan).
    demo:        the demo product. Its Parts link to Signoff EE's and ME's demo projects; their
@@ -26,7 +28,7 @@ window.SIGNOFF_CONFIG = {
   "phases": ["EVT", "DVT", "PVT"],
   "tools": [
     { "id": "ee", "name": "Signoff EE", "short": "EE", "desc": "Electrical design review",
-      "dataRepo": "ee_design_review_data", "prefix": "review-ee-", "app": "../ee_design_review/index.html" },
+      "dataRepo": "ee_design_review_data", "prefix": "review-ee-", "app": "../ee_design_review/index.html", "previews": "fabcheck/" },
     { "id": "me", "name": "Signoff ME", "short": "ME", "desc": "Mechanical design review",
       "dataRepo": "me_design_review_data", "prefix": "review-me-", "app": "../me_design_review/index.html" }
   ],
@@ -47,6 +49,10 @@ window.SIGNOFF_CONFIG = {
       { "key": "enc", "parent": "mech", "kind": "part", "name": "Enclosure", "source": "me", "link": "me:mdemo5", "massG": 75 },
       { "key": "brkt", "parent": "mech", "kind": "part", "name": "Wall bracket", "source": "me", "link": "me:mdemo13", "massG": 38 },
       { "key": "screw", "parent": "mech", "kind": "part", "name": "Screw, M3.5 × 25, pan head", "source": "purchased", "supplier": "Example Fasteners", "mpn": "M35-25-PH-ZN", "qty": 2, "massG": 1.6 }
-    ]
+    ],
+    "previews": {
+      "ee:pdemo7": [["top", 120, 76], ["bottom", 120, 76]],
+      "ee:pdemo11": [["top", 110, 70], ["bottom", 110, 70]]
+    }
   }
 };

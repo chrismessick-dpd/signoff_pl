@@ -31,7 +31,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha. The project-to-repo map is rebuilt on every refresh. |
-| `assets/app.js` | UI: Overview, Structure (a map of tiles with an inspector, or the table), Issues; sheets with a design picker; sync |
+| `assets/app.js` | UI: Overview, Structure (Map, Gallery, Exploded, List; inspector; client-project tray; drag to place), Issues; sheets with a design picker; pictures (IndexedDB cache); sync |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
 | `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE and ME demos' summaries |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
@@ -52,14 +52,23 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (63 tests as of
-   2026-11-01, after the Structure map).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (70 tests as of
+   2026-11-01, after board previews).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
 3. Real-repo behavior has been verified only through the fake GitHub (`tests/fake-hub.js`) and
    the demo. A live sync needs Chris's token typed into the page, which Claude doesn't do. Ask
    Chris to try it.
+
+## Visual redesign (2026-11-01)
+
+Chris asked for PL to be visual and easy to build, "Apple, but technical". Map stays the default
+layout; Gallery and Exploded show stored pictures only, never made-up ones (Exploded names Parts
+without a picture). The new look stays in PL: don't port it to the hub, EE or ME (Chris, 2026-11-01).
+Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
+next time each is sent from Fabcheck. ME parts have none until a mechanical checker exists (see
+`../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout.
 
 ## Next
 

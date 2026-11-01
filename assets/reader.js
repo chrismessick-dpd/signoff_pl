@@ -67,8 +67,40 @@
   }
   function cleanEntry(e) {
     e = obj(e);
-    return { id: str(e.id), name: str(e.name), number: str(e.number), revision: str(e.revision), stage: str(e.stage),
+    var out = { id: str(e.id), name: str(e.name), number: str(e.number), revision: str(e.revision), stage: str(e.stage),
       archived: !!e.archived, summary: cleanSummary(e.summary) };
+    var pv = keepPreview(e.preview);
+    if (pv) out.preview = pv;
+    return out;
+  }
+
+  // Pictures a checker stored next to a review (EE's docs/fabcheck-link.md, "Board previews"):
+  // <tool.previews><id>/preview/index.json names them. PL keeps each image's blob sha and fetches
+  // the bytes only when a tile shows it. `shas` maps the repo's paths to blob shas.
+  var IMAGE_TYPES = { 'image/webp': 1, 'image/png': 1 };
+  function cleanPreview(doc, dir, shas, repo) {
+    doc = obj(doc);
+    var images = (Array.isArray(doc.images) ? doc.images : []).map(obj).map(function (i) {
+      var file = str(i.file), key = str(i.key), type = str(i.type);
+      if (!/^[a-z0-9-]{1,32}$/.test(key) || !/^[a-z0-9-]{1,32}\.(webp|png)$/.test(file) || !IMAGE_TYPES[type] || !shas[dir + file]) return null;
+      return { key: key, type: type, w: num(i.w, 4096), h: num(i.h, 4096), sha: shas[dir + file] };
+    }).filter(Boolean);
+    return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images }) : null;
+  }
+  // A preview as stored in the index: images by blob sha, or (demo only) by a file under
+  // assets/demo-previews/.
+  function keepPreview(p) {
+    p = obj(p);
+    var images = (Array.isArray(p.images) ? p.images : []).map(obj).map(function (i) {
+      var key = str(i.key), sha = str(i.sha), src = str(i.src);
+      if (!/^[a-z0-9-]{1,32}$/.test(key)) return null;
+      if (/^[0-9a-f]{40}$/.test(sha) && IMAGE_TYPES[str(i.type)]) return { key: key, type: str(i.type), w: num(i.w, 4096), h: num(i.h, 4096), sha: sha };
+      if (/^assets\/demo-previews\/[a-z0-9-]+\.svg$/.test(src)) return { key: key, w: num(i.w, 4096), h: num(i.h, 4096), src: src };
+      return null;
+    }).filter(Boolean);
+    if (!images.length) return null;
+    var hero = images.some(function (i) { return i.key === str(p.hero); }) ? str(p.hero) : images[0].key;
+    return { repo: /^[\w.-]+\/[\w.-]+$/.test(str(p.repo)) ? str(p.repo) : '', runId: str(p.runId), at: str(p.at), hero: hero, images: images };
   }
   // A stored index (localStorage) goes through the same cleaning before it is shown.
   function cleanIndex(index) {
@@ -127,12 +159,33 @@
           }).catch(function (err) {
             index.errors.push({ tool: tool.id, repo: full, message: e.path + ': ' + err.message });
           });
-        })); });
+        })); }).then(function () { return readPreviews(tool, full, store, snap.entries, cached); });
       }).catch(function (err) {
         // A tool with no data repo yet is fine; anything else is reported.
         if (err.status === 404 && repo === tool.dataRepo) return;
         index.errors.push({ tool: tool.id, repo: full, message: err.message });
       });
+    }
+
+    // The previews stored in this repo, for the designs it holds. One that can't be read is left out
+    // quietly: a tile without a picture still works.
+    function readPreviews(tool, full, store, entries, cached) {
+      if (!tool.previews) return;
+      var shas = {}, head = tool.previews;
+      entries.forEach(function (e) { if (e.type === 'blob') shas[e.path] = e.sha; });
+      return Promise.all(entries.filter(function (e) {
+        return e.type === 'blob' && e.path.indexOf(head) === 0 && /^[^/]+\/preview\/index\.json$/.test(e.path.slice(head.length));
+      }).map(function (e) {
+        var id = e.path.slice(head.length).split('/')[0], entry = index.entries[tool.id + ':' + id];
+        if (!entry || entry.repo !== full) return;
+        var hit = cached[e.path], dir = e.path.slice(0, -'index.json'.length);
+        var got = hit && hit.sha === e.sha ? Promise.resolve(hit.doc) : store.blob(e.sha).then(function (t) { return JSON.parse(t); });
+        return got.then(function (doc) {
+          index.files[full][e.path] = { sha: e.sha, doc: doc };
+          var pv = cleanPreview(doc, dir, shas, full);
+          if (pv) entry.preview = pv;
+        }).catch(function () { /* no picture */ });
+      }));
     }
 
     return Promise.all(this.tools.map(function (tool) {
@@ -153,6 +206,11 @@
         return (a.archived - b.archived) || ((b.summary && b.summary.at) || '').localeCompare((a.summary && a.summary.at) || '') || a.name.localeCompare(b.name);
       });
   }
+
+  // One stored image's bytes, as a Blob.
+  Reader.prototype.image = function (repo, img) {
+    return this.store(repo.split('/')[1]).blobBytes(img.sha).then(function (b) { return new Blob([b], { type: img.type }); });
+  };
 
   S.PLReader = Reader;
   S.plReader = { designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex };

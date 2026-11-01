@@ -140,3 +140,47 @@
 .pick-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .pick-tags span { font-size: 10.5px; color: var(--text-3); border: 1px solid var(--hair); border-radius: 4px; padding: 0 5px; }
 .pick .map-meta { flex-direction: column; align-items: flex-start; gap: 0; }
+
+/* Stored pictures (Fabcheck's board previews) in tiles, the inspector and the picker */
+.map-art img.pv, .map-ins-art img.pv { width: 92%; height: 92%; object-fit: contain; display: block; }
+.map-art img.pv:not([src]), .map-ins-art img.pv:not([src]) { display: none; }
+.map-ins-art { position: relative; }
+.map-ins-flip { position: absolute; right: 8px; bottom: 8px; }
+.map-ins-flip button { padding: 3px 9px; font-size: 11.5px; }
+
+/* Designs of the client project not in the product yet, and dragging */
+.map-tray { background: var(--bg-elev); border: 1px dashed var(--accent); border-radius: var(--radius); padding: 14px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 12px; }
+.map-tray-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.map-tray-head b { display: block; font: 600 14px var(--display); }
+.map-tray-head span { font-size: 12.5px; color: var(--text-3); }
+.map-tray-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.map-tray .pick { cursor: grab; }
+body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2px; }
+[data-drop].drop-on { outline: 2px solid var(--accent); background: var(--accent-soft); }
+
+/* Gallery: big pictures, a section per assembly */
+.gal { display: flex; flex-direction: column; gap: 22px; }
+.gal-sec { display: flex; flex-direction: column; gap: 10px; border-radius: var(--radius); }
+.map-group-name.static { cursor: default; }
+.gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.gal-tile { display: flex; flex-direction: column; gap: 8px; text-align: left; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--hair); border-radius: 14px; padding: 10px; cursor: pointer; min-width: 0;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), border-color 0.18s; }
+.gal-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.gal-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.gal-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gal-art { aspect-ratio: 4 / 3; }
+
+/* Exploded: the pictured Parts stacked in 3D, pulled apart by the slider */
+.xp { padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.xp-stage { min-height: 460px; display: grid; place-items: center; perspective: 1400px; }
+.xp-stack { position: relative; width: min(340px, 70vw); aspect-ratio: 16 / 10; transform-style: preserve-3d; transform: rotateX(56deg) rotateZ(-36deg); }
+.xp-layer { position: absolute; inset: 0; padding: 0; border: none; background: none; cursor: pointer; transform-style: preserve-3d;
+  transform: translateZ(calc(var(--i) * (var(--gap) + 6px))); transition: transform 0.5s var(--ease); }
+.xp-layer img.pv { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 16px 16px rgba(0, 0, 0, 0.25)); }
+.xp-layer svg { width: 100%; height: 100%; }
+.xp-layer.sel img.pv, .xp-layer:hover img.pv { filter: drop-shadow(0 0 2px var(--accent)) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.3)); }
+.xp-layer:focus-visible { outline: 2px solid var(--accent); }
+.xp-label { position: absolute; left: 100%; top: 50%; margin-left: 12px; white-space: nowrap; font-size: 12px; color: var(--text-2); transform: rotateZ(36deg) rotateX(-56deg); transform-origin: left center; pointer-events: none; }
+.xp-ctl { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-3); }
+.xp-ctl input { flex: 0 1 260px; accent-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .xp-layer { transition: none; } }

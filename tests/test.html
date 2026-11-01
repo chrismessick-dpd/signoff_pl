@@ -147,6 +147,29 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   hub.makeRepo('own/review-ee-broken', { 'projects/p9.json': '{ not json' }, ['own']);
   var ix6 = await reader.refresh(ix5);
   ok(ix6.errors.some(function (e) { return e.repo === 'own/review-ee-broken'; }) && ix6.entries['ee:p1'], 'an unreadable file is reported and the rest still load');
+
+  // Board previews stored by Fabcheck next to a review (EE docs/fabcheck-link.md, "Board previews").
+  var phub = new FakeHub();
+  var pindex = { v: 1, tool: 'fabcheck', runId: 'r1', at: '2026-11-01T00:00:00Z', hero: 'top', images: [
+    { key: 'top', file: 'top.webp', type: 'image/webp', w: 640, h: 320 }, { key: 'bottom', file: 'bottom.webp', type: 'image/webp', w: 640, h: 320 },
+    { key: 'evil', file: '../x.webp', type: 'image/webp' }, { key: 'svg', file: 'a.svg', type: 'image/svg+xml' }, { key: 'gone', file: 'gone.png', type: 'image/png' }] };
+  phub.makeRepo('own/ee_design_review_data', { 'projects/p1.json': file('p1', 'Main', summary(100, 50, { critical: 0, major: 0, minor: 0 })),
+    'fabcheck/p1/preview/index.json': JSON.stringify(pindex), 'fabcheck/p1/preview/top.webp': 'TOP', 'fabcheck/p1/preview/bottom.webp': 'BOTTOM',
+    'fabcheck/p9/preview/index.json': JSON.stringify(pindex) }, ['own']);
+  var preader = new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: phub.fetchFor('tok-own') });
+  var pix = await preader.refresh(null), pv = pix.entries['ee:p1'].preview;
+  eq(pv && pv.images.map(function (i) { return i.key; }), ['top', 'bottom'], 'reads a design’s stored previews and drops bad file names, types and missing files');
+  ok(pv.hero === 'top' && pv.repo === 'own/ee_design_review_data' && /^[0-9a-f]{40}$/.test(pv.images[0].sha), 'a preview keeps its hero, repo and blob shas');
+  ok(!pix.entries['ee:p9'], 'a preview without its review adds nothing');
+  var pblob = await preader.image(pv.repo, pv.images[1]);
+  ok(pblob.type === 'image/webp' && await pblob.text() === 'BOTTOM', 'an image is fetched by its blob sha');
+  var before2 = phub.calls.length;
+  var pix2 = await preader.refresh(pix);
+  ok(pix2.entries['ee:p1'].preview && !phub.calls.slice(before2).some(function (c) { return /\/git\/blobs\//.test(c); }), 'an unchanged preview index isn’t downloaded again');
+  var kept = Signoff.plReader.cleanIndex(JSON.parse(JSON.stringify(pix2)));
+  ok(kept.entries['ee:p1'].preview.images.length === 2, 'a stored index keeps its previews');
+  var forged = Signoff.plReader.cleanIndex({ entries: { 'ee:x': { tool: 'ee', id: 'x', preview: { images: [{ key: 'top', src: 'https://evil.example/a.svg' }, { key: 'b', src: 'javascript:alert(1)' }] } } } });
+  ok(!forged.entries['ee:x'].preview, 'a stored preview can only point at the demo pictures');
   eq(Signoff.plReader.designs(ix6, 'ee').map(function (d) { return d.id; }).sort(), ['p1', 'p2'], 'designs() lists one tool’s projects');
 
   // Review repos are contractor-writable: planted files and hostile summaries.
