@@ -31,7 +31,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha. The project-to-repo map is rebuilt on every refresh. |
-| `assets/app.js` | UI: Overview, Structure, Issues; sheets; sync |
+| `assets/app.js` | UI: Overview, Structure (a map of tiles with an inspector, or the table), Issues; sheets with a design picker; sync |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
 | `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE and ME demos' summaries |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
@@ -52,8 +52,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (61 tests as of
-   2026-11-01).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (63 tests as of
+   2026-11-01, after the Structure map).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.

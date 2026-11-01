@@ -51,7 +51,7 @@
     });
     var q = s.reqs && typeof s.reqs === 'object' ? s.reqs : null;
     var out = {
-      v: num(s.v), tool: str(s.tool), name: str(s.name), client: str(s.client), number: str(s.number), revision: str(s.revision),
+      v: num(s.v), tool: str(s.tool), name: str(s.name), client: str(s.client), project: str(s.project), number: str(s.number), revision: str(s.revision),
       stage: str(s.stage), archived: !!s.archived, total: num(s.total), reviewed: num(s.reviewed), pct: num(s.pct, 100),
       checklists: checklists, issues: { open: open, fixed: num(iss.fixed), waived: num(iss.waived) },
       reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), open: num(q.open), unlinked: num(q.unlinked) } : null,
@@ -110,7 +110,9 @@
             }).catch(function () { /* unreadable: no check */ });
         return map.then(function () { return Promise.all(files.map(function (e) {
           var hit = cached[e.path], fileId = e.path.slice('projects/'.length, -'.json'.length);
-          var got = hit && hit.sha === e.sha ? Promise.resolve(cleanEntry(hit.entry))
+          // Entries cached before PL kept the summary's client project are read again once.
+          var stale = hit && hit.entry && hit.entry.summary && !('project' in hit.entry.summary);
+          var got = hit && hit.sha === e.sha && !stale ? Promise.resolve(cleanEntry(hit.entry))
             : store.blob(e.sha).then(function (text) { return keep(obj(JSON.parse(text))); });
           return got.then(function (entry) {
             if (entry.id !== fileId) return;   // a file only counts for the project its name says

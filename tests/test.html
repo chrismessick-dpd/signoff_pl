@@ -124,6 +124,12 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var ix2 = await reader.refresh(ix);
   ok(!hub.calls.slice(before).some(function (c) { return /\/git\/blobs\//.test(c); }), 'unchanged files aren’t downloaded again');
   ok(Object.keys(ix2.entries).length === 3, '…and are still in the index');
+  ok('project' in ix.entries['ee:p1'].summary, 'keeps the summary’s client project');
+  var old = JSON.parse(JSON.stringify(ix));
+  Object.keys(old.files).forEach(function (r) { Object.keys(old.files[r]).forEach(function (f) { var e = old.files[r][f].entry; if (e && e.summary) delete e.summary.project; }); });
+  before = hub.calls.length;
+  await reader.refresh(old);
+  ok(hub.calls.slice(before).some(function (c) { return /\/git\/blobs\//.test(c); }), 'entries cached before the client project was kept are read again');
 
   // p1 is shared with a contractor: it moves out of the data repo into its own repo.
   hub.makeRepo('own/review-ee-main', { 'projects/p1.json': file('p1', 'Main', summary(100, 60, { critical: 0, major: 0, minor: 0 })) }, ['own']);

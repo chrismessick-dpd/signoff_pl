@@ -46,7 +46,7 @@
   var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
-  var ui = Object.assign({ slug: '', view: 'overview', closed: {} }, load('ui', {}));
+  var ui = Object.assign({ slug: '', view: 'overview', closed: {}, layout: 'map', sel: '' }, load('ui', {}));
   var syncing = false;
 
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
@@ -60,7 +60,7 @@
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
-  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed }); }
+  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -313,13 +313,129 @@
     return html;
   }
 
+  // ── Structure: a map of tiles (default) or the table ─────
+  // Until designs carry a picture, a Part's tile shows a plain drawing of what it is: a board
+  // outline for EE, a part outline for ME, a box for purchased, braces for firmware.
+  function partArt(n, big) {
+    var num = esc(((n.ref && P.partStatus(n, index).entry) || {}).number || n.number || '');
+    var label = big && num ? '<text class="pa-text" x="60" y="44" text-anchor="middle">' + num + '</text>' : '';
+    if (n.source === 'ee') {
+      return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-board" x="3" y="3" width="114" height="70" rx="7"/>' +
+        [[11, 11], [109, 11], [11, 65], [109, 65]].map(function (c) { return '<circle class="pa-hole" cx="' + c[0] + '" cy="' + c[1] + '" r="3"/>'; }).join('') + label + '</svg>';
+    }
+    if (n.source === 'me') {
+      return '<svg viewBox="0 0 120 76" aria-hidden="true"><path class="pa-part" d="M24 24 L60 8 L96 24 L96 54 L60 70 L24 54 Z"/><path class="pa-edge" d="M24 24 L60 40 L96 24 M60 40 V70"/></svg>';
+    }
+    if (n.source === 'purchased') {
+      return '<svg viewBox="0 0 120 76" aria-hidden="true"><path class="pa-box" d="M38 26 L60 16 L82 26 L82 52 L60 62 L38 52 Z"/><path class="pa-edge" d="M38 26 L60 36 L82 26 M60 36 V62 M49 21 L71 31"/></svg>';
+    }
+    if (P.toolById(n.source)) return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-unknown" x="20" y="12" width="80" height="52" rx="8"/></svg>';
+    return '<svg viewBox="0 0 120 76" aria-hidden="true"><text class="pa-fw" x="60" y="47" text-anchor="middle">{ }</text></svg>';
+  }
+
   function structurePage(p) {
-    var t = P.tree(p), rolls = P.rollup(p, index);
-    var html = '<div class="page"><div class="cl-head"><div><div class="eyebrow">' + esc(p.meta.name) + '</div><h1 class="page-title">Structure</h1>' +
+    var t = P.tree(p), rolls = P.rollup(p, index), ids = P.flatten(t);
+    var map = ui.layout !== 'list';
+    if (map && ui.sel && !t.nodes[ui.sel]) ui.sel = '';
+    var html = '<div class="page' + (map ? ' page-map' + (ui.sel ? ' has-sel' : '') : '') + '"><div class="map-main"><div class="cl-head"><div><div class="eyebrow">' + esc(p.meta.name) + '</div><h1 class="page-title">Structure</h1>' +
       '<div class="page-sub"><span>' + plural(rolls[''].parts, 'Part') + '</span><span class="sep">·</span><span>' + fmtMass(rolls[''].massG) + '</span></div></div>' +
-      '<button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div>';
-    var ids = P.flatten(t);
-    if (!ids.length) return html + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Start with the top assembly.</p><button class="btn btn-primary" data-act="add-node">Add</button></div></div>';
+      '<div class="cl-head-acts"><div class="seg" role="tablist" aria-label="Layout">' + [['map', 'Map'], ['list', 'List']].map(function (l) {
+        return '<button role="tab" class="' + ((map ? 'map' : 'list') === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
+      }).join('') + '</div><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div></div>';
+    if (!ids.length) return html + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Start with the top assembly.</p><button class="btn btn-primary" data-act="add-node">Add</button></div></div></div>';
+    if (map) return html + mapLanes(p, t, rolls, ids) + '</div>' + (ui.sel ? inspector(p, t, ui.sel) : '') + '</div>';
+    return html + listTable(t, rolls, ids) + '</div></div>';
+  }
+
+  // One lane per assembly under the top assembly (or per top-level assembly when there are
+  // several). Parts at the top level share a lane; deeper assemblies are headed groups in their lane.
+  function mapLanes(p, t, rolls, ids) {
+    var top = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
+    var level = top ? t.children[top] || [] : t.roots;
+    var lanes = level.filter(function (id) { return t.nodes[id].kind === 'assembly'; });
+    var loose = level.filter(function (id) { return t.nodes[id].kind !== 'assembly'; });
+    function tiles(list) {
+      var big = list.filter(function (id) { return P.toolById(t.nodes[id].source); }), small = list.filter(function (id) { return !P.toolById(t.nodes[id].source); });
+      return (big.length ? '<div class="map-tiles">' + big.map(function (id) { return tile(t.nodes[id]); }).join('') + '</div>' : '') +
+        (small.length ? '<div class="map-tiles small">' + small.map(function (id) { return tile(t.nodes[id]); }).join('') + '</div>' : '');
+    }
+    function laneHead(id, name, r) {
+      return '<div class="map-lane-head"><button class="map-lane-name" data-act="edit-node" data-id="' + esc(id) + '" title="Edit assembly">' + esc(name) + '</button>' +
+        '<span class="map-lane-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') +
+        '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button></div>';
+    }
+    var html = '<div class="map-lanes">' + lanes.map(function (lane) {
+      var inside = P.descendants(t, lane), groups = [{ id: lane, parts: [] }];
+      ids.forEach(function (id) {
+        if (!inside[id]) return;
+        if (t.nodes[id].kind === 'assembly') groups.push({ id: id, parts: [] });
+        else groups.filter(function (g) { return g.id === t.parent[id]; }).concat(groups.slice(-1))[0].parts.push(id);
+      });
+      return '<section class="map-lane">' + laneHead(lane, t.nodes[lane].name || 'Unnamed', rolls[lane]) +
+        groups.map(function (g, k) {
+          if (!k) return tiles(g.parts);
+          return '<div class="map-group"><button class="map-group-name" data-act="edit-node" data-id="' + esc(g.id) + '">' + esc(t.nodes[g.id].name || 'Unnamed') + '</button>' +
+            (g.parts.length ? tiles(g.parts) : '<div class="map-empty">Empty</div>') + '</div>';
+        }).join('') + (Object.keys(inside).length ? '' : '<div class="map-empty">No Parts yet</div>') + '</section>';
+    }).join('');
+    if (loose.length) {
+      html += '<section class="map-lane"><div class="map-lane-head"><span class="map-lane-name static">' + esc(top ? t.nodes[top].name : 'Top level') + '</span>' +
+        '<span class="map-lane-sub">' + plural(loose.length, 'Part') + '</span></div>' + tiles(loose) + '</section>';
+    }
+    return html + '</div>';
+  }
+
+  function tile(n) {
+    var st = P.partStatus(n, index), s = st && st.summary, tool = P.toolById(n.source);
+    var cls = 'map-tile' + (tool ? '' : ' small') + (ui.sel === n.id ? ' sel' : '');
+    var qty = n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '';
+    if (!tool) {
+      return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
+        '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
+    }
+    return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '"><div class="map-art">' + partArt(n, true) + '</div>' +
+      '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div>' +
+      (s ? '<div class="bar"><i style="width:' + pct(s.pct) + '%"></i></div>' : '') +
+      '<div class="map-meta">' + (s ? '<span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : stateChip(st)) + srcChip(n.source) + '</div></button>';
+  }
+
+  // The selected Part's detail, beside the map (over it on narrow screens).
+  function inspector(p, t, id) {
+    var n = t.nodes[id], st = P.partStatus(n, index), tool = P.toolById(n.source);
+    var html = '<aside class="map-ins card" aria-label="' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
+    if (n.kind === 'assembly') {
+      var r = P.rollup(p, index)[id];
+      return html + '<h2>' + esc(n.name) + '</h2><p class="map-ins-sub">' + esc(P.path(t, id).map(function (x) { return x.name; }).concat(['Assembly']).join(' › ')) + '</p>' +
+        '<div class="map-ins-row">' + (r.designs ? ring(r.pct, 56, 6, pct(r.pct) + '%') : '') + '<div>' + plural(r.parts, 'Part') + '<br>' + sevs(r.open) + '</div></div>' +
+        '<div class="map-ins-acts"><button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button></div></aside>';
+    }
+    var e = st.entry || {}, s = st.summary;
+    html += '<div class="map-ins-art">' + partArt(n, true) + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
+      '<p class="map-ins-sub">' + esc([e.number || n.number || n.mpn, e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
+    if (s) {
+      var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
+      html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
+      var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
+      if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
+      var top = (s.open || []).slice().sort(function (a, b) { return P.SEVERITIES.indexOf(a.severity) - P.SEVERITIES.indexOf(b.severity); }).slice(0, 4);
+      if (top.length) {
+        html += '<div class="map-ins-issues">' + top.map(function (i) {
+          return '<a href="' + esc(designUrl(n, i.id)) + '" target="_blank" rel="noopener"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '</span></a>';
+        }).join('') + (total > top.length ? '<p class="note">' + plural(total - top.length, 'more issue') + ' in ' + esc(tool.short) + '</p>' : '') + '</div>';
+      }
+      if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
+    } else if (st.state === 'purchased') {
+      html += '<p class="map-ins-text">' + esc([n.supplier, n.mpn].filter(Boolean).join(' · ') || 'Purchased') + (n.envelopeMm ? '<br>Envelope ' + esc(n.envelopeMm) + ' mm' : '') + '</p>';
+    } else if (STATE_TEXT[st.state]) {
+      html += '<p class="map-ins-text">' + stateChip(st) + ' ' + esc(STATE_TEXT[st.state][2]) + '</p>';
+    }
+    if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
+    return html + '<div class="map-ins-acts">' + (tool && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(tool.name) + '</a>' : '') +
+      '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button></div></aside>';
+  }
+
+  function listTable(t, rolls, ids) {
+    var html = '';
     var hidden = {};
     ids.forEach(function (id) { if (ui.closed[id] || hidden[t.parent[id]]) { if (hidden[t.parent[id]]) hidden[id] = 1; if (ui.closed[id]) Object.keys(P.descendants(t, id)).forEach(function (d) { hidden[d] = 1; }); } });
     html += '<div class="card" style="overflow-x:auto"><table class="table tree"><thead><tr><th>Name</th><th>Source</th><th class="hide-narrow">Stage</th><th>Progress</th><th>Open issues</th><th class="hide-narrow">Qty</th><th class="hide-narrow">Mass</th><th></th></tr></thead><tbody>' +
@@ -342,7 +458,7 @@
           '<button class="icon-btn" data-act="move-up" data-id="' + esc(id) + '" title="Move up">' + ICON.up + '</button>' +
           '<button class="icon-btn" data-act="move-down" data-id="' + esc(id) + '" title="Move down">' + ICON.down + '</button></td></tr>';
       }).join('') + '</tbody></table></div>';
-    html += '<p class="note" style="margin-top:12px">Mass is per Part times quantity, over the Parts that have one. Progress counts linked designs once, however many Parts use them.</p></div>';
+    html += '<p class="note" style="margin-top:12px">Mass is per Part times quantity, over the Parts that have one. Progress counts linked designs once, however many Parts use them.</p>';
     return html;
   }
 
@@ -408,16 +524,20 @@
 
   // Add (fields.parent preset) or edit a node.
   function nodeSheet(id, preset) {
-    var p = current(), t = P.tree(p), n = id ? p.nodes[id] : Object.assign({ kind: 'part', name: '', number: '', source: (C.tools[0] || {}).id || 'purchased', ref: null, qty: 1 }, preset || {});
+    var p = current(), t = P.tree(p);
+    // A new Part goes inside the product's one top assembly unless you choose otherwise.
+    var home = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
+    var n = id ? p.nodes[id] : Object.assign({ kind: 'part', name: '', number: '', source: (C.tools[0] || {}).id || 'purchased', ref: null, qty: 1, parent: home }, preset || {});
     var banned = id ? Object.assign(P.descendants(t, id), (function () { var o = {}; o[id] = 1; return o; })()) : {};
     var parents = P.flatten(t).filter(function (x) { return t.nodes[x].kind === 'assembly' && !banned[x]; });
     var st = id ? P.partStatus(n, index) : null;
     var w = sheet('<div class="sheet-head"><h2>' + (id ? esc(n.name || 'Part') : 'Add to ' + esc(p.meta.name)) + '</h2>' +
-      (id ? '<p>' + esc(P.path(t, id).map(function (x) { return x.name; }).join(' › ') || 'Top level') + '</p>' : '<p>An assembly groups Parts. A Part links to its design review, or is purchased.</p>') + '</div>' +
+      (id ? '<p>' + esc(P.path(t, id).map(function (x) { return x.name; }).join(' › ') || 'Top level') + '</p>' : '<p>Pick an existing design, or type in a generic Part. An assembly groups Parts.</p>') + '</div>' +
       '<div class="sheet-body">' +
       '<div class="field"><span class="field-label">Kind</span><div class="seg full" id="f-kind">' + [['part', 'Part'], ['assembly', 'Assembly']].map(function (k) {
         return '<button type="button" class="' + (n.kind === k[0] ? 'on' : '') + '" data-kind="' + k[0] + '">' + k[1] + '</button>';
       }).join('') + '</div></div>' +
+      '<div id="f-link"></div>' +
       '<div class="row2"><div class="field"><label for="f-name">Name</label><input class="input" id="f-name" value="' + esc(n.name) + '" placeholder="e.g. Main board"></div>' +
       '<div class="field"><label for="f-number">Number</label><input class="input" id="f-number" value="' + esc(n.number) + '" placeholder="Part or drawing number"></div></div>' +
       '<div class="field"><label for="f-parent">Inside</label><select class="input" id="f-parent"><option value="">Top level</option>' + parents.map(function (x) {
@@ -430,25 +550,66 @@
       '<button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (id ? 'Save' : 'Add') + '</button></div>', { wide: true });
 
     var kind = n.kind, source = n.source || '';
+    var linked = P.refKey(n.ref);   // "tool:id" of the picked design, or ''
+    // A Part is either an existing design from Signoff EE or ME, or a generic Part you type in
+    // (purchased, or firmware until Signoff FW exists). New Parts start on the design list.
+    var generic = !P.toolById(source), lastGeneric = generic ? source : 'purchased';
+    function allDesigns() {
+      return C.tools.reduce(function (all, tool) { return all.concat(S.plReader.designs(index, tool.id)); }, []);
+    }
+    // Design cards, those of this product's client project first. A design another Part already
+    // links to is marked, not hidden: the same board can be used twice.
+    function pickCards(q) {
+      var list = allDesigns(), mine = String(p.meta.name || '').toLowerCase(), used = {};
+      P.flatten(t).forEach(function (x) { if (x !== id && t.nodes[x].ref) used[P.refKey(t.nodes[x].ref)] = 1; });
+      var shown = list.filter(function (d) {
+        return !q || [d.name, d.number, d.summary && d.summary.project, (P.toolById(d.tool) || {}).short].join(' ').toLowerCase().indexOf(q) >= 0;
+      });
+      var here = shown.filter(function (d) { return d.summary && d.summary.project && d.summary.project.toLowerCase() === mine; });
+      var rest = shown.filter(function (d) { return here.indexOf(d) < 0; });
+      function card(d) {
+        var s = d.summary, key = d.tool + ':' + d.id, on = key === linked;
+        return '<button type="button" class="pick' + (on ? ' on' : '') + (d.archived ? ' archived' : '') + '" data-pick="' + esc(key) + '" aria-pressed="' + on + '">' +
+          '<div class="map-art">' + partArt({ source: d.tool, number: d.number }, false) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
+          '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span>' +
+          (s ? '<span>' + esc(s.stage || d.stage || '') + (s.stage || d.stage ? ' · ' : '') + pct(s.pct) + '%</span>' : '<span>Not summarized yet</span>') + '</div>' +
+          '<div class="pick-tags">' + srcChip(d.tool) + (s && s.project && here.indexOf(d) < 0 ? '<span>' + esc(s.project) + '</span>' : '') +
+            (used[key] ? '<span>In use</span>' : '') + (d.archived ? '<span>Archived</span>' : '') + '</div></div></button>';
+      }
+      var missing = linked && !list.some(function (d) { return d.tool + ':' + d.id === linked; });
+      return (missing ? '<button type="button" class="pick on" data-pick="' + esc(linked) + '"><div class="pick-body"><div class="map-name">' + esc(linked.split(':')[1]) + '</div><div class="map-meta"><span>Not found</span></div></div></button>' : '') +
+        (here.length ? '<div class="pick-group">In ' + esc(p.meta.name) + '</div>' + here.map(card).join('') : '') +
+        (rest.length ? (here.length ? '<div class="pick-group">Other projects</div>' : '') + rest.map(card).join('') : '') +
+        (q && !shown.length ? '<p class="note">Nothing matches “' + esc(q) + '”.</p>' : '');
+    }
+    function refreshPicks() {
+      var box = w.querySelector('#f-ref-list'), qEl = w.querySelector('#f-ref-q');
+      if (box) box.innerHTML = pickCards(qEl ? qEl.value.trim().toLowerCase() : '');
+    }
+    function linkFields() {
+      var box = w.querySelector('#f-link');
+      if (kind !== 'part') { box.innerHTML = ''; return; }
+      var list = allDesigns(), tools = C.tools.map(function (x) { return x.short; }).join(' or ');
+      var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['generic', 'Generic Part']].map(function (m) {
+        return '<button type="button" class="' + ((generic ? 'generic' : 'design') === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
+      }).join('') + '</div></div>';
+      if (generic) {
+        html += '<div class="field"><span class="field-label">Kind of Part</span><div class="seg full" id="f-source">' + P.sources().filter(function (s) { return !s.tool; }).map(function (s) {
+          return '<button type="button" class="' + (source === s.id ? 'on' : '') + '" data-source="' + esc(s.id) + '">' + esc(s.name) + '</button>';
+        }).join('') + '</div></div>';
+      } else {
+        html += '<div class="field">' + (list.length > 6 ? '<input class="input" id="f-ref-q" type="search" placeholder="Search designs by name, number or client project" autocomplete="off" aria-label="Search designs">' : '') +
+          '<div class="pick-grid" id="f-ref-list">' + pickCards('') + '</div>' +
+          (!index ? '<p class="note">Designs haven’t been read yet. ' + (DEMO ? '' : 'Sync to read them from GitHub.') + '</p>'
+            : !list.length ? '<p class="note">No designs found in ' + esc(C.tools.map(function (x) { return x.name; }).join(' or ')) + '. Sync to read them again.</p>' : '') + '</div>';
+      }
+      box.innerHTML = html;
+    }
     function partFields() {
+      linkFields();
       var box = w.querySelector('#f-part');
       if (kind !== 'part') { box.innerHTML = ''; return; }
-      var tool = P.toolById(source);
-      var list = tool ? S.plReader.designs(index, source) : [];
-      var linked = n.ref && n.ref.tool === source ? n.ref.id : '';
-      var linkField = '';
-      if (tool) {
-        var known = list.some(function (d) { return d.id === linked; });
-        linkField = '<div class="field"><label for="f-ref">' + esc(tool.name) + ' project</label><select class="input" id="f-ref"><option value="">Not linked yet</option>' +
-          (linked && !known ? '<option value="' + esc(linked) + '" selected>' + esc(linked) + ' (not found)</option>' : '') +
-          list.map(function (d) {
-            return '<option value="' + esc(d.id) + '"' + (d.id === linked ? ' selected' : '') + '>' + esc([d.name, d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + (d.summary ? '' : ' (not summarized yet)') + (d.archived ? ' (archived)' : '') + '</option>';
-          }).join('') + '</select>' +
-          (!index ? '<p class="note">Designs haven’t been read yet. ' + (DEMO ? '' : 'Sync to read them from GitHub.') + '</p>' : !list.length ? '<p class="note">No ' + esc(tool.name) + ' projects found. Sync to read them again.</p>' : '') + '</div>';
-      }
-      box.innerHTML = '<div class="field"><span class="field-label">Source</span><div class="seg full" id="f-source">' + P.sources().map(function (s) {
-        return '<button type="button" class="' + (source === s.id ? 'on' : '') + '" data-source="' + esc(s.id) + '" title="' + esc(s.name) + '">' + esc(s.label) + '</button>';
-      }).join('') + '</div></div>' + linkField +
+      box.innerHTML =
       '<div class="row2"><div class="field"><label for="f-qty">Quantity</label><input class="input" id="f-qty" type="number" min="1" step="1" value="' + esc(n.qty || 1) + '"></div>' +
       '<div class="field"><label for="f-mass">Mass each (g)</label><input class="input" id="f-mass" type="number" min="0" step="0.1" value="' + esc(n.massG == null ? '' : n.massG) + '" placeholder="Optional"></div></div>' +
       (source === 'purchased' ? '<div class="row2"><div class="field"><label for="f-supplier">Supplier</label><input class="input" id="f-supplier" value="' + esc(n.supplier || '') + '"></div>' +
@@ -456,11 +617,30 @@
         '<div class="field"><label for="f-env">Envelope (mm)</label><input class="input" id="f-env" value="' + esc(n.envelopeMm || '') + '" placeholder="e.g. 70 × 55 × 38"></div>' : '');
     }
     partFields();
+    w.addEventListener('input', function (e) { if (e.target.id === 'f-ref-q') refreshPicks(); });
     w.addEventListener('click', function (e) {
       var k = e.target.closest('[data-kind]');
       if (k) { kind = k.dataset.kind; w.querySelectorAll('#f-kind button').forEach(function (b) { b.classList.toggle('on', b === k); }); partFields(); return; }
+      var md = e.target.closest('[data-mode]');
+      if (md) {
+        generic = md.dataset.mode === 'generic';
+        source = generic ? lastGeneric : (linked ? linked.split(':')[0] : (C.tools[0] || {}).id);
+        partFields(); return;
+      }
       var s = e.target.closest('[data-source]');
-      if (s) { source = s.dataset.source; partFields(); return; }
+      if (s) { source = lastGeneric = s.dataset.source; partFields(); return; }
+      var pk = e.target.closest('[data-pick]');
+      if (pk) {
+        linked = linked === pk.dataset.pick ? '' : pk.dataset.pick;
+        if (linked) source = linked.split(':')[0];
+        var d = allDesigns().filter(function (x) { return x.tool + ':' + x.id === linked; })[0];
+        // The Part takes the design's name and number, unless you've typed your own.
+        [['#f-name', 'name'], ['#f-number', 'number']].forEach(function (f) {
+          var el = w.querySelector(f[0]);
+          if (!el.value.trim() || el.value === el.dataset.auto) { el.value = d ? d[f[1]] || '' : ''; el.dataset.auto = el.value; }
+        });
+        refreshPicks(); return;
+      }
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') return closeSheet();
       if (b.dataset.sheet === 'delete') {
@@ -475,7 +655,7 @@
       if (id && !P.canMove(t, id, parent)) { toast('An assembly can’t go inside itself'); return; }
       var fields = { kind: kind, name: name, number: val(w, '#f-number'), parent: parent, notes: val(w, '#f-notes') };
       if (kind === 'part') {
-        var refId = val(w, '#f-ref'), mass = val(w, '#f-mass'), qty = parseInt(val(w, '#f-qty'), 10);
+        var refId = linked.split(':')[1] || '', mass = val(w, '#f-mass'), qty = parseInt(val(w, '#f-qty'), 10);
         Object.assign(fields, {
           source: source, ref: P.toolById(source) && refId ? { tool: source, id: refId } : null,
           qty: qty > 0 ? qty : 1, massG: mass === '' ? null : Math.max(0, Number(mass)),
@@ -669,6 +849,9 @@
       case 'add-node': nodeSheet(null, {}); break;
       case 'add-child': e.stopPropagation(); nodeSheet(null, { parent: id }); break;
       case 'edit-node': nodeSheet(id); break;
+      case 'select-node': ui.sel = ui.sel === id ? '' : id; saveUi(); renderPage(); break;
+      case 'close-ins': ui.sel = ''; saveUi(); renderPage(); break;
+      case 'layout': ui.layout = el.dataset.layout; saveUi(); renderPage(); break;
       case 'open-url': if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener'); break;
       case 'toggle-node': e.stopPropagation(); if (ui.closed[id]) delete ui.closed[id]; else ui.closed[id] = 1; saveUi(); renderPage(); break;
       case 'move-up': e.stopPropagation(); move(id, -1); break;
@@ -689,7 +872,10 @@
   });
   $('#project-search').addEventListener('input', renderSidebar);
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { closeSheet(); closeMenu(); return; }
+    if (e.key === 'Escape') {
+      if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'structure') { ui.sel = ''; saveUi(); renderPage(); return; }
+      closeSheet(); closeMenu(); return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); sync(); return; }
     if (e.target.closest('input,textarea,select') || $('#sheet')) return;
     if (e.key === '[') toggleSidebar();
