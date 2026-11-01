@@ -43,7 +43,7 @@
   var projects = load('projects', {});    // slug -> PL project document (working copy)
   var dirty = load('dirty', {});          // project id -> time of last unsynced edit
   var cache = load('cache', {});          // blob shas in the PL data repo as of the last sync
-  var index = load('index', null);        // designs read from EE/ME (reader.js)
+  var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
   var ui = Object.assign({ slug: '', view: 'overview', closed: {} }, load('ui', {}));
@@ -100,16 +100,19 @@
     tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>'
   };
 
-  function ring(pct, size, stroke, label, sub) {
+  // Numbers shown here come from review files other people can write; pct() keeps them numbers.
+  function pct(v) { return Math.max(0, Math.min(100, Math.round(Number(v)) || 0)); }
+  function ring(pct0, size, stroke, label, sub) {
+    var pct = pct0 == null ? 0 : Number(pct0) || 0;
     var r = (size - stroke) / 2, c = 2 * Math.PI * r;
     return '<div class="ring" style="width:' + size + 'px;height:' + size + 'px">' +
       '<svg width="' + size + '" height="' + size + '"><circle class="ring-track" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke-width="' + stroke + '"/>' +
       '<circle class="ring-val" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke-width="' + stroke + '" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + (c * (1 - pct / 100)) + '"/></svg>' +
-      (label != null ? '<div class="ring-label"><div><b>' + label + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div></div>' : '') + '</div>';
+      (label != null ? '<div class="ring-label"><div><b>' + esc(label) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div></div>' : '') + '</div>';
   }
-  function pbar(pct) { return '<div class="pbar"><div class="bar"><i style="width:' + pct + '%"></i></div><span>' + pct + '%</span></div>'; }
+  function pbar(v) { var n = pct(v); return '<div class="pbar"><div class="bar"><i style="width:' + n + '%"></i></div><span>' + n + '%</span></div>'; }
   function sevs(open) {
-    var parts = P.SEVERITIES.filter(function (s) { return open[s]; }).map(function (s) { return '<span class="sev ' + s + '" title="' + cap(s) + '"><b>' + open[s] + '</b></span>'; });
+    var parts = P.SEVERITIES.filter(function (s) { return open[s]; }).map(function (s) { return '<span class="sev ' + s + '" title="' + cap(s) + '"><b>' + esc(open[s]) + '</b></span>'; });
     return '<span class="sevs">' + (parts.join('') || '<span class="none">None</span>') + '</span>';
   }
   function srcChip(id) {
@@ -204,7 +207,7 @@
     if (!p) { $('#view-seg').innerHTML = ''; $('#toolbar-actions').innerHTML = ''; return; }
     var r = P.rollup(p, index)[''];
     $('#view-seg').innerHTML = VIEWS.map(function (v) {
-      var extra = v.id === 'issues' && r.openTotal ? '<span class="count">' + r.openTotal + '</span>' : '';
+      var extra = v.id === 'issues' && r.openTotal ? '<span class="count">' + esc(r.openTotal) + '</span>' : '';
       return '<button role="tab" class="' + (v.id === ui.view ? 'on' : '') + '" data-act="view" data-view="' + v.id + '">' + v.label + extra + '</button>';
     }).join('');
     $('#toolbar-actions').innerHTML = (DEMO ? '' : '<button class="btn" data-act="sync" title="Sync PL projects and read the designs again (Ctrl+S)">' + ICON.sync + '<span class="btn-label">Sync</span>' +
@@ -254,7 +257,7 @@
       '<div class="page-sub">' + (sub ? '<span>' + sub + '</span>' : '') + (m.phase ? '<span class="chip accent">' + esc(m.phase) + '</span>' : '') + '</div>';
   }
   function stat(n, label, cls, detail) {
-    return '<div class="card stat ' + (cls || '') + '"><div class="stat-num">' + n + '</div><div class="stat-label">' + esc(label) + '</div>' + (detail ? '<div class="stat-detail">' + detail + '</div>' : '') + '</div>';
+    return '<div class="card stat ' + esc(cls || '') + '"><div class="stat-num">' + esc(n) + '</div><div class="stat-label">' + esc(label) + '</div>' + (detail ? '<div class="stat-detail">' + detail + '</div>' : '') + '</div>';
   }
 
   function overviewPage(p) {

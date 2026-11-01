@@ -9,6 +9,12 @@
    when its project moves out of the data repo into its own shared repo. If the same project
    is in both for a moment (the move was interrupted), the shared repo's copy wins.
 
+   Review files come from repositories contractors can write to, so nothing in them is
+   trusted: every entry is rebuilt from known fields (numbers as numbers, severities from the
+   list), a file only counts for the project its name says, and when the tool's data repo has
+   a People list (users.json), a shared repo only counts for the projects its shared map puts
+   there.
+
    index: { at, entries: { 'tool:id': { tool, id, repo, path, sha, name, number, revision,
             stage, summary | null } }, errors: [{ tool, repo, message }], files: { 'owner/repo':
             { path: { sha, entry } } } } */
@@ -28,16 +34,64 @@
     return new S.GitHubStore({ owner: this.owner, repo: repo, branch: this.branch, dataPath: '', token: this.token }, this.fetch);
   };
 
+  var SEVERITIES = ['critical', 'major', 'minor'];
+  function str(v) { return v == null || typeof v === 'object' ? '' : String(v); }
+  function num(v, max) { v = Math.max(0, Math.round(Number(v)) || 0); return max ? Math.min(v, max) : v; }
+  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+
+  // A summary (EE README, "The project summary") rebuilt from the fields PL knows.
+  function cleanSummary(s) {
+    if (!s || typeof s !== 'object') return null;
+    var iss = obj(s.issues), open = {}, checklists = {};
+    SEVERITIES.forEach(function (sev) { open[sev] = num(obj(iss.open)[sev]); });
+    Object.keys(obj(s.checklists)).forEach(function (k) {
+      if (k === '__proto__') return;
+      var c = obj(s.checklists[k]);
+      checklists[k] = { name: str(c.name), total: num(c.total), reviewed: num(c.reviewed), pct: num(c.pct, 100), issuesOpen: num(c.issuesOpen) };
+    });
+    var q = s.reqs && typeof s.reqs === 'object' ? s.reqs : null;
+    var out = {
+      v: num(s.v), tool: str(s.tool), name: str(s.name), client: str(s.client), number: str(s.number), revision: str(s.revision),
+      stage: str(s.stage), archived: !!s.archived, total: num(s.total), reviewed: num(s.reviewed), pct: num(s.pct, 100),
+      checklists: checklists, issues: { open: open, fixed: num(iss.fixed), waived: num(iss.waived) },
+      reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), open: num(q.open), unlinked: num(q.unlinked) } : null,
+      at: str(s.at), by: str(s.by)
+    };
+    if (Array.isArray(s.open)) {
+      out.open = s.open.filter(function (i) { return i && typeof i === 'object'; }).map(function (i) {
+        return { id: str(i.id), severity: SEVERITIES.indexOf(i.severity) >= 0 ? i.severity : 'minor', text: str(i.text),
+          checklist: str(i.checklist), assignee: str(i.assignee), ref: str(i.ref) };
+      });
+    }
+    return out;
+  }
+  function cleanEntry(e) {
+    e = obj(e);
+    return { id: str(e.id), name: str(e.name), number: str(e.number), revision: str(e.revision), stage: str(e.stage),
+      archived: !!e.archived, summary: cleanSummary(e.summary) };
+  }
+  // A stored index (localStorage) goes through the same cleaning before it is shown.
+  function cleanIndex(index) {
+    if (!index || typeof index !== 'object') return index || null;
+    var entries = {};
+    Object.keys(obj(index.entries)).forEach(function (k) {
+      if (k === '__proto__') return;
+      var e = obj(index.entries[k]);
+      entries[k] = Object.assign({ tool: str(e.tool), repo: str(e.repo), path: str(e.path), sha: str(e.sha) }, cleanEntry(e));
+    });
+    return Object.assign({}, index, { entries: entries });
+  }
+
   function keep(doc) {
-    var m = doc.meta || {};
-    return { id: doc.id, name: m.name || '', number: m.board || '', revision: m.revision || '', stage: m.stage || '',
-      archived: !!m.archived, summary: doc.summary || null };
+    var m = obj(doc.meta);
+    return cleanEntry({ id: doc.id, name: m.name, number: m.board, revision: m.revision, stage: m.stage, archived: m.archived, summary: doc.summary });
   }
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache.
   Reader.prototype.refresh = function (prev) {
     var self = this, prevFiles = (prev && prev.files) || {};
     var index = { at: new Date().toISOString(), entries: {}, errors: [], files: {} };
+    var sharedMaps = {};   // tool id -> the shared map from its data repo's users.json, if any
 
     function readRepo(tool, repo) {
       var full = self.owner + '/' + repo, store = self.store(repo), cached = prevFiles[full] || {};
@@ -46,11 +100,23 @@
           return e.type === 'blob' && /^projects\/[^/]+\.json$/.test(e.path);
         });
         index.files[full] = {};
-        return Promise.all(files.map(function (e) {
-          var hit = cached[e.path];
-          var got = hit && hit.sha === e.sha ? Promise.resolve(hit.entry)
-            : store.blob(e.sha).then(function (text) { return keep(JSON.parse(text)); });
+        var isData = repo === tool.dataRepo, people = isData && snap.entries.filter(function (e) { return e.path === 'users.json'; })[0];
+        var seen = people && cached['users.json'];
+        var map = !people ? Promise.resolve()
+          : (seen && seen.sha === people.sha ? Promise.resolve(seen.shared) : store.blob(people.sha).then(function (t) { return obj(JSON.parse(t)).shared; }))
+            .then(function (m) {
+              index.files[full]['users.json'] = { sha: people.sha, shared: m };
+              if (m && typeof m === 'object') sharedMaps[tool.id] = m;
+            }).catch(function () { /* unreadable: no check */ });
+        return map.then(function () { return Promise.all(files.map(function (e) {
+          var hit = cached[e.path], fileId = e.path.slice('projects/'.length, -'.json'.length);
+          var got = hit && hit.sha === e.sha ? Promise.resolve(cleanEntry(hit.entry))
+            : store.blob(e.sha).then(function (text) { return keep(obj(JSON.parse(text))); });
           return got.then(function (entry) {
+            if (entry.id !== fileId) return;   // a file only counts for the project its name says
+            var shared = sharedMaps[tool.id] && obj(sharedMaps[tool.id][fileId]);
+            // A shared repo only counts for the projects the data repo's shared map puts there.
+            if (!isData && sharedMaps[tool.id] && (shared.deleted || str(shared.repo).toLowerCase() !== full.toLowerCase())) return;
             index.files[full][e.path] = { sha: e.sha, entry: entry };
             var key = tool.id + ':' + entry.id, had = index.entries[key];
             // The data repo is read first, so a shared repo's copy replaces its stale twin.
@@ -59,7 +125,7 @@
           }).catch(function (err) {
             index.errors.push({ tool: tool.id, repo: full, message: e.path + ': ' + err.message });
           });
-        }));
+        })); });
       }).catch(function (err) {
         // A tool with no data repo yet is fine; anything else is reported.
         if (err.status === 404 && repo === tool.dataRepo) return;
@@ -87,5 +153,5 @@
   }
 
   S.PLReader = Reader;
-  S.plReader = { designs: designs };
+  S.plReader = { designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex };
 })(window.Signoff = window.Signoff || {});

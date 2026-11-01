@@ -47,7 +47,11 @@ while a sync has confirmed that for the token in use:
 2. It pulls, merges and pushes the PL projects in the data repo. A 404 locks PL, as above.
 3. For FTEs, it reads the designs again from Signoff EE and ME:
    - It lists each tool's data repo and every repo starting with its prefix (`config.tools`).
-   - It keeps only `meta` and `summary` from each project file.
+   - It keeps only `meta` and `summary` from each project file, rebuilt from known fields:
+     numbers as numbers, severities from the list. Review repos are contractor-writable, so
+     nothing in them is shown as is (`cleanSummary` in `reader.js`).
+   - A file counts only for the project id in its name. When the tool's data repo has a People
+     list, a shared repo counts only for the projects its shared map puts there.
    - It downloads only files whose blob sha changed.
    - It rebuilds the project-to-repo map every time, so a Part keeps working when its review
      moves into a shared repo.

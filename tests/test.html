@@ -143,6 +143,20 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(ix6.errors.some(function (e) { return e.repo === 'own/review-ee-broken'; }) && ix6.entries['ee:p1'], 'an unreadable file is reported and the rest still load');
   eq(Signoff.plReader.designs(ix6, 'ee').map(function (d) { return d.id; }).sort(), ['p1', 'p2'], 'designs() lists one tool’s projects');
 
+  // Review repos are contractor-writable: planted files and hostile summaries.
+  var BAD = '"><img src=x onerror=alert(1)>';
+  var badSum = { pct: BAD, total: BAD, issues: { open: { critical: BAD, major: 2 }, fixed: BAD }, open: [{ id: 'x', severity: BAD, text: 't' }], checklists: { a: { pct: 250, name: 'A' } }, name: { toString: 1 } };
+  var cs = Signoff.plReader.cleanSummary(badSum);
+  ok(cs.pct === 0 && cs.total === 0 && cs.issues.open.critical === 0 && cs.issues.open.major === 2 && cs.issues.fixed === 0 && cs.open[0].severity === 'minor' && cs.checklists.a.pct === 100 && cs.name === '',
+    'a summary from a review file is rebuilt with numbers and known severities only', JSON.stringify(cs));
+  var dirtyIx = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: badSum } } };
+  eq(Signoff.plReader.cleanIndex(dirtyIx).entries['ee:p1'].summary.pct, 0, 'an index stored in the browser is cleaned the same way');
+  hub.makeRepo('own/review-ee-evil', { 'projects/p1.json': file('p1', 'Planted', summary(100, 99, { critical: 0, major: 0, minor: 0 })), 'projects/p7.json': file('p2', 'Renamed', null) }, ['own']);
+  hub.push('own/ee_design_review_data', { 'users.json': JSON.stringify({ shared: { p1: { repo: 'own/review-ee-main' }, p2: { repo: 'own/review-ee-sensor' } } }) });
+  var ix7 = await reader.refresh(ix6);
+  ok(ix7.entries['ee:p1'].repo === 'own/review-ee-main' && ix7.entries['ee:p2'].repo === 'own/review-ee-sensor' && !JSON.stringify(ix7.entries).includes('evil'),
+    'with a shared map, a repo counts only for its own projects, and a file only for the id in its name');
+
   // ── PL's own documents through the engine store ──
   hub.makeRepo('own/signoff_pl_data', { 'README.md': '#' }, ['own']);
   var plStore = function () { return new Signoff.GitHubStore({ owner: 'own', repo: 'signoff_pl_data', branch: 'main', dataPath: '', token: 'tok-own', merge: P.merge }, hub.fetchFor('tok-own')); };
