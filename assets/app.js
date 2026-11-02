@@ -67,7 +67,7 @@
 
   function persist() { save('projects', projects); save('dirty', dirty); }
   function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
-    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel }); }
+    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }

@@ -29,6 +29,13 @@ updated in PL or in that tool. The list should be interactive enough that people
 6. **Conflict cards first.** Field-level merge (`fieldAt`) waits.
 7. **No gate tags for now.**
 
+**Later decision (Chris, 2026-11-02): keep it lightweight.** Requirements can be written in each
+EE board, ME part or FW review on their own. When a Part links that review, its requirements show
+in PL automatically, as a folding section per tool and a row per design, and the PL project's own
+requirements sit on top. Tracing up to a System requirement is optional; an untraced design
+requirement is normal, not something waiting for action. Grouping is by the review's tool, not the
+record's `discipline`.
+
 **Implementation note.** `summary.reqList` carries each live requirement's display fields:
 - `id`, `ref`, `text`, `discipline`, `kind`, `category`, `method`, `status`, `verify`;
 - the trace state and linked open issues;

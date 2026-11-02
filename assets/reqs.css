@@ -43,6 +43,17 @@
 .rq-warn { color: var(--warn); font-weight: 600; }
 .rq-new { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 5px; vertical-align: middle; }
 .rq-section { padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); background: var(--bg-sunk); border-bottom: 1px solid var(--hair); }
+/* Folding sections: System, then one per review tool, with a row per design. */
+.rq-fold { display: flex; align-items: center; gap: 8px; cursor: pointer; padding-left: 10px; }
+.rq-fold:hover { color: var(--text-2); }
+.rq-sec-note { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.rq-row.rq-design { grid-template-columns: 22px 30px minmax(0, 1fr) auto; padding-left: 22px; background: var(--bg-elev); }
+.rq-design .rq-t b { font-weight: 600; }
+.rq-dot-n { white-space: nowrap; }
+.rq-dot-n i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.rq-up { font: 600 11.5px var(--mono); color: var(--accent-ink); }
+.rq-row.rq-hint { cursor: default; }
+.rq-hint .muted, .rq-row.kid .muted { color: var(--text-3); }
 .rq-state { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 980px; white-space: nowrap; }
 .rq-pass { color: var(--pass); background: var(--pass-soft); }
 .rq-risk { color: var(--warn); background: var(--warn-soft); }
@@ -113,6 +124,8 @@
 @media (max-width: 640px) {
   .rq-hero { flex-direction: column; align-items: flex-start; }
   .rq-row, .rq-row.kid { grid-template-columns: 22px 30px minmax(0, 1fr) auto; padding-left: 12px; }
+  .rq-row.rq-design { grid-template-columns: 22px 30px minmax(0, 1fr); }
+  .rq-design > .btn { display: none; }
   .rq-row .rq-ref { display: none; }
   .rq-part-grid { grid-template-columns: 1fr; }
 }

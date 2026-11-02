@@ -137,10 +137,11 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(Object.keys(ix2.entries).length === 3, '…and are still in the index');
   ok('project' in ix.entries['ee:p1'].summary, 'keeps the summary’s client project');
   var old = JSON.parse(JSON.stringify(ix));
-  Object.keys(old.files).forEach(function (r) { Object.keys(old.files[r]).forEach(function (f) { var e = old.files[r][f].entry; if (e && e.summary) delete e.summary.project; }); });
+  delete old.v;
   before = hub.calls.length;
   await reader.refresh(old);
-  ok(hub.calls.slice(before).some(function (c) { return /\/git\/blobs\//.test(c); }), 'entries cached before the client project was kept are read again');
+  ok(hub.calls.slice(before).some(function (c) { return /\/git\/blobs\//.test(c); }), 'a cache from an older reader (no reqList) is read again once');
+  ok(ix.v === Signoff.plReader.CACHE_V && Signoff.plReader.cleanIndex(ix).v === ix.v, 'the index carries its cache shape, also once stored');
 
   // p1 is shared with a contractor: it moves out of the data repo into its own repo.
   hub.makeRepo('own/review-ee-main', { 'projects/p1.json': file('p1', 'Main', summary(100, 60, { critical: 0, major: 0, minor: 0 })) }, ['own']);
@@ -289,6 +290,19 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq(R.pruneOverlay(demo.index, { 'ee:pdemo11': { a: { at: '2000-01-01T00:00:00Z' }, b: { at: '2999-01-01T00:00:00Z' } } }), { 'ee:pdemo11': { b: { at: '2999-01-01T00:00:00Z' } } }, 'overlay entries the summary has caught up with are dropped');
   var mcsv = R.csv(demo.project, demo.index);
   ok(/^ID,Requirement,Type,Category,Source,Verification method,Status,Roll-up,/.test(mcsv) && mcsv.trim().split('\n').length === 11, 'the compliance matrix has one row per System requirement and a column per Part');
+  // Sections: every review's requirements, traced or not, grouped by the review's tool.
+  eq(rq.sections.map(function (sec) { return sec.tool + ':' + sec.designs.map(function (d) { return d.design.id; }).join(','); }), ['ee:pdemo7,pdemo11', 'me:mdemo5,mdemo13', 'fw:fdemo3'], 'a section per tool, a design per linked review, in tree order');
+  var allItems = R.items(demo.project, demo.index).filter(function (it) { return it.home.tool !== 'pl'; });
+  var inSections = 0; rq.sections.forEach(function (sec) { sec.designs.forEach(function (d) { inSections += d.items.length; }); });
+  ok(inSections === allItems.length && rq.sections[0].designs[0].items.every(function (it, i, a) { return !i || a[i - 1].req.ref <= it.req.ref; }), 'every review requirement is in its design’s section, by ref');
+  ok(rq.sections[0].designs[0].items.some(function (it) { return it.sys; }) && rq.sections[0].designs[0].items.some(function (it) { return !it.sys; }), 'traced ones name their System parent; the rest are listed all the same');
+  var noDisc = JSON.parse(JSON.stringify(demo.index));
+  noDisc.entries['ee:pdemo7'].summary.reqList.forEach(function (q) { q.discipline = 'other'; });
+  ok(R.rollup(demo.project, noDisc).sections[0].designs[0].items.length === rq.sections[0].designs[0].items.length, 'a record without a discipline still lands in its tool’s section');
+  var lcsv = R.listCsv(demo.project, demo.index).trim().split('\r\n');
+  ok(/^Home,ID,Requirement,/.test(lcsv[0]) && lcsv.length === 1 + rq.sys.length + inSections, 'the full list exports one row per requirement');
+  var solo = { id: 'plx', meta: { name: 'x' }, nodes: demo.project.nodes, reqs: {} };
+  ok(R.rollup(solo, demo.index).sections.length === 3 && !R.rollup(solo, demo.index).sys.length, 'a project with no System requirements still lists its reviews’ requirements');
   ok(R.suggest({ req: { text: 'Display brightness shall be readable from 2 m', category: 'Display' } }, rq.sys) === null, 'no suggested parent without real overlap');
   var mergedReqs = P.merge({ id: 'x', meta: {}, nodes: {}, reqs: { a: { id: 'a', updatedAt: '1' } }, extra: 1 }, { id: 'x', meta: {}, nodes: {}, reqs: { b: { id: 'b', updatedAt: '1' } } });
   ok(mergedReqs.reqs.a && mergedReqs.reqs.b && mergedReqs.extra === 1, 'PL merges requirements record by record and keeps keys it doesn’t know');

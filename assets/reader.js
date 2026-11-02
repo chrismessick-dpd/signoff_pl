@@ -15,7 +15,7 @@
    a People list (users.json), a shared repo only counts for the projects its shared map puts
    there.
 
-   index: { at, entries: { 'tool:id': { tool, id, repo, path, sha, name, number, revision,
+   index: { v, at, entries: { 'tool:id': { tool, id, repo, path, sha, name, number, revision,
             stage, summary | null } }, errors: [{ tool, repo, message }], files: { 'owner/repo':
             { path: { sha, entry } } } } */
 (function (S) {
@@ -148,10 +148,15 @@
     return cleanEntry({ id: doc.id, name: m.name, number: m.board, revision: m.revision, stage: m.stage, archived: m.archived, summary: doc.summary });
   }
 
-  // Resolves a new index. `prev` (the last index) supplies the blob cache.
+  // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
+  // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
+  // (2: summary.reqList, which a cache from before the Requirements tab dropped).
+  var CACHE_V = 2;
+
+  // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {
-    var self = this, prevFiles = (prev && prev.files) || {};
-    var index = { at: new Date().toISOString(), entries: {}, errors: [], files: {} };
+    var self = this, prevFiles = (prev && prev.v === CACHE_V && prev.files) || {};
+    var index = { v: CACHE_V, at: new Date().toISOString(), entries: {}, errors: [], files: {} };
     var sharedMaps = {};   // tool id -> the shared map from its data repo's users.json, if any
 
     function readRepo(tool, repo) {
@@ -171,9 +176,7 @@
             }).catch(function () { /* unreadable: no check */ });
         return map.then(function () { return Promise.all(files.map(function (e) {
           var hit = cached[e.path], fileId = e.path.slice('projects/'.length, -'.json'.length);
-          // Entries cached before PL kept the summary's client project are read again once.
-          var stale = hit && hit.entry && hit.entry.summary && !('project' in hit.entry.summary);
-          var got = hit && hit.sha === e.sha && !stale ? Promise.resolve(cleanEntry(hit.entry))
+          var got = hit && hit.sha === e.sha ? Promise.resolve(cleanEntry(hit.entry))
             : store.blob(e.sha).then(function (text) { return keep(obj(JSON.parse(text))); });
           return got.then(function (entry) {
             if (entry.id !== fileId) return;   // a file only counts for the project its name says
@@ -242,5 +245,5 @@
   };
 
   S.PLReader = Reader;
-  S.plReader = { designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex };
+  S.plReader = { CACHE_V: CACHE_V, designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex };
 })(window.Signoff = window.Signoff || {});

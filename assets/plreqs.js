@@ -74,7 +74,7 @@
   }
 
   // The roll-up: { sys: [{ rec, state, kids, cells: { node id: state }, unallocatedKids }],
-  //   untraced: [item], parts: [node ids in tree order that have a requirement or an allocation],
+  //   untraced: [item], sections: (see sections()), parts: [node ids in tree order that have a requirement or an allocation],
   //   counts: { state: n }, inbox: { unallocated, approval, untraced, risk, gaps } }
   function rollup(project, index) {
     var t = P.tree(project), all = items(project, index), sys = systemReqs(project), byId = {};
@@ -82,7 +82,7 @@
     var untraced = [];
     all.forEach(function (it) {
       var p = it.req.parent, s = p && p.project === project.id && byId[p.id];
-      if (s) s.kids.push(it);
+      if (s) { s.kids.push(it); it.sys = s.rec; }
       else if (it.req.status !== 'deprecated') untraced.push(it);
     });
     var used = {};
@@ -110,7 +110,7 @@
     var kids = [];
     list.forEach(function (s) { kids = kids.concat(s.kids); });
     return {
-      sys: list, untraced: untraced, counts: counts,
+      sys: list, untraced: untraced, counts: counts, sections: sections(all),
       parts: P.flatten(t).filter(function (id) { return used[id]; }),
       inbox: {
         unallocated: list.filter(function (s) { return s.state !== 'deprecated' && !(s.rec.parts || []).length && !s.kids.length; }),
@@ -120,6 +120,44 @@
         gaps: list.filter(function (s) { return s.state === 'gap'; })
       }
     };
+  }
+
+  // The requirements each linked review brings, whether or not they trace up to a System one:
+  // [{ tool, designs: [{ key, design, nodes, items, counts, state }], counts }], tools in config
+  // order, designs in tree order, items by ref. Grouped by the review's tool, never by the record's
+  // discipline (a record from before disciplines reads as 'other'). A design used by several Parts
+  // is listed once. counts: { fail, risk, open, pass, deprecated, live }; state is the worst live one.
+  function tally(list) {
+    var c = { fail: 0, risk: 0, open: 0, pass: 0, deprecated: 0, live: 0 };
+    list.forEach(function (it) { var st = it.req.state; c[st] = (c[st] || 0) + 1; if (st !== 'deprecated') c.live++; });
+    return c;
+  }
+  function byRef(a, b) {
+    var x = a.req.ref || '', y = b.req.ref || '', n = x.localeCompare(y, undefined, { numeric: true });
+    return n || (a.req.text || '').localeCompare(b.req.text || '');
+  }
+  function sections(all) {
+    var designs = {}, order = [];
+    all.forEach(function (it) {
+      if (it.home.tool === 'pl' || !it.design) return;
+      var k = it.home.tool + ':' + it.home.project;
+      if (!designs[k]) { designs[k] = { key: k, tool: it.home.tool, design: it.design, nodes: it.nodes, items: [] }; order.push(k); }
+      designs[k].items.push(it);
+    });
+    var tools = (S.config && S.config.tools || []).map(function (t) { return t.id; });
+    order.forEach(function (k) { if (tools.indexOf(designs[k].tool) < 0) tools.push(designs[k].tool); });
+    return tools.map(function (tool) {
+      var ds = order.filter(function (k) { return designs[k].tool === tool; }).map(function (k) {
+        var d = designs[k];
+        d.items.sort(byRef);
+        d.counts = tally(d.items);
+        d.state = worst(d.items.filter(function (it) { return it.req.state !== 'deprecated'; }).map(function (it) { return it.req.state; }));
+        return d;
+      });
+      var every = [];
+      ds.forEach(function (d) { every = every.concat(d.items); });
+      return { tool: tool, designs: ds, counts: tally(every) };
+    }).filter(function (sec) { return sec.designs.length; });
   }
 
   // A System requirement that probably covers an untraced one: shared category, then shared words.
@@ -171,7 +209,7 @@
     return out;
   }
 
-  // ── Compliance matrix (CSV) ──────────────────────────────
+  // ── CSV: the compliance matrix, and the full list ────────
   var LABEL = { fail: 'Failing', risk: 'At risk', gap: 'Gap', open: 'Open', pass: 'Met', deprecated: 'Deprecated' };
   // A cell a spreadsheet won't run as a formula (review text comes from contractors).
   function csvCell(v) { v = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[",\r\n']/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
@@ -190,9 +228,30 @@
     return rows.map(function (row) { return row.map(csvCell).join(','); }).join('\r\n') + '\r\n';
   }
 
+  // Every requirement, one row each: System first, then each review's in section order.
+  function listCsv(project, index) {
+    var r = rollup(project, index), t = P.tree(project), WORDS = { sys: 'System', ee: 'EE', me: 'ME', fw: 'FW', other: 'Other' };
+    var rows = [['Home', 'ID', 'Requirement', 'Type', 'Category', 'Verification method', 'Status', 'State', 'Traces to']];
+    r.sys.forEach(function (s) { var q = s.rec; rows.push(['System', q.ref, q.text, q.kind, q.category, q.method, q.status, LABEL[s.state], '']); });
+    planReqs(project).filter(function (q) { return q.parent; }).forEach(function (q) {
+      var n = q.part && t.nodes[q.part], sys = r.sys.filter(function (s) { return s.rec.id === q.parent.id; })[0];
+      rows.push([(n ? n.name : 'Project plan') + ' (held in PL)', q.ref, q.text, q.kind, q.category, q.method, q.status, LABEL[asListItem(q).state], sys ? sys.rec.ref : '']);
+    });
+    r.sections.forEach(function (sec) {
+      sec.designs.forEach(function (d) {
+        var home = WORDS[sec.tool] ? WORDS[sec.tool] + ' · ' : '';
+        d.items.forEach(function (it) {
+          var q = it.req;
+          rows.push([home + (d.design.name || d.design.id), q.ref, q.text, q.kind, q.category, q.method, q.status, LABEL[q.state], it.sys ? it.sys.ref : '']);
+        });
+      });
+    });
+    return rows.map(function (row) { return row.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+  }
+
   S.plReqs = {
     DISCIPLINES: DISCIPLINES, LABEL: LABEL, worst: worst,
     newReq: newReq, planReqs: planReqs, systemReqs: systemReqs, asListItem: asListItem, parentLink: parentLink,
-    items: items, rollup: rollup, suggest: suggest, withOverlay: withOverlay, pruneOverlay: pruneOverlay, csv: csv
+    items: items, rollup: rollup, sections: sections, suggest: suggest, withOverlay: withOverlay, pruneOverlay: pruneOverlay, csv: csv, listCsv: listCsv
   };
 })(window.Signoff = window.Signoff || {});

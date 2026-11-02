@@ -56,8 +56,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (129 tests as of
-   2026-11-02, after Signoff FW joined).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (136 tests as of
+   2026-11-02, after requirement sections).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
@@ -143,7 +143,18 @@ The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In 
   the record `id`, never the `ref`.
 - **Flow-down.** It's the child's `parent: { tool: 'pl', project, id, ref, text }`. A child counts
   only when its parent is a live System requirement of this project; anything else is untraced.
-- **Reading.** PL reads `summary.reqList`, sanitized in `reader.js` (`cleanReq`).
+- **Reading.** PL reads `summary.reqList`, sanitized in `reader.js` (`cleanReq`). The reader's
+  blob cache carries a shape version (`CACHE_V`); bump it whenever `keep()` or `cleanSummary()`
+  keeps a new field, or files that haven't changed never gain it. That's why real projects
+  showed no requirements on 2026-11-02: their cached entries predated `reqList`.
+- **Sections (Chris, 2026-11-02).** Requirements should be lightweight. Each review's own
+  requirements are pulled in automatically whenever its Part is in the tree, with no tracing
+  needed. The list is a **System** section (PL's own), then one folding section per review tool
+  (`rollup().sections`, grouped by the review's tool, never by `discipline`), with a folding row
+  per design that starts closed. Rows that trace up name their System parent (`↑ REQ-001`);
+  untraced is normal and is no longer in Needs you. Deprecated rows hide unless shown
+  (`ui.rqDep`). Export CSV is the full list in List layout (`listCsv`) and the compliance matrix
+  in Matrix layout (`csv`).
 - **Writing.** It goes through the engine's `GitHubStore.patchRecords`, after a confirm:
   - only `reqs` records change;
   - the file must round-trip;
