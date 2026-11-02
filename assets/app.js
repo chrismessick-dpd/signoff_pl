@@ -311,6 +311,34 @@
   }
 
   // What the Overview tab used to show, under the structure.
+  // Recent discussion across the linked designs (each review's summary.recent), newest first. A
+  // design used by several Parts counts once; each comment opens its check in the review.
+  var DISCUSSION = 8;
+  function discussionPanel(t, ids) {
+    var seen = {}, rows = [];
+    ids.forEach(function (id) {
+      var n = t.nodes[id], st = P.partStatus(n, index);
+      if (!st || !st.summary || seen[P.refKey(n.ref)]) return;
+      seen[P.refKey(n.ref)] = 1;
+      (st.summary.recent || []).forEach(function (c) { rows.push({ c: c, n: n }); });
+    });
+    if (!rows.length) return '';
+    rows.sort(function (a, b) { return (b.c.at || '').localeCompare(a.c.at || ''); });
+    return '<div class="section-title">Recent discussion</div><div class="card sys-talk">' + rows.slice(0, DISCUSSION).map(function (x) {
+      var c = x.c, n = x.n;
+      return '<a class="cmt sys-talk-row" href="' + esc(designUrl(n, c.item)) + '" target="_blank" rel="noopener">' + avatar(c.author) +
+        '<div><div class="cmt-head"><b>' + esc(c.author || 'Someone') + '</b><span>' + relTime(c.at) + '</span><span class="sys-talk-on">' + srcChip(n.source) + esc(n.name) + '</span></div>' +
+        (c.check ? '<div class="sys-talk-check">' + esc(c.check) + '</div>' : '') +
+        '<div class="cmt-text">' + esc(c.text) + '</div></div></a>';
+    }).join('') + '</div>';
+  }
+  function avatar(name) {
+    var h = 0, s = String(name || '?');
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    var ini = s.split(/\s+/).filter(Boolean).map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+    return '<div class="avatar" style="background:hsl(' + h + ' 45% 42%)">' + esc(ini || '?') + '</div>';
+  }
+
   function infoPanels(p, t, r, ids) {
     var stageList = Object.keys(r.stages).sort().map(function (k) { var s = k.split(':'); return '<span class="sys-stage">' + srcChip(s[0]) + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' <span class="map-qty">×' + r.stages[k] + '</span>' : '') + '</span>'; }).join('');
     var html = '<div class="section-title">Status</div><div class="card sys-stats">' +
@@ -347,6 +375,7 @@
       }).join('') + '</div>';
     }
     if (Object.keys(r.stages).length) html += '<div class="section-title">Stages</div><div class="card sys-stages"><div class="sys-stage-list">' + stageList + '</div><p class="note">Each tool keeps its own stages. Gates (EVT, DVT, PVT) will tie them together.</p></div>';
+    html += discussionPanel(t, ids);
     return html + '<p class="note" style="margin-top:28px">' + (index && index.at ? 'Designs read ' + relTime(index.at) : 'Designs not read yet') +
       (r.designs ? ' · progress is checks reviewed across ' + plural(r.designs, 'linked design') : '') +
       ' · created ' + relTime(p.createdAt) + (p.createdBy ? ' by ' + esc(p.createdBy) : '') + '</p>';

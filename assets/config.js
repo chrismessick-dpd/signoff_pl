@@ -54,8 +54,8 @@ window.SIGNOFF_CONFIG = {
       { "key": "screw", "parent": "mech", "kind": "part", "name": "Screw, M3.5 × 25, pan head", "source": "purchased", "supplier": "Example Fasteners", "mpn": "M35-25-PH-ZN", "qty": 2, "massG": 1.6 }
     ],
     "previews": {
-      "ee:pdemo7": [["top", 120, 76], ["bottom", 120, 76]],
-      "ee:pdemo11": [["top", 110, 70], ["bottom", 110, 70]]
+      "ee:pdemo7": [["top", 640, 406], ["bottom", 640, 406]],
+      "ee:pdemo11": [["top", 640, 407], ["bottom", 640, 407]]
     },
     "boardsMm": { "ee:pdemo7": [80, 50.7, 1.6], "ee:pdemo11": [72, 45.8, 1.0] },
     "requirements": [

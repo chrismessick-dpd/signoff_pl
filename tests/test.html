@@ -255,7 +255,12 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
     dr[''].purchased === 3 && dr[''].manual === 1, 'the demo product links four designs, three purchased Parts and firmware', JSON.stringify(dr['']));
   ok(Signoff.config.demo.tree.filter(function (r) { return r.link; }).every(function (r) { return Signoff.plDemo.snapshot.designs[r.link]; }), 'every demo link has a design in the snapshot');
   eq(dr[''].massG, 205.2, 'demo mass matches the 205 g in the ME enclosure’s mass requirement');
-  ok(P.issues(demo.project, demo.index).length === 13, 'the demo lists every open issue from the four designs');
+  ok(P.issues(demo.project, demo.index).length === 20, 'the demo lists every open issue from the four designs');
+  var talk = [];
+  Object.keys(demo.index.entries).forEach(function (k) { ((demo.index.entries[k].summary || {}).recent || []).forEach(function (c) { talk.push(c); }); });
+  ok(talk.length > 0 && talk.every(function (c) { return c.author && c.text && c.at <= new Date().toISOString(); }), 'the demo designs bring their recent discussion, dated in the past');
+  var dirty = Signoff.plReader.cleanSummary({ recent: [{ id: 'c1', item: 'x', author: { a: 1 }, text: 'hi', at: 5 }, 'junk', null] });
+  ok(dirty.recent.length === 1 && dirty.recent[0].author === '' && dirty.recent[0].text === 'hi', 'summary.recent is cleaned (strings only)');
   ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
 
   // ── Requirements (plreqs.js) ──
@@ -377,7 +382,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   });
   function strip(designs) {
     var out = {};
-    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; (d.summary.reqList || []).forEach(function (q) { delete q.at; }); out[k] = d; });
+    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; (d.summary.reqList || []).forEach(function (q) { delete q.at; }); (d.summary.recent || []).forEach(function (c) { delete c.at; }); out[k] = d; });
     return M.stableStringify(out);
   }
   if (live) {

@@ -58,6 +58,12 @@
       at: str(s.at), by: str(s.by)
     };
     if (Array.isArray(s.reqList)) out.reqList = s.reqList.slice(0, 2000).map(cleanReq).filter(Boolean);
+    // summary.recent: the review's latest comments (EE README, "The project summary").
+    if (Array.isArray(s.recent)) {
+      out.recent = s.recent.filter(function (c) { return c && typeof c === 'object'; }).slice(0, 20).map(function (c) {
+        return { id: str(c.id).slice(0, 80), item: str(c.item).slice(0, 80), check: str(c.check).slice(0, 200), author: str(c.author).slice(0, 100), at: str(c.at).slice(0, 40), text: str(c.text).slice(0, 600) };
+      });
+    }
     if (Array.isArray(s.open)) {
       out.open = s.open.filter(function (i) { return i && typeof i === 'object'; }).map(function (i) {
         return { id: str(i.id), severity: SEVERITIES.indexOf(i.severity) >= 0 ? i.severity : 'minor', text: str(i.text),
@@ -116,7 +122,7 @@
       var key = str(i.key), sha = str(i.sha), src = str(i.src);
       if (!/^[a-z0-9-]{1,32}$/.test(key)) return null;
       if (/^[0-9a-f]{40}$/.test(sha) && IMAGE_TYPES[str(i.type)]) return { key: key, type: str(i.type), w: num(i.w, 4096), h: num(i.h, 4096), sha: sha };
-      if (/^assets\/demo-previews\/[a-z0-9-]+\.svg$/.test(src)) return { key: key, w: num(i.w, 4096), h: num(i.h, 4096), src: src };
+      if (/^assets\/demo-previews\/[a-z0-9-]+\.(svg|webp)$/.test(src)) return { key: key, w: num(i.w, 4096), h: num(i.h, 4096), src: src };
       return null;
     }).filter(Boolean);
     if (!images.length) return null;

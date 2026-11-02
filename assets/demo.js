@@ -20,14 +20,15 @@
     var ids = {}, index = { at: new Date().toISOString(), entries: {}, errors: [], files: {}, demo: true };
     Object.keys(SNAP.designs).forEach(function (key) {
       var d = SNAP.designs[key], at = key.indexOf(':');
-      var summary = d.summary ? Object.assign({}, d.summary, { at: shifted(d.summary.at) }) : null;
+      var summary = d.summary ? Object.assign({}, d.summary, { at: shifted(d.summary.at),
+        recent: (d.summary.recent || []).map(function (c) { return Object.assign({}, c, { at: shifted(c.at) }); }) }) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
-      // The demo boards' pictures stand in for the previews Fabcheck stores with a run.
+      // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo).
       var pv = (D.previews || {})[key];
       var mm = (D.boardsMm || {})[key];
       if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], board: mm ? P.cleanBoard(mm) : null, images: pv.map(function (x) {
-        return { key: x[0], w: x[1], h: x[2], src: 'assets/demo-previews/' + key.slice(at + 1) + '-' + x[0] + '.svg' };
+        return { key: x[0], w: x[1], h: x[2], src: 'assets/demo-previews/' + key.slice(at + 1) + '-' + x[0] + '.webp' };
       }) };
     });
     (D.tree || []).forEach(function (r) {

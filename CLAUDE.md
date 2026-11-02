@@ -56,8 +56,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (126 tests as of
-   2026-11-01, after the Requirements tab).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (128 tests as of
+   2026-11-02, after Recent discussion).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
