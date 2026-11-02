@@ -313,7 +313,7 @@
   // What the Overview tab used to show, under the structure.
   function infoPanels(p, t, r, ids) {
     var stageList = Object.keys(r.stages).sort().map(function (k) { var s = k.split(':'); return '<span class="sys-stage">' + srcChip(s[0]) + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' <span class="map-qty">×' + r.stages[k] + '</span>' : '') + '</span>'; }).join('');
-    var html = '<div class="section-title">Status</div><div class="grid grid-4">' +
+    var html = '<div class="section-title">Status</div><div class="card sys-stats">' +
       stat(r.openTotal, 'Open issues', r.openTotal ? 'issue' : 'pass', sevs(r.open)) +
       stat(r.parts, plural(r.parts, 'Part').replace(/^\d+ /, ''), '', [r.designs && plural(r.designs, 'design'), r.purchased && r.purchased + ' purchased', r.manual && r.manual + ' firmware'].filter(Boolean).join(' · ')) +
       stat(r.unlinked + r.attention, 'Need attention', r.unlinked + r.attention ? 'issue' : '', r.unlinked + r.attention ? [r.unlinked && r.unlinked + ' not linked', r.attention && r.attention + ' unreadable'].filter(Boolean).join(' · ') : 'Every design reads') +

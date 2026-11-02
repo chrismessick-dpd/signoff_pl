@@ -379,3 +379,20 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
   .sys-design .open-link { grid-column: 2; grid-row: 1; }
 }
 .sys-design-name .src, .sys-stage .src { min-width: 26px; text-align: center; flex: none; }
+
+/* System: Status as one compact strip of four cells */
+.sys-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; overflow: hidden; }
+.sys-stats > .stat { background: none; box-shadow: none; border: none; border-radius: 0; padding: 10px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; align-items: baseline; min-width: 0; }
+.sys-stats > .stat + .stat { border-left: 1px solid var(--hair); }
+.sys-stats .stat-num { font-size: 20px; }
+.sys-stats .stat-label { margin: 0; font-size: 12.5px; color: var(--text-2); }
+.sys-stats .stat-detail { grid-column: 1 / -1; margin-top: 2px; font-size: 11.5px; }
+.sys-stats .stat-detail .sevs { gap: 6px; font-size: 11.5px; }
+@media (max-width: 700px) {
+  .sys-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sys-stats > .stat:nth-child(3) { border-left: none; }
+  .sys-stats > .stat:nth-child(n + 3) { border-top: 1px solid var(--hair); }
+}
+
+/* Rings in the inspector are small; keep the percentage inside the bar. */
+.map-ins .ring-label b { font-size: 13.5px; letter-spacing: -0.01em; }
