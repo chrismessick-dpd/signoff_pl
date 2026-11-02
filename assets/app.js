@@ -312,7 +312,8 @@
 
   // What the Overview tab used to show, under the structure.
   // Recent discussion across the linked designs (each review's summary.recent), newest first. A
-  // design used by several Parts counts once; each comment opens its check in the review.
+  // design used by several Parts counts once; each comment opens its check in the review. View all
+  // shows every comment the summaries carry, in a scrolling list.
   var DISCUSSION = 8;
   function discussionPanel(t, ids) {
     var seen = {}, rows = [];
@@ -324,7 +325,10 @@
     });
     if (!rows.length) return '';
     rows.sort(function (a, b) { return (b.c.at || '').localeCompare(a.c.at || ''); });
-    return '<div class="section-title">Recent discussion</div><div class="card sys-talk">' + rows.slice(0, DISCUSSION).map(function (x) {
+    var more = rows.length > DISCUSSION, all = more && ui.talkAll;
+    return '<div class="section-title">Recent discussion' + (more ? '<button class="btn btn-plain" data-act="talk-all" aria-expanded="' + !!all + '">' +
+      (all ? 'Show fewer' : 'View all ' + rows.length) + '</button>' : '') + '</div>' +
+      '<div class="card sys-talk' + (all ? ' all' : '') + '">' + (all ? rows : rows.slice(0, DISCUSSION)).map(function (x) {
       var c = x.c, n = x.n;
       return '<a class="cmt sys-talk-row" href="' + esc(designUrl(n, c.item)) + '" target="_blank" rel="noopener">' + avatar(c.author) +
         '<div><div class="cmt-head"><b>' + esc(c.author || 'Someone') + '</b><span>' + relTime(c.at) + '</span><span class="sys-talk-on">' + srcChip(n.source) + esc(n.name) + '</span></div>' +
@@ -2001,6 +2005,7 @@
       case 'print': window.print(); break;
       case 'close-ins': ui.sel = ''; snapState = null; saveUi(); renderPage(); break;
       case 'layout': ui.layout = el.dataset.layout; saveUi(); renderPage(); break;
+      case 'talk-all': ui.talkAll = !ui.talkAll; saveUi(); renderPage(); break;
       case 'place-all': placeAll(current()); break;
       case 'place-design': (function () {
         var d = index && index.entries[el.dataset.key];
