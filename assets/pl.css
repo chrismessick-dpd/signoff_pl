@@ -84,7 +84,7 @@
 .map-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .map-tile:focus-visible, .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .map-tile.small { flex-direction: row; align-items: center; gap: 10px; padding: 7px 10px; }
-.map-art { aspect-ratio: 2 / 1; border-radius: 8px; background: var(--bg-sunk); display: grid; place-items: center; overflow: hidden; }
+.map-art { position: relative; aspect-ratio: 2 / 1; border-radius: 8px; background: var(--bg-sunk); display: grid; place-items: center; overflow: hidden; }
 .map-art svg { width: 86%; height: 86%; }
 .map-tile.small .map-art { width: 38px; flex: none; aspect-ratio: 1; }
 .map-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -107,9 +107,10 @@
 
 /* Inspector */
 .map-ins { position: sticky; top: 72px; padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 96px); overflow: auto; }
+.map-ins > * { flex-shrink: 0; }   /* the panel scrolls; its sections never squeeze into each other */
 .map-ins h2 { margin: 0; font: 600 19px var(--display); padding-right: 28px; }
 .map-ins-close { position: absolute; right: 12px; top: 12px; width: 28px; height: 28px; font-size: 18px; }
-.map-ins-art { aspect-ratio: 16 / 10; border-radius: 10px; background: var(--bg-sunk); display: grid; place-items: center; }
+.map-ins-art { aspect-ratio: 16 / 10; border-radius: 10px; background: var(--bg-sunk); display: grid; place-items: center; overflow: hidden; }
 .map-ins-art svg { width: 80%; height: 80%; }
 .map-ins-sub { margin: -8px 0 0; font-size: 12.5px; color: var(--text-3); }
 .map-ins-row { display: flex; align-items: center; gap: 14px; font-size: 13.5px; line-height: 1.7; }
@@ -129,6 +130,7 @@
   .map-ins { position: fixed; z-index: 40; top: auto; right: 12px; bottom: 12px; width: min(360px, calc(100vw - 24px)); max-height: 70vh; box-shadow: var(--shadow-lg); }
   /* The close button stays pinned while the panel scrolls, and the dimmed page behind closes it too. */
   .map-ins-close { position: sticky; top: 0; align-self: flex-end; flex: none; z-index: 2; width: 36px; height: 36px; margin: -8px -8px -42px 0; font-size: 22px; background: var(--bg-elev); box-shadow: var(--shadow); border-radius: 50%; }
+  .map-ins-art { max-height: 30vh; width: 100%; }
   .map-ins-scrim { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, 0.18); }
 }
 
@@ -146,7 +148,8 @@
 .pick .map-meta { flex-direction: column; align-items: flex-start; gap: 0; }
 
 /* Stored pictures (Fabcheck's board previews) in tiles, the inspector and the picker */
-.map-art img.pv, .map-ins-art img.pv { width: 92%; height: 92%; object-fit: contain; display: block; }
+/* Pictures are placed inside their box, so the box's shape decides their size whatever the picture's. */
+.map-art img.pv, .map-ins-art img.pv { position: absolute; inset: 4%; width: 92%; height: 92%; object-fit: contain; display: block; }
 .map-art img.pv:not([src]), .map-ins-art img.pv:not([src]) { display: none; }
 .map-ins-art { position: relative; }
 .map-ins-flip { position: absolute; right: 8px; bottom: 8px; }
