@@ -17,8 +17,10 @@ PL shows where the whole product stands:
 - each design's stage
 - total mass
 
-PL never writes to Signoff EE or ME. It reads the `summary` block that those tools write into
-each project file at sync. The format is in Signoff EE's README under *The project summary*.
+PL reads the `summary` block that Signoff EE and ME write into each project file at sync. The
+format is in Signoff EE's README under *The project summary*. The only thing PL writes into a
+review is requirement records, from the Requirements tab, after a confirm. Nothing else in the
+file changes (`GitHubStore.patchRecords`). See `docs/requirements-tab.md`.
 
 It is FTE-only. Signoff EE and ME call their reviews "projects" on screen. In PL and in the code,
 a design linked into a product is a "Part".

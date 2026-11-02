@@ -3,7 +3,8 @@
 Signoff PL (project lead) is the product-level tool. A PL project is a whole product: a tree of
 assemblies and **Parts**. Each Part links to a Signoff EE or ME review by `{tool, id}`, or is
 firmware or purchased. PL rolls up progress, issues, stages and mass from each review's
-`summary`, and never writes to EE or ME.
+`summary`. The one thing it writes into EE or ME is requirement records, from the Requirements
+tab (Chris, 2026-11-01; see *Requirements tab* below).
 
 When the suite folder is checked out, also read `../CLAUDE.md`. Then read:
 - `README.md`: data format and layout
@@ -31,6 +32,8 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha. The project-to-repo map is rebuilt on every refresh. |
+| `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
+| `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
 | `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js` |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
@@ -53,8 +56,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (111 tests as of
-   2026-11-01, after the System tab).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (126 tests as of
+   2026-11-01, after the Requirements tab).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
@@ -128,7 +131,39 @@ System. PL has no view deep link.
 The BOM is `pl.js` `bom()`. Its mass equals `rollup()`'s while assemblies have no qty. The UI
 never sets one, but `bom()` multiplies by it if present.
 
+## Requirements tab (2026-11-01)
+
+The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In short:
+- **One home per requirement.** System requirements live in the PL project (`reqs`, with `parts`
+  for allocation). A board's or part's requirement lives in its EE or ME review. Firmware ones are
+  held in PL with a `parent` and `part` until Signoff FW exists.
+- **IDs.** Every requirement is `REQ-###`, with `discipline` sys / ee / me / fw / other. Links use
+  the record `id`, never the `ref`.
+- **Flow-down.** It's the child's `parent: { tool: 'pl', project, id, ref, text }`. A child counts
+  only when its parent is a live System requirement of this project; anything else is untraced.
+- **Reading.** PL reads `summary.reqList`, sanitized in `reader.js` (`cleanReq`).
+- **Writing.** It goes through the engine's `GitHubStore.patchRecords`, after a confirm:
+  - only `reqs` records change;
+  - the file must round-trip;
+  - `force: false`;
+  - a record changed since PL read it comes back as a conflict card (keep mine or keep theirs).
+
+  The review's repo is resolved fresh from the tool's data repo's shared map (`users.json`),
+  never from the reader's cache.
+- **Overlay.** PL can't rebuild a review's summary, so what it wrote is laid over `reqList`
+  (`reqOverlay` in localStorage) until the review's own sync catches up.
+- **States.** At risk (an open issue on a linked check) and failing (verification failed) are
+  separate, the same as in EE and ME.
+- **Demo.** The demo's System requirements are `config.demo.requirements`. `demo.js` gives the
+  EE/ME demo requirements the parent links PL would have written. Writes in the demo stay in the
+  browser.
+- **Not tried live yet.** The live write path (`homeStore`, `writeToReview`) has run only in the
+  demo, and `patchRecords` against the fake GitHub in EE's tests. Ask Chris to try it on a test
+  review first.
+
 ## Next
 
-Phase 2 is requirements allocation. See `docs/roadmap.md`. It starts with adding
-`summary.reqList` to the EE engine's `projectSummary`.
+- **The requirements live write.** Try it on a test review with a real token, then add a PL test
+  against `tests/fake-hub.js` that covers the shared-map lookup.
+- **Field-level merge for `reqs`** (`fieldAt`), deferred by Chris: conflict cards come first.
+- **Phase 3:** gates and interfaces. See `docs/roadmap.md`.

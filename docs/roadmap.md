@@ -22,7 +22,18 @@ and the latest edit. The format is in Signoff EE's README (*The project summary*
 - Deep links: EE and ME accept `?project=<id>&item=<check>`.
 - A demo built from the EE and ME demos.
 
-## Phase 2: requirements allocation
+## Phase 2: requirements allocation — done (2026-11-01)
+
+Built as designed in `docs/requirements-tab.md`, which replaces the notes below where they
+differ:
+- Links use the record `id`, not the `ref`. The link lives on the child as `parent`.
+- Every requirement is `REQ-` with a `discipline`.
+- PL writes requirement records into reviews.
+- At risk and failing are separate states.
+
+Still open: trying the live write on a test review, and field-level merge for `reqs`.
+
+The original notes:
 
 Product requirements are written in PL and allocated down to the requirements in the Parts'
 reviews.

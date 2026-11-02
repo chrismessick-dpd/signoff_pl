@@ -1,6 +1,7 @@
 /* Signoff PL app: state, storage, rendering and interaction.
    PL projects sync to the PL data repo through the Signoff engine's GitHubStore with PL's own
-   merge (pl.js). The design reviews Parts link to are read, never written (reader.js). */
+   merge (pl.js). The design reviews Parts link to are read (reader.js); the Requirements tab
+   (reqs.js) writes requirement records into them, and nothing else. */
 (function (S) {
   'use strict';
   var M = S.model, P = S.pl, C = S.config;
@@ -46,7 +47,8 @@
   var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
-  var VIEWS = [{ id: 'system', label: 'System' }, { id: 'bom', label: 'BOM' }, { id: 'issues', label: 'Issues' }];
+  // Requirements comes from reqs.js and plreqs.js; without them PL runs as before.
+  var VIEWS = [{ id: 'system', label: 'System' }].concat(S.plReqsView && S.plReqs ? [{ id: 'reqs', label: 'Requirements' }] : [], [{ id: 'bom', label: 'BOM' }, { id: 'issues', label: 'Issues' }]);
   var VIEW_IDS = VIEWS.map(function (v) { return v.id; });
   var ui = Object.assign({ slug: '', view: 'system', closed: {}, layout: 'map', sel: '' }, load('ui', {}));
   if (VIEW_IDS.indexOf(ui.view) < 0) ui.view = 'system';   // Overview and Structure became System (2026-11-01)
@@ -54,16 +56,18 @@
 
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
   // product in config.js), so a browser that saw an older demo doesn't keep it.
-  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {});
+  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {}) + JSON.stringify((C.demo || {}).requirements || []);
   if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
     index = demo.index; dirty = {}; ui.slug = demo.project.slug; ui.closed = {};
     save('projects', projects); save('index', index); save('dirty', dirty); save('demoVersion', DEMO_VERSION);
+    save('reqOverlay', {}); save('reqSeen', {});   // the Requirements tab's demo writes belong to the old demo
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
-  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols }); }
+  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
+    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -209,7 +213,8 @@
     if (!p) { $('#view-seg').innerHTML = ''; $('#toolbar-actions').innerHTML = ''; return; }
     var r = P.rollup(p, index)[''];
     $('#view-seg').innerHTML = VIEWS.map(function (v) {
-      var extra = v.id === 'issues' && r.openTotal ? '<span class="count">' + esc(r.openTotal) + '</span>' : '';
+      var need = v.id === 'reqs' && S.plReqsView ? reqsView().badge(p) : 0;
+      var extra = v.id === 'issues' && r.openTotal ? '<span class="count">' + esc(r.openTotal) + '</span>' : need ? '<span class="count" title="Waiting in Needs you">' + need + '</span>' : '';
       return '<button role="tab" class="' + (v.id === ui.view ? 'on' : '') + '" data-act="view" data-view="' + v.id + '">' + v.label + extra + '</button>';
     }).join('');
     $('#toolbar-actions').innerHTML = (DEMO ? '' : '<button class="btn" data-act="sync" title="Sync PL projects and read the designs again (Ctrl+S)">' + ICON.sync + '<span class="btn-label">Sync</span>' +
@@ -219,11 +224,22 @@
   }
 
   // ── Pages ────────────────────────────────────────────────
+  // The Requirements tab lives in reqs.js; it gets what it needs from here.
+  var reqsViewObj = null;
+  function reqsView() {
+    return reqsViewObj || (reqsViewObj = S.plReqsView({
+      esc: esc, ui: ui, load: load, save: save, index: function () { return index; }, view: function () { return ui.view; },
+      headBlock: headBlock, ICON: ICON, ring: ring, plural: plural, srcChip: srcChip, relTime: relTime,
+      current: current, touch: touch, me: me, saveUi: saveUi, renderPage: renderPage, toast: toast,
+      sheet: sheet, closeSheet: closeSheet, val: val, settings: settings, getToken: getToken, DEMO: DEMO
+    }));
+  }
   function renderPage() {
     var p = current(), page = $('#page'), scroll = $('#main').scrollTop;
     renderToolbar();
     if (!p) { page.innerHTML = allowed() ? emptyPage() : lockedPage(); return; }
     if (ui.view === 'issues') page.innerHTML = issuesPage(p);
+    else if (ui.view === 'reqs') page.innerHTML = reqsView().page(p);
     else if (ui.view === 'bom') page.innerHTML = bomPage(p);
     else page.innerHTML = systemPage(p);
     $('#main').scrollTop = scroll;

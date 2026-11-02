@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'model3d', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -44,7 +44,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(merged.nodes[a.id].name === 'Main board rev B' && merged.nodes[b.id].deleted && merged.nodes.nNEW, 'merge keeps both sides’ node edits, deletions and additions');
   var older = JSON.parse(JSON.stringify(mine)); older.nodes[a.id].name = 'Stale'; older.nodes[a.id].updatedAt = at('09:00:00');
   eq(P.merge(older, mine).nodes[a.id].name, 'Main board rev B', 'the newer node record wins');
-  eq(Object.keys(merged).sort(), ['createdAt', 'createdBy', 'id', 'meta', 'nodes', 'schema', 'slug'], 'a merged document carries only PL fields');
+  eq(Object.keys(merged).sort(), ['createdAt', 'createdBy', 'id', 'meta', 'nodes', 'reqs', 'schema', 'slug'], 'a merged document carries only PL fields');
 
   // ── Tree: order, orphans, cycles, moves ──
   var t = P.tree(proj);
@@ -258,6 +258,36 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(P.issues(demo.project, demo.index).length === 13, 'the demo lists every open issue from the four designs');
   ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
 
+  // ── Requirements (plreqs.js) ──
+  var R = Signoff.plReqs, rq = R.rollup(demo.project, demo.index);
+  var bySysText = function (s) { return rq.sys.filter(function (x) { return x.rec.text.indexOf(s) === 0; })[0]; };
+  ok(rq.sys.length === 10 && rq.sys.every(function (s) { return /^REQ-\d{3}$/.test(s.rec.ref) && s.rec.discipline === 'sys'; }), 'the demo has ten System requirements, all REQ- with discipline sys');
+  eq(rq.counts, { fail: 0, risk: 2, gap: 1, open: 5, pass: 2, deprecated: 0 }, 'System roll-up: at risk from linked open issues, met when every child passes');
+  var temp = bySysText('The thermostat shall measure');
+  ok(temp.state === 'risk' && temp.kids.length === 2 && Object.keys(temp.cells).length === 2, 'a System requirement rolls up its children on each allocated Part');
+  var iso = bySysText('Mains shall be separated');
+  ok(iso.state === 'gap' && Object.keys(iso.cells).filter(function (k) { return iso.cells[k] === 'gap'; }).length === 1, 'a Part allocated with no derived requirement is a gap');
+  ok(bySysText('The installed thermostat').state === 'pass' && bySysText('The thermostat shall run from').state === 'pass', 'mass and mains are met');
+  eq(rq.untraced.map(function (it) { return it.design.id + ':' + it.req.ref; }).sort(), ['mdemo13:REQ-002', 'mdemo5:REQ-004', 'pdemo11:REQ-003', 'pdemo11:REQ-004', 'pdemo7:REQ-004'], 'requirements with no System parent are untraced');
+  ok(rq.inbox.unallocated.length === 1 && rq.inbox.approval.length === 1 && rq.inbox.approval[0].req.ref === 'REQ-005', 'the inbox lists the unallocated System requirement and the reworded child');
+  var esd = bySysText('Every user-accessible');
+  ok(esd.kids.some(function (it) { return it.home.tool === 'pl' && it.req.discipline === 'fw'; }), 'firmware requirements are held in PL and count as children');
+  // A claimed parent that isn't a System requirement of this project doesn't count.
+  var forged = JSON.parse(JSON.stringify(demo.index));
+  forged.entries['ee:pdemo11'].summary.reqList[2].parent = { tool: 'pl', project: 'pl-other', id: esd.rec.id, ref: 'REQ-002' };
+  ok(R.rollup(demo.project, forged).untraced.some(function (it) { return it.req.id === 'q11-2'; }), 'a parent in another PL project is ignored');
+  // Overlay: what PL wrote shows until the review's own sync catches up.
+  var ov = { 'ee:pdemo11': { 'q11-2': { id: 'q11-2', status: 'approved', parent: { tool: 'pl', project: demo.project.id, id: temp.rec.id, ref: temp.rec.ref }, at: '2999-01-01T00:00:00Z' } } };
+  ok(R.rollup(demo.project, R.withOverlay(demo.index, ov)).sys.filter(function (s) { return s.rec.id === temp.rec.id; })[0].kids.length === 3, 'a written parent link shows before the review syncs');
+  eq(R.pruneOverlay(demo.index, { 'ee:pdemo11': { a: { at: '2000-01-01T00:00:00Z' }, b: { at: '2999-01-01T00:00:00Z' } } }), { 'ee:pdemo11': { b: { at: '2999-01-01T00:00:00Z' } } }, 'overlay entries the summary has caught up with are dropped');
+  var mcsv = R.csv(demo.project, demo.index);
+  ok(/^ID,Requirement,Type,Category,Source,Verification method,Status,Roll-up,/.test(mcsv) && mcsv.trim().split('\n').length === 11, 'the compliance matrix has one row per System requirement and a column per Part');
+  ok(R.suggest({ req: { text: 'Display brightness shall be readable from 2 m', category: 'Display' } }, rq.sys) === null, 'no suggested parent without real overlap');
+  var mergedReqs = P.merge({ id: 'x', meta: {}, nodes: {}, reqs: { a: { id: 'a', updatedAt: '1' } }, extra: 1 }, { id: 'x', meta: {}, nodes: {}, reqs: { b: { id: 'b', updatedAt: '1' } } });
+  ok(mergedReqs.reqs.a && mergedReqs.reqs.b && mergedReqs.extra === 1, 'PL merges requirements record by record and keeps keys it doesn’t know');
+  var rl = Signoff.plReader.cleanSummary({ reqList: [{ id: 'q1', state: '<b>', discipline: 'ee', parent: { tool: 'ee', id: 'x', project: 'y' } }, 'junk', { id: 'q2', parent: { tool: 'pl', id: 'p', project: 'pl1', evil: 1 } }] }).reqList;
+  ok(rl.length === 2 && rl[0].state === 'open' && !rl[0].parent && rl[1].parent.project === 'pl1' && !('evil' in rl[1].parent), 'the reader rebuilds reqList from known fields');
+
   // ── Bill of materials ──
   var bi = P.bom(demo.project, demo.index, 'indented'), bf = P.bom(demo.project, demo.index, 'flat');
   eq([bi.totals.massG, bf.totals.massG], [dr[''].massG, dr[''].massG], 'BOM mass totals match the roll-up (205.2 g), indented and consolidated');
@@ -347,7 +377,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   });
   function strip(designs) {
     var out = {};
-    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; out[k] = d; });
+    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; (d.summary.reqList || []).forEach(function (q) { delete q.at; }); out[k] = d; });
     return M.stableStringify(out);
   }
   if (live) {

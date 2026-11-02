@@ -41,6 +41,28 @@
       ids[r.key] = n.id;
       project.nodes[n.id] = n;
     });
+    // Requirements: System ones in the project, firmware ones held in PL, and the EE/ME demo
+    // requirements given the parent links PL would have written into those reviews.
+    var R = S.plReqs, reqIds = {};
+    project.reqs = {};
+    (R ? D.requirements || [] : []).forEach(function (r) {
+      var parent = r.parent ? project.reqs[reqIds[r.parent]] : null;
+      var q = R.newReq(project, {
+        text: r.text, kind: r.kind || 'shall', category: r.category || '', source: r.source || '', method: r.method || 'inspection',
+        status: r.status || 'draft', discipline: r.discipline || 'sys',
+        parts: (r.parts || []).map(function (k) { return ids[k]; }).filter(Boolean)
+      }, user);
+      if (parent) { q.parent = R.parentLink(project, parent); q.part = ids[r.part] || ''; delete q.parts; }
+      reqIds[r.key] = q.id;
+      project.reqs[q.id] = q;
+      (r.children || []).forEach(function (c) {
+        var at = c.lastIndexOf(':'), e = index.entries[c.slice(0, at)];
+        if (!e || !e.summary) return;
+        e.summary = Object.assign({}, e.summary, { reqList: (e.summary.reqList || []).map(function (x) {
+          return x.id === c.slice(at + 1) ? Object.assign({}, x, { parent: { tool: 'pl', project: project.id, id: q.id, ref: q.ref } }) : x;
+        }) });
+      });
+    });
     project.meta.updatedAt = M.now();
     return { project: project, index: index };
   }

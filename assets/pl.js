@@ -7,7 +7,8 @@
        nodes: { id: { id, parent: '' | node id, order, kind: 'assembly' | 'part', name, number,
                       source: 'ee' | 'me' | … | 'fw' | 'purchased', ref: { tool, id } | null,
                       qty, supplier, mpn, massG, envelopeMm, notes,
-                      createdAt, updatedAt, updatedBy, deleted } } }
+                      createdAt, updatedAt, updatedBy, deleted } },
+       reqs:  { id: requirement record, see plreqs.js } }
    Nodes merge record by record like every Signoff document: the newer record wins and
    deletions are tombstones. Two people moving nodes at once can still leave a cycle, and
    deleting an assembly orphans its children; tree() puts both at the top, flagged.
@@ -71,18 +72,21 @@
     return max + 1;
   }
 
+  // Requirements (plreqs.js) merge record by record like nodes. Top-level keys this copy doesn't
+  // know are carried along (the remote's wins), so an older copy never drops a newer one's data.
   function merge(local, remote) {
     if (!local) return remote;
     if (!remote) return local;
-    return {
+    return Object.assign({}, local, remote, {
       schema: Math.max(local.schema || 1, remote.schema || 1),
       id: remote.id || local.id,
       slug: remote.slug || local.slug,
       createdAt: remote.createdAt < local.createdAt ? remote.createdAt : local.createdAt,
       createdBy: remote.createdBy || local.createdBy,
       meta: M.newer(local.meta, remote.meta),
-      nodes: M.mergeMaps(local.nodes, remote.nodes)
-    };
+      nodes: M.mergeMaps(local.nodes, remote.nodes),
+      reqs: M.mergeMaps(local.reqs || {}, remote.reqs || {})
+    });
   }
 
   function liveNodes(project) {

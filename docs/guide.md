@@ -17,12 +17,21 @@ of those designs is reviewed in its own Signoff tool. PL puts them together.
    - a mechanical part reviewed in Signoff ME
    - firmware
    - a purchased item, with its supplier, part number, mass and envelope
-2. **Link the reviews.** Pick each Part's review from a list of the projects PL finds. PL never
-   changes a review. It reads the summary each review keeps up to date.
+2. **Link the reviews.** Pick each Part's review from a list of the projects PL finds. PL reads
+   the summary each review keeps up to date. The only thing it writes into a review is
+   requirements, and it asks first.
 3. **See where it stands.**
    - **System:** the product as a tree, with each assembly rolling up the Parts inside it.
      Underneath: the share of checks reviewed across every design, open issues by severity, each
      design's stage, total mass, and any Part that needs attention.
+   - **Requirements:** the product's System requirements, each allocated to the Parts that must
+     meet it. Each Part's own requirements in Signoff EE and ME trace up to them.
+     - Rings and a coverage strip show what's met, at risk, failing, or a gap: allocated, but with
+       nothing derived yet.
+     - **Needs you** lists what's unallocated, untraced, reworded or at risk.
+     - Drag a requirement onto a Part to allocate it.
+     - Derive, trace, approve or edit a Part's requirement from here, and PL writes it into the
+       review.
    - **Issues:** every open issue in the product, worst first. Each one opens the exact check in
      its review.
 

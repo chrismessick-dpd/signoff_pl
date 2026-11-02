@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PL Requirements Mockup</title>
+<!-- Static design mockup for docs/requirements-tab.md. Made-up Smart Thermostat data, no code
+     from assets/ (another session is reworking those). Open straight from disk. -->
+<style>
+:root {
+  --bg: #f5f5f7; --card: #fff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e3e3e8; --hover: #f0f0f4;
+  --accent: #0a66d8; --met: #1f9d55; --risk: #d68a00; --fail: #d93025; --open: #9a9aa2; --gap: #c9c9d1;
+  --ee: #0a66d8; --me: #7a4fd6; --fw: #0e8a7a; --sys: #1d1d1f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111113; --card: #1c1c1f; --ink: #f2f2f5; --muted: #9a9aa2; --line: #2e2e33; --hover: #26262a;
+    --accent: #4a9bff; --met: #3ccf7e; --risk: #f2a93b; --fail: #ff6b5e; --open: #6e6e76; --gap: #45454c;
+    --ee: #4a9bff; --me: #a98bff; --fw: #3cc7b4; --sys: #f2f2f5;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+.eyebrow { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+h1 { margin: 2px 0 14px; font-size: 26px; letter-spacing: -.01em; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 22px; padding: 18px 20px; align-items: center; }
+.ring-big { width: 92px; height: 92px; }
+.counters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.counter { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; display: inline-flex; gap: 6px; align-items: center; }
+.counter.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.counter b { font-variant-numeric: tabular-nums; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.strip { display: flex; flex-wrap: wrap; gap: 14px 22px; }
+.strip-part { display: flex; align-items: center; gap: 8px; }
+.strip-part span { font-size: 12px; color: var(--muted); min-width: 0; }
+.cells { display: flex; gap: 3px; }
+.cell { width: 16px; height: 16px; border-radius: 4px; cursor: pointer; border: 1.5px solid transparent; }
+.cell.gap { background: repeating-linear-gradient(45deg, var(--gap) 0 3px, transparent 3px 6px); border-color: var(--gap); }
+.cell.open { border-color: var(--open); }
+.cell:hover, .cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; margin-top: 16px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 5px 11px; font: inherit; cursor: pointer; }
+.seg button.on { background: var(--ink); color: var(--card); }
+select, input[type=search] { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 5px 9px; }
+input[type=search] { flex: 1; min-width: 140px; }
+.row { display: grid; grid-template-columns: 22px 30px 92px 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover { background: var(--hover); }
+.row.sel { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.row.child { grid-template-columns: 22px 30px 92px 1fr auto; padding-left: 44px; font-size: 13px; }
+.row.child .tree { color: var(--line); }
+.ref { font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.text { min-width: 0; }
+.text .t { display: block; }
+.text .sub { color: var(--muted); font-size: 12px; }
+.text .t[contenteditable="true"] { outline: 1px dashed var(--accent); border-radius: 4px; padding: 0 3px; }
+.badge { font: 600 10.5px ui-monospace, Menlo, Consolas, monospace; padding: 2px 6px; border-radius: 6px; color: #fff; }
+.b-ee { background: var(--ee); } .b-me { background: var(--me); } .b-fw { background: var(--fw); } .b-sys { background: var(--sys); color: var(--card); }
+.state { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.s-met { color: var(--met); background: color-mix(in srgb, var(--met) 14%, transparent); }
+.s-risk { color: var(--risk); background: color-mix(in srgb, var(--risk) 16%, transparent); }
+.s-fail { color: var(--fail); background: color-mix(in srgb, var(--fail) 14%, transparent); }
+.s-open { color: var(--muted); background: color-mix(in srgb, var(--open) 16%, transparent); }
+.s-gap { color: var(--muted); border: 1px dashed var(--gap); }
+.pill { display: inline-flex; gap: 5px; align-items: center; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; margin-left: 6px; }
+.pill:hover { border-color: var(--accent); color: var(--accent); }
+.chev { color: var(--muted); transition: transform .15s; display: inline-block; }
+.chev.open { transform: rotate(90deg); }
+.lock { color: var(--muted); font-size: 11px; margin-left: 6px; }
+.fresh { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 6px; vertical-align: middle; }
+.section-h { padding: 10px 14px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); background: var(--bg); }
+.side { display: flex; flex-direction: column; gap: 16px; }
+.side h3 { margin: 0; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+.inbox-g { padding: 8px 14px 4px; font-size: 12px; color: var(--muted); }
+.inbox-i { margin: 0 10px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12.5px; background: var(--card); }
+.inbox-i[draggable="true"] { cursor: grab; }
+.inbox-i .act { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 3px 9px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sugg { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.parts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+.part { border: 1.5px dashed var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; min-width: 128px; flex: 1; }
+.part.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.part small { display: block; color: var(--muted); }
+.insp { padding: 14px; font-size: 13px; }
+.insp .crumb { color: var(--muted); font-size: 12px; }
+.insp h4 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.chain { border-left: 2px solid var(--line); margin-left: 6px; padding-left: 12px; }
+.chain div { margin: 6px 0; }
+.matrix { overflow-x: auto; }
+.matrix table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.matrix th { font-weight: 600; color: var(--muted); font-size: 12px; }
+.matrix td.c { text-align: center; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--card); padding: 9px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; }
+.note { color: var(--muted); font-size: 12px; margin-top: 18px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; }
+  .row, .row.child { grid-template-columns: 18px 26px 1fr auto; }
+  .row .refcol { display: none; }
+  .row.child { padding-left: 24px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Smart Thermostat · Acme Climate · EVT · mockup</div>
+  <h1>Requirements</h1>
+
+  <div class="card hero">
+    <svg class="ring-big" viewBox="0 0 36 36" id="bigRing" aria-label="Verified share"></svg>
+    <div>
+      <div class="counters" id="counters"></div>
+      <div class="strip" id="strip" aria-label="Coverage by Part"></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="card" style="overflow:hidden">
+      <div class="toolbar">
+        <div class="seg" id="viewSeg"><button class="on" data-v="list">List</button><button data-v="matrix">Matrix</button></div>
+        <select id="fTool" aria-label="Tool"><option value="">All tools</option><option value="sys">System</option><option value="ee">EE</option><option value="me">ME</option><option value="fw">FW</option></select>
+        <select id="fPart" aria-label="Part"><option value="">All Parts</option></select>
+        <input type="search" id="q" placeholder="Search requirements" aria-label="Search">
+        <button class="btn">Export CSV</button>
+      </div>
+      <div id="main"></div>
+    </div>
+
+    <div class="side">
+      <div class="card" id="inspector" hidden></div>
+      <div class="card">
+        <h3>Needs you <span id="needCount" class="state s-risk"></span></h3>
+        <div id="inbox"></div>
+      </div>
+      <div class="card">
+        <h3>Parts <span style="color:var(--muted);font-weight:400;font-size:12px">drop to allocate</span></h3>
+        <div class="parts" id="parts"></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Design mockup for <code>docs/requirements-tab.md</code>. All data is made up. Links and edits only show a message.</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var PARTS = [
+    { id: 'main', name: 'Main PCBA', tool: 'ee' },
+    { id: 'disp', name: 'Display & sensor', tool: 'ee' },
+    { id: 'enc', name: 'Enclosure', tool: 'me' },
+    { id: 'brkt', name: 'Wall bracket', tool: 'me' },
+    { id: 'fw', name: 'Firmware', tool: 'fw' }
+  ];
+  var partById = {}; PARTS.forEach(function (p) { partById[p.id] = p; });
+
+  // Children: derived requirements, homed in their Part's review (FW: held in PL).
+  // state: met | risk | fail | open; issue: the linked check with an open issue.
+  var C = {
+    d1: { part: 'disp', ref: 'REQ-001', text: 'Measure room temperature to within ±0.5 °C from 5 to 35 °C.', state: 'risk', issue: ['sch-therm-4', 'major'], checks: ['sch-therm-4', 'pcb-pl-8'] },
+    e2: { part: 'enc', ref: 'REQ-002', text: 'Venting keeps the sensor within 0.3 °C of room air at full relay load.', state: 'risk', issue: ['enc-thm-4', 'major'], checks: ['enc-thm-4', 'fea-th-13'], fresh: 'Lee Alvarez linked fea-th-13 · 2 h ago' },
+    m3: { part: 'main', ref: 'REQ-003', text: 'USB-C service port withstands ±8 kV contact and ±15 kV air ESD.', state: 'risk', issue: ['usb2', 'critical'], checks: ['usb2', 'spr4'] },
+    d2: { part: 'disp', ref: 'REQ-002', text: 'Touch keys withstand ±8 kV contact ESD without a reset or false press.', state: 'risk', issue: ['disp8', 'major'], checks: ['disp8', 'ifc-gpio-5'] },
+    f1: { part: 'fw', ref: 'FW-001', text: 'Firmware recovers from an ESD event on the touch controller without a user-visible reset.', state: 'open', checks: [] },
+    e3: { part: 'enc', ref: 'REQ-003', text: 'Installed thermostat weighs no more than 250 g.', state: 'met', checks: ['mat-sel-11'] },
+    m1: { part: 'main', ref: 'REQ-001', text: 'Runs from 100–240 V AC, 50/60 Hz mains.', state: 'met', checks: ['sp2', 'sp8'] },
+    m2: { part: 'main', ref: 'REQ-002', text: 'Mains separated from user-accessible low voltage by reinforced insulation.', state: 'risk', issue: ['pcb-iso-1', 'critical'], checks: ['sch-iso-3', 'pcb-iso-1'] },
+    m5: { part: 'main', ref: 'REQ-005', text: 'Relay outputs switch 2 A at 250 V AC resistive for 100,000 cycles.', state: 'open', checks: [], changed: true, fresh: 'Sam Patel reworded it · yesterday' },
+    e1: { part: 'enc', ref: 'REQ-001', text: 'Every visible face of the front cover meets Class A cosmetics.', state: 'open', checks: ['rq-id-2', 'pd-cos-6'] },
+    b1: { part: 'brkt', ref: 'REQ-001', text: 'Mounts to a single-gang box and drywall anchors with one hole pattern.', state: 'open', checks: ['tol-dat-5'] },
+    f2: { part: 'fw', ref: 'FW-002', text: 'Firmware updates over the air with rollback on a failed image.', state: 'open', checks: [] }
+  };
+  var SYS = [
+    { id: 's1', ref: 'SYS-001', text: 'Measure room temperature to within ±0.5 °C from 5 to 35 °C.', method: 'Test', src: 'DT-SPEC-12 §2.3', parts: ['disp', 'enc'], kids: ['d1', 'e2'] },
+    { id: 's2', ref: 'SYS-002', text: 'Withstand ±8 kV contact and ±15 kV air ESD at every user-accessible point.', method: 'Test', src: 'DT-SPEC-12 §6.4', parts: ['main', 'disp', 'fw'], kids: ['m3', 'd2', 'f1'] },
+    { id: 's3', ref: 'SYS-003', text: 'The installed thermostat shall weigh no more than 250 g.', method: 'Analysis', src: 'DT-SPEC-12 §2.1', parts: ['enc'], kids: ['e3'], computed: '205.2 g from the BOM · 18% margin' },
+    { id: 's4', ref: 'SYS-004', text: 'Run from 100–240 V AC, 50/60 Hz mains.', method: 'Test', src: 'DT-SPEC-12 §3.1', parts: ['main'], kids: ['m1'] },
+    { id: 's5', ref: 'SYS-005', text: 'Separate mains from user-accessible circuits by reinforced insulation.', method: 'Inspection', src: 'DT-SPEC-12 §5.2', parts: ['main', 'enc'], kids: ['m2'] },
+    { id: 's6', ref: 'SYS-006', text: 'Relay outputs switch 2 A at 250 V AC for 100,000 cycles.', method: 'Analysis', src: 'DT-SPEC-12 §4.3', parts: ['main'], kids: ['m5'] },
+    { id: 's7', ref: 'SYS-007', text: 'The front cover meets the client’s Class A cosmetic standard.', method: 'Inspection', src: 'DT-SPEC-12 §7.1', parts: ['enc'], kids: ['e1'] },
+    { id: 's8', ref: 'SYS-008', text: 'Mount to a single-gang electrical box.', method: 'Inspection', src: 'DT-SPEC-12 §8.2', parts: ['brkt'], kids: ['b1'] },
+    { id: 's9', ref: 'SYS-009', text: 'Firmware updates over the air.', method: 'Demonstration', src: 'Kickoff notes', parts: ['fw'], kids: ['f2'] },
+    { id: 's10', ref: 'SYS-010', text: 'Operate from 0 to 40 °C ambient.', method: 'Test', src: 'DT-SPEC-12 §2.2', parts: [], kids: [] }
+  ];
+  var UNTRACED = [
+    { part: 'disp', ref: 'REQ-003', text: 'Draw ≤ 15 mA average from 3V3 with the backlight dimmed.', state: 'met', sugg: null },
+    { part: 'disp', ref: 'REQ-004', text: 'Display readable from 2 m in 500 lux.', state: 'open', sugg: null },
+    { part: 'enc', ref: 'REQ-004', text: 'Front cover comes off with a flat screwdriver.', state: 'open', sugg: null },
+    { part: 'brkt', ref: 'REQ-002', text: 'Fasteners are metric, two drive types at most.', state: 'met', sugg: null },
+    { part: 'main', ref: 'REQ-004', text: 'Wi-Fi uses a pre-certified radio module.', state: 'open', sugg: 'SYS-009?' }
+  ];
+  var LABEL = { met: 'Met', risk: 'At risk', fail: 'Failing', open: 'Open', gap: 'Gap', none: 'Not allocated' };
+  var COLOR = { met: 'var(--met)', risk: 'var(--risk)', fail: 'var(--fail)', open: 'var(--open)', gap: 'var(--gap)' };
+
+  var ui = { view: 'list', state: '', tool: '', part: '', q: '', open: { s1: 1, s2: 1 }, sel: null, cell: null };
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(id) { return document.getElementById(id); }
+  function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('show'); }, 2200); }
+
+  // Roll-up per docs/requirements-tab.md: failing > at risk > gap > open; met when all met.
+  function cellState(s, partId) {
+    if (s.parts.indexOf(partId) < 0) return 'none';
+    var kids = s.kids.filter(function (k) { return C[k].part === partId; });
+    if (!kids.length) return 'gap';
+    var st = kids.map(function (k) { return C[k].state; });
+    return st.indexOf('fail') >= 0 ? 'fail' : st.indexOf('risk') >= 0 ? 'risk' : st.every(function (x) { return x === 'met'; }) ? 'met' : 'open';
+  }
+  function rollup(s) {
+    if (!s.parts.length) return 'open';
+    var cells = s.parts.map(function (p) { return cellState(s, p); });
+    return cells.indexOf('fail') >= 0 ? 'fail' : cells.indexOf('risk') >= 0 ? 'risk' : cells.indexOf('gap') >= 0 ? 'gap' : cells.every(function (x) { return x === 'met'; }) ? 'met' : 'open';
+  }
+  // A ring with one segment per child (or per gap).
+  function ring(s, size) {
+    var segs = s.kids.map(function (k) { return C[k].state; });
+    s.parts.forEach(function (p) { if (cellState(s, p) === 'gap') segs.push('gap'); });
+    if (!segs.length) segs = ['open'];
+    var r = 14, c = 2 * Math.PI * r, n = segs.length, gapLen = n > 1 ? 1.6 : 0, len = c / n - gapLen, out = '';
+    segs.forEach(function (st, i) {
+      out += '<circle cx="18" cy="18" r="' + r + '" fill="none" stroke="' + COLOR[st] + '" stroke-width="5" stroke-dasharray="' + len + ' ' + (c - len) + '" stroke-dashoffset="' + (-(i * c / n)) + '" transform="rotate(-90 18 18)"' + (st === 'gap' ? ' stroke-opacity=".7"' : '') + '/>';
+    });
+    return '<svg viewBox="0 0 36 36" width="' + size + '" height="' + size + '">' + out + '</svg>';
+  }
+
+  function badge(tool) { return '<span class="badge b-' + tool + '">' + tool.toUpperCase() + '</span>'; }
+  function stateChip(st) { return '<span class="state s-' + st + '">' + LABEL[st] + '</span>'; }
+  function issuePill(c) { return c.issue ? '<a class="pill" href="#" data-link="' + esc(c.issue[0]) + '" title="Open in Signoff ' + partById[c.part].tool.toUpperCase() + '"><span class="dot" style="background:' + (c.issue[1] === 'critical' ? 'var(--fail)' : 'var(--risk)') + '"></span>' + esc(c.issue[0]) + ' · ' + c.issue[1] + '</a>' : ''; }
+
+  function matches(s) {
+    var st = rollup(s);
+    if (ui.state && st !== ui.state) return false;
+    if (ui.part && s.parts.indexOf(ui.part) < 0) return false;
+    if (ui.tool === 'sys') return true;
+    if (ui.tool && !s.kids.some(function (k) { return partById[C[k].part].tool === ui.tool; })) return false;
+    if (ui.cell && (ui.cell[0] !== s.id)) return false;
+    if (ui.q) {
+      var hay = (s.ref + ' ' + s.text + ' ' + s.kids.map(function (k) { return C[k].ref + ' ' + C[k].text; }).join(' ')).toLowerCase();
+      if (hay.indexOf(ui.q.toLowerCase()) < 0) return false;
+    }
+    return true;
+  }
+
+  function renderHeader() {
+    var counts = { met: 0, risk: 0, fail: 0, gap: 0, open: 0 };
+    SYS.forEach(function (s) { counts[rollup(s)]++; });
+    var pct = Math.round(counts.met / SYS.length * 100);
+    var r = 15.5, c = 2 * Math.PI * r;
+    $('bigRing').innerHTML = '<circle cx="18" cy="18" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="3.5"/>' +
+      '<circle cx="18" cy="18" r="' + r + '" fill="none" stroke="var(--met)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="' + (c * pct / 100) + ' ' + c + '" transform="rotate(-90 18 18)"/>' +
+      '<text x="18" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ink)">' + pct + '%</text><text x="18" y="24" text-anchor="middle" font-size="3.6" fill="var(--muted)">met</text>';
+    var derived = Object.keys(C).length;
+    $('counters').innerHTML = '<span style="color:var(--muted);margin-right:6px;align-self:center">' + SYS.length + ' System · ' + derived + ' derived · ' + UNTRACED.length + ' untraced</span>' +
+      ['met', 'risk', 'fail', 'gap', 'open'].map(function (k) {
+        return '<button class="counter' + (ui.state === k ? ' on' : '') + '" data-state="' + k + '"><span class="dot" style="background:' + COLOR[k] + '"></span><b>' + counts[k] + '</b> ' + LABEL[k].toLowerCase() + '</button>';
+      }).join('');
+    $('strip').innerHTML = PARTS.map(function (p) {
+      var cells = SYS.filter(function (s) { return s.parts.indexOf(p.id) >= 0; }).map(function (s) {
+        var st = cellState(s, p.id), sel = ui.cell && ui.cell[0] === s.id && ui.cell[1] === p.id;
+        return '<span class="cell ' + st + (sel ? ' sel' : '') + '" data-cell="' + s.id + ':' + p.id + '" title="' + esc(s.ref + ' on ' + p.name + ': ' + LABEL[st]) + '" style="' + (st === 'gap' || st === 'open' ? '' : 'background:' + COLOR[st]) + '"></span>';
+      }).join('');
+      return '<div class="strip-part">' + badge(p.tool) + '<span>' + esc(p.name) + '</span><div class="cells">' + cells + '</div></div>';
+    }).join('');
+  }
+
+  function renderList() {
+    var html = '';
+    SYS.filter(matches).forEach(function (s) {
+      var st = rollup(s), open = !!ui.open[s.id];
+      html += '<div class="row' + (ui.sel === s.id ? ' sel' : '') + '" data-sel="' + s.id + '">' +
+        '<span class="chev' + (open ? ' open' : '') + '" data-toggle="' + s.id + '">' + (s.kids.length || s.parts.length ? '▸' : '') + '</span>' +
+        ring(s, 26) + '<span class="ref refcol">' + s.ref + '</span>' +
+        '<span class="text"><span class="t" data-edit>' + esc(s.text) + '</span><span class="sub">' + esc(s.method + ' · ' + s.src) +
+        (s.computed ? ' · <b style="color:var(--met)">' + esc(s.computed) + '</b>' : '') +
+        (!s.parts.length ? ' · not allocated' : '') + '</span></span>' + stateChip(st) + '</div>';
+      if (!open) return;
+      s.parts.forEach(function (pid) {
+        var kids = s.kids.filter(function (k) { return C[k].part === pid; });
+        if (ui.part && pid !== ui.part) return;
+        if (!kids.length) {
+          var p = partById[pid];
+          html += '<div class="row child"><span class="tree">└</span>' + badge(p.tool) + '<span class="ref refcol">—</span>' +
+            '<span class="text"><span class="t" style="color:var(--muted)">' + esc(p.name) + ': allocated, no derived requirement yet</span></span>' +
+            '<button class="btn" data-msg="Phase 2c: creates a derived requirement in the ' + esc(p.name) + ' review, pre-filled from ' + s.ref + '.">Derive</button></div>';
+        }
+        kids.forEach(function (k) {
+          var c = C[k], p = partById[c.part];
+          if (ui.tool && ui.tool !== 'sys' && p.tool !== ui.tool) return;
+          html += '<div class="row child' + (ui.sel === k ? ' sel' : '') + '" data-sel="' + k + '"><span class="tree">└</span>' + badge(p.tool) +
+            '<span class="ref refcol">' + c.ref + '</span>' +
+            '<span class="text"><span class="t">' + (c.fresh ? '<span class="fresh" title="' + esc(c.fresh) + '"></span>' : '') + esc(p.name) + ' · ' + esc(c.text) +
+            (p.tool !== 'fw' ? '<span class="lock" title="Homed in the ' + p.tool.toUpperCase() + ' review; editable from PL in Phase 2c">⌂ ' + p.tool.toUpperCase() + '</span>' : '') + '</span>' +
+            (c.changed ? '<span class="sub" style="color:var(--risk)">Changed, needs approval</span>' : '') + issuePill(c) + '</span>' + stateChip(c.state) + '</div>';
+        });
+      });
+    });
+    var ut = UNTRACED.filter(function (u) { return (!ui.part || u.part === ui.part) && (!ui.tool || ui.tool === partById[u.part].tool) && !ui.state && !ui.cell && (!ui.q || u.text.toLowerCase().indexOf(ui.q.toLowerCase()) >= 0); });
+    if (ut.length) {
+      html += '<div class="section-h">Not traced to a System requirement</div>';
+      ut.forEach(function (u) {
+        var p = partById[u.part];
+        html += '<div class="row child"><span class="tree">·</span>' + badge(p.tool) + '<span class="ref refcol">' + u.ref + '</span><span class="text"><span class="t">' + esc(p.name) + ' · ' + esc(u.text) + '</span></span>' + stateChip(u.state) + '</div>';
+      });
+    }
+    return html || '<div style="padding:30px;text-align:center;color:var(--muted)">No requirements match.</div>';
+  }
+
+  function renderMatrix() {
+    var html = '<div class="matrix"><table><thead><tr><th>System</th>' + PARTS.map(function (p) { return '<th>' + badge(p.tool) + ' ' + esc(p.name) + '</th>'; }).join('') + '<th>Roll-up</th></tr></thead><tbody>';
+    SYS.filter(matches).forEach(function (s) {
+      html += '<tr><td><span class="ref">' + s.ref + '</span><br>' + esc(s.text) + '</td>' + PARTS.map(function (p) {
+        var st = cellState(s, p.id);
+        if (st === 'none') return '<td class="c" style="color:var(--line)">·</td>';
+        var kid = s.kids.filter(function (k) { return C[k].part === p.id; })[0];
+        return '<td class="c">' + (kid ? '<span class="ref">' + C[kid].ref + '</span><br>' : '') + stateChip(st) + '</td>';
+      }).join('') + '<td>' + stateChip(rollup(s)) + '</td></tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+
+  function renderInbox() {
+    var items = [];
+    var html = '';
+    function group(title, list) { if (!list.length) return; html += '<div class="inbox-g">' + title + ' · ' + list.length + '</div>' + list.join(''); items = items.concat(list); }
+    group('Unallocated', SYS.filter(function (s) { return !s.parts.length; }).map(function (s) {
+      return '<div class="inbox-i" draggable="true" data-drag="' + s.id + '"><span class="ref">' + s.ref + '</span> ' + esc(s.text) + '<div class="sugg">Drag onto a Part below ↓</div></div>';
+    }));
+    group('Needs approval', Object.keys(C).filter(function (k) { return C[k].changed; }).map(function (k) {
+      var c = C[k];
+      return '<div class="inbox-i"><span class="ref">' + esc(partById[c.part].name) + ' · ' + c.ref + '</span> was reworded in EE after approval.<div class="act"><button class="btn primary" data-msg="Phase 2c: writes status approved back to the EE review, after a confirm.">Approve</button><button class="btn" data-msg="Shows the old and new wording side by side.">See change</button></div></div>';
+    }));
+    group('Untraced', UNTRACED.slice(0, 3).map(function (u) {
+      return '<div class="inbox-i"><span class="ref">' + esc(partById[u.part].name) + ' · ' + u.ref + '</span> ' + esc(u.text) +
+        '<div class="sugg">' + (u.sugg ? 'Suggested parent: ' + u.sugg : 'No suggested parent') + '</div><div class="act"><button class="btn" data-msg="Opens a picker of System requirements; Phase 2c writes the parent link.">Trace up</button><button class="btn" data-msg="Marks it design-level: no System parent needed.">Design-level</button></div></div>';
+    }).concat(UNTRACED.length > 3 ? ['<div class="inbox-g" style="padding-top:0">+ ' + (UNTRACED.length - 3) + ' more in the list</div>'] : []));
+    group('At risk', ['m3', 'm2'].map(function (k) {
+      var c = C[k];
+      return '<div class="inbox-i"><span class="ref">' + esc(partById[c.part].name) + ' · ' + c.ref + '</span>' + issuePill(c) + '<div class="sugg">Blocks ' + SYS.filter(function (s) { return s.kids.indexOf(k) >= 0; })[0].ref + '</div></div>';
+    }));
+    $('inbox').innerHTML = html;
+    $('needCount').textContent = items.filter(function (h) { return h.indexOf('inbox-i') >= 0; }).length;
+  }
+
+  function renderParts() {
+    $('parts').innerHTML = PARTS.map(function (p) {
+      var n = SYS.filter(function (s) { return s.parts.indexOf(p.id) >= 0; }).length;
+      return '<div class="part" data-drop="' + p.id + '">' + badge(p.tool) + ' ' + esc(p.name) + '<small>' + n + ' System requirements</small></div>';
+    }).join('');
+  }
+
+  function renderInspector() {
+    var el = $('inspector');
+    if (!ui.sel) { el.hidden = true; return; }
+    el.hidden = false;
+    var s = SYS.filter(function (x) { return x.id === ui.sel; })[0], html;
+    if (s) {
+      html = '<div class="insp"><div class="crumb">System · ' + s.ref + ' · home: PL project</div><div style="font-size:15px;font-weight:600;margin-top:4px">' + esc(s.text) + '</div>' +
+        '<div style="margin-top:6px">' + stateChip(rollup(s)) + ' <span style="color:var(--muted);font-size:12px">' + esc(s.method + ' · ' + s.src) + '</span></div>' +
+        (s.computed ? '<h4>Computed evidence</h4><div>' + esc(s.computed) + '</div>' : '') +
+        '<h4>Trace chain</h4><div class="chain">' + (s.kids.map(function (k) {
+          var c = C[k], p = partById[c.part];
+          return '<div>' + badge(p.tool) + ' <b>' + esc(p.name) + ' · ' + c.ref + '</b> ' + stateChip(c.state) +
+            '<div style="padding-left:10px;font-size:12px;color:var(--muted)">' + (c.checks.length ? c.checks.map(function (ch) {
+              var bad = c.issue && c.issue[0] === ch;
+              return '<a class="pill" href="#" data-link="' + esc(ch) + '"><span class="dot" style="background:' + (bad ? 'var(--fail)' : 'var(--met)') + '"></span>' + esc(ch) + '</a>';
+            }).join('') : 'No linked checks yet') + '</div></div>';
+        }).join('') || '<div style="color:var(--muted)">No derived requirements yet</div>') + '</div>' +
+        '<h4>History</h4><div style="color:var(--muted);font-size:12px">Allocated to ' + s.parts.length + ' Parts by Chris · Oct 28<br>Created by Chris · Oct 20</div></div>';
+    } else {
+      var c = C[ui.sel], p = partById[c.part], par = SYS.filter(function (x) { return x.kids.indexOf(ui.sel) >= 0; })[0];
+      html = '<div class="insp"><div class="crumb">' + p.tool.toUpperCase() + ' · ' + esc(p.name) + ' · ' + c.ref + ' · home: ' + (p.tool === 'fw' ? 'PL project (until Signoff FW)' : p.tool.toUpperCase() + ' review') + '</div>' +
+        '<div style="font-size:15px;font-weight:600;margin-top:4px">' + esc(c.text) + '</div><div style="margin-top:6px">' + stateChip(c.state) + '</div>' +
+        '<h4>Flows down from</h4><div><span class="ref">' + par.ref + '</span> ' + esc(par.text) + '</div>' +
+        '<h4>Verification (owned by the reviewer)</h4><div class="chain">' + (c.checks.map(function (ch) {
+          var bad = c.issue && c.issue[0] === ch;
+          return '<div><a class="pill" style="margin:0" href="#" data-link="' + esc(ch) + '"><span class="dot" style="background:' + (bad ? 'var(--fail)' : 'var(--met)') + '"></span>' + esc(ch) + '</a> ' + (bad ? '<span style="font-size:12px;color:var(--fail)">open ' + c.issue[1] + ' issue</span>' : '') + '</div>';
+        }).join('') || '<div style="color:var(--muted)">No linked checks</div>') + '</div>' +
+        (c.fresh ? '<h4>Since you last looked</h4><div style="font-size:12px"><span class="fresh"></span>' + esc(c.fresh) + '</div>' : '') +
+        (p.tool !== 'fw' ? '<div class="act" style="margin-top:14px"><button class="btn primary" data-msg="Opens ' + esc(p.name) + ' in Signoff ' + p.tool.toUpperCase() + ' at ' + c.ref + ' (?project=…&req=…).">Open in ' + p.tool.toUpperCase() + '</button></div>' : '') + '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  function render() {
+    renderHeader();
+    $('main').innerHTML = ui.view === 'list' ? renderList() : renderMatrix();
+    renderInbox(); renderParts(); renderInspector();
+  }
+
+  // ── Events ──
+  var partSel = $('fPart');
+  PARTS.forEach(function (p) { var o = document.createElement('option'); o.value = p.id; o.textContent = p.name; partSel.appendChild(o); });
+  $('fTool').onchange = function () { ui.tool = this.value; render(); };
+  partSel.onchange = function () { ui.part = this.value; render(); };
+  $('q').oninput = function () { ui.q = this.value; render(); };
+  $('viewSeg').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    ui.view = b.dataset.v;
+    Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+    render();
+  };
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    var link = t.closest('[data-link]');
+    if (link) { e.preventDefault(); e.stopPropagation(); toast('Opens check ' + link.dataset.link + ' in its review (?project=…&item=' + link.dataset.link + ')'); return; }
+    var msg = t.closest('[data-msg]');
+    if (msg) { e.stopPropagation(); toast(msg.dataset.msg); return; }
+    var st = t.closest('[data-state]');
+    if (st) { ui.state = ui.state === st.dataset.state ? '' : st.dataset.state; ui.cell = null; render(); return; }
+    var cell = t.closest('[data-cell]');
+    if (cell) { var pc = cell.dataset.cell.split(':'); ui.cell = ui.cell && ui.cell[0] === pc[0] && ui.cell[1] === pc[1] ? null : pc; if (ui.cell) { ui.open[pc[0]] = 1; ui.part = ''; ui.sel = pc[0]; } render(); return; }
+    var tog = t.closest('[data-toggle]');
+    if (tog) { e.stopPropagation(); ui.open[tog.dataset.toggle] = !ui.open[tog.dataset.toggle]; render(); return; }
+    var sel = t.closest('[data-sel]');
+    if (sel && !t.closest('[data-edit]')) { ui.sel = ui.sel === sel.dataset.sel ? null : sel.dataset.sel; render(); }
+  });
+  // Inline editing of PL-homed System text: double-click.
+  document.addEventListener('dblclick', function (e) {
+    var t = e.target.closest('[data-edit]'); if (!t) return;
+    t.contentEditable = 'true'; t.focus();
+    t.onblur = function () { t.contentEditable = 'false'; toast('Saved to the PL project; syncs with the next PL sync.'); };
+  });
+  // Drag to allocate.
+  document.addEventListener('dragstart', function (e) { var d = e.target.closest('[data-drag]'); if (d) e.dataTransfer.setData('text/plain', d.dataset.drag); });
+  document.addEventListener('dragover', function (e) { var p = e.target.closest('[data-drop]'); if (p) { e.preventDefault(); p.classList.add('over'); } });
+  document.addEventListener('dragleave', function (e) { var p = e.target.closest('[data-drop]'); if (p) p.classList.remove('over'); });
+  document.addEventListener('drop', function (e) {
+    var p = e.target.closest('[data-drop]'); if (!p) return;
+    e.preventDefault();
+    var s = SYS.filter(function (x) { return x.id === e.dataTransfer.getData('text/plain'); })[0];
+    if (!s) return;
+    if (s.parts.indexOf(p.dataset.drop) < 0) s.parts.push(p.dataset.drop);
+    ui.open[s.id] = 1;
+    toast(s.ref + ' allocated to ' + partById[p.dataset.drop].name + '. It shows as a gap until a derived requirement exists.');
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

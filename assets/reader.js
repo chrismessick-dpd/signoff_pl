@@ -54,14 +54,35 @@
       v: num(s.v), tool: str(s.tool), name: str(s.name), client: str(s.client), project: str(s.project), number: str(s.number), revision: str(s.revision),
       stage: str(s.stage), archived: !!s.archived, total: num(s.total), reviewed: num(s.reviewed), pct: num(s.pct, 100),
       checklists: checklists, issues: { open: open, fixed: num(iss.fixed), waived: num(iss.waived) },
-      reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), open: num(q.open), unlinked: num(q.unlinked) } : null,
+      reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), risk: num(q.risk), open: num(q.open), unlinked: num(q.unlinked) } : null,
       at: str(s.at), by: str(s.by)
     };
+    if (Array.isArray(s.reqList)) out.reqList = s.reqList.slice(0, 2000).map(cleanReq).filter(Boolean);
     if (Array.isArray(s.open)) {
       out.open = s.open.filter(function (i) { return i && typeof i === 'object'; }).map(function (i) {
         return { id: str(i.id), severity: SEVERITIES.indexOf(i.severity) >= 0 ? i.severity : 'minor', text: str(i.text),
           checklist: str(i.checklist), assignee: str(i.assignee), ref: str(i.ref) };
       });
+    }
+    return out;
+  }
+  // One entry of summary.reqList (EE README, "The project summary"): enums from their lists,
+  // text capped, and a parent only when it's a Signoff PL link.
+  function oneOf(list, v, fallback) { return list.indexOf(v) >= 0 ? v : fallback; }
+  function cleanReq(r) {
+    if (!r || typeof r !== 'object' || typeof r.id !== 'string' || !r.id) return null;
+    var out = {
+      id: r.id.slice(0, 80), ref: str(r.ref).slice(0, 40), text: str(r.text).slice(0, 2000),
+      discipline: oneOf(['sys', 'ee', 'me', 'fw', 'other'], r.discipline, 'other'), kind: oneOf(['shall', 'should'], r.kind, 'shall'),
+      category: str(r.category).slice(0, 200), method: oneOf(['inspection', 'analysis', 'demonstration', 'test'], r.method, 'inspection'),
+      status: oneOf(['draft', 'approved', 'changed', 'deprecated'], r.status, 'draft'), verify: oneOf(['open', 'pass', 'fail'], r.verify, 'open'),
+      state: oneOf(['deprecated', 'fail', 'risk', 'pass', 'open'], r.state, 'open'), links: num(r.links),
+      issues: Array.isArray(r.issues) ? r.issues.filter(function (i) { return typeof i === 'string'; }).slice(0, 50).map(function (i) { return i.slice(0, 80); }) : [],
+      at: str(r.at), by: str(r.by)
+    };
+    var p = r.parent;
+    if (p && typeof p === 'object' && p.tool === 'pl' && typeof p.id === 'string' && typeof p.project === 'string') {
+      out.parent = { tool: 'pl', project: p.project.slice(0, 80), id: p.id.slice(0, 80), ref: str(p.ref).slice(0, 40) };
     }
     return out;
   }
