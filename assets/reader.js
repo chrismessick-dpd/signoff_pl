@@ -85,7 +85,7 @@
       if (!/^[a-z0-9-]{1,32}$/.test(key) || !/^[a-z0-9-]{1,32}\.(webp|png)$/.test(file) || !IMAGE_TYPES[type] || !shas[dir + file]) return null;
       return { key: key, type: type, w: num(i.w, 4096), h: num(i.h, 4096), sha: shas[dir + file] };
     }).filter(Boolean);
-    return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images }) : null;
+    return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images, board: doc.board }) : null;
   }
   // A preview as stored in the index: images by blob sha, or (demo only) by a file under
   // assets/demo-previews/.
@@ -100,7 +100,9 @@
     }).filter(Boolean);
     if (!images.length) return null;
     var hero = images.some(function (i) { return i.key === str(p.hero); }) ? str(p.hero) : images[0].key;
-    return { repo: /^[\w.-]+\/[\w.-]+$/.test(str(p.repo)) ? str(p.repo) : '', runId: str(p.runId), at: str(p.at), hero: hero, images: images };
+    // board: the board's size in mm as Fabcheck measured it ({ w, h, t }), for the 3D Exploded view.
+    var board = S.pl && S.pl.cleanBoard(p.board);
+    return { repo: /^[\w.-]+\/[\w.-]+$/.test(str(p.repo)) ? str(p.repo) : '', runId: str(p.runId), at: str(p.at), hero: hero, images: images, board: board };
   }
   // A stored index (localStorage) goes through the same cleaning before it is shown.
   function cleanIndex(index) {

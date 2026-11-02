@@ -25,7 +25,8 @@
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
       // The demo boards' pictures stand in for the previews Fabcheck stores with a run.
       var pv = (D.previews || {})[key];
-      if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], images: pv.map(function (x) {
+      var mm = (D.boardsMm || {})[key];
+      if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], board: mm ? P.cleanBoard(mm) : null, images: pv.map(function (x) {
         return { key: x[0], w: x[1], h: x[2], src: 'assets/demo-previews/' + key.slice(at + 1) + '-' + x[0] + '.svg' };
       }) };
     });

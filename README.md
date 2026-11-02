@@ -78,21 +78,31 @@ Nothing is read from GitHub.
 
 ### Views
 
-- **Overview:** the product's progress ring, then:
+- **System** (once Overview and Structure; a stored `overview` or `structure` view opens it) shows
+  the structure on top and the product's status underneath. The structure has four layouts:
+  - **Map** (the default): an indented tree. The top assembly is the trunk, a button with the
+    product's progress ring, Part count, mass and open issues. Each assembly branches off its
+    parent with connector lines, and its Parts sit in a row of tiles on their own branch: a tile
+    per Part with its picture (or a plain drawing until it has one), progress, stage and open
+    issues. With several top-level nodes the trunk is the product itself. A product of one Part
+    shows one tile, which is both the top and the Part.
+    - Click a Part for the inspector: the picture (Top/Bottom for boards), checklists, the worst
+      open issues, and links.
+    - Click the trunk or an assembly for its full detail: rolled-up progress, open issues, mass,
+      Part counts, Parts that need attention, the children (click one to select it), stages and
+      the worst open issues below it.
+    - Drag a tile or an assembly onto another branch to move it.
+  - **Gallery:** big pictures, a section per assembly.
+  - **Exploded:** the product in 3D, to scale, where you can arrange it (see *Arranging in 3D*).
+    Parts with no 3D yet are named, not drawn.
+  - **List:** the table. Click a row to edit it, collapse assemblies, add inside an assembly (+),
+    reorder siblings (↑ ↓), or move a node by changing **Inside**.
+
+  Underneath the structure:
   - open issues by severity
   - Part counts, mass, and Parts that need attention
   - one card per linked design, with a link that opens it in its tool (`?project=<id>`)
   - stages, listed per tool
-- **Structure** has four layouts:
-  - **Map** (the default): one lane per assembly, a tile per Part with its picture (or a plain
-    drawing until it has one), progress, stage and open issues. Click a tile for the inspector:
-    the picture (Top/Bottom for boards), checklists, the worst open issues, and links. Drag a tile
-    onto another lane or assembly group to move it.
-  - **Gallery:** big pictures, a section per assembly.
-  - **Exploded:** the Parts that have a picture, stacked in 3D in structure order; the slider pulls
-    them apart. Parts without a picture are named, not drawn.
-  - **List:** the table. Click a row to edit it, collapse assemblies, add inside an assembly (+),
-    reorder siblings (↑ ↓), or move a node by changing **Inside**.
 
   **Building from the client project.** A design whose summary names this product's client
   project (Project details, *Client project*; the product name when empty) and that no Part links
@@ -100,10 +110,75 @@ Nothing is read from GitHub.
   Part sheet, or **Add all**: boards go under *Electronics* and parts under *Mechanical*, made if
   missing.
 
+  **3D models.** Any Part except firmware can carry a STEP file: Edit the Part, then **Attach
+  STEP…** (or drop the file on the field). A board's tiles keep its Fabcheck pictures; its model
+  is used in the 3D view.
+  - The STEP is read in the browser by OpenCascade (`model3d.js`, run in `occt-worker.js`), which
+    loads pinned from jsDelivr.
+  - PL keeps a **simplified mesh**: at most 60,000 triangles, 16-bit positions, gzipped (usually
+    tens of kB). It also keeps four 480 × 360 **pictures** (iso, top, front, right).
+  - The original STEP is kept, gzipped, only if **Also keep the original STEP** stays checked. It
+    can't be kept over 10 MB compressed.
+  - The sheet shows what will be stored. An empty envelope is filled in from the model's size.
+  - The pictures show on the map tile (as a big tile), in Gallery and the BOM.
+    The inspector flips between the views and has a **3D** view you drag to turn. A kept STEP can
+    be downloaded from there.
+  - The files go into the PL data repo at the next sync, before the project file that names them.
+    Until then they wait in this browser (IndexedDB `signoff-pl-uploads`). Replaced or removed
+    models stay in the repo's git history.
+
+  **Arranging in 3D** (System › Exploded).
+  - **What's drawn:**
+    - A Part with a model is drawn as its model.
+    - A board without one is drawn as a slab carrying its Fabcheck top and bottom pictures, each
+      cropped to the board.
+    - A board needs its size first. Fabcheck stores it with the pictures from its next Send to
+      Signoff; until then, type it in the panel.
+    - Nothing else is made up: Parts without 3D are named under the view.
+  - **Getting around:** drag to turn, Shift-drag (or right-drag) to pan, scroll to zoom. The view
+    buttons are Iso, Top, Front and Right. **Fit** frames everything.
+  - **Exploding:** the slider pulls the parts apart: layers by their order from the top, and a
+    little outward.
+  - **Where parts start:** a Part you haven't moved is stacked in structure order, first on top.
+    **CAD position** puts a model where its STEP put it, so parts exported from one CAD assembly
+    line up by themselves. **Back to stack** forgets a placement.
+  - **Click a part** to arrange it in the panel:
+    - **Move:** drag it, or type X, Y and Z (mm).
+      - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.
+      - Moves keep to a 0.5 mm grid unless you hold Alt.
+      - Arrows nudge 1 mm (10 with Shift), and Page Up and Page Down move it in Z.
+      - Moving shows the parts assembled.
+    - **Turn:** turn it 90° about X, Y or Z, or press R for Z.
+    - **Line up with** another part: **Stack on** puts it on top, centered; **Center on** centers it
+      in X and Y.
+    - **Snap:** pick a corner, edge, hole or flat face on this part, then one on another part. This
+      part moves (it never turns):
+      - corners meet;
+      - flat faces become flush (only the gap between them closes);
+      - edges and hole axes line up (a hole keeps its height, so boards drop onto standoffs);
+      - crossing edges meet.
+
+      Snapping works in the exploded view too, so you can reach faces the assembly hides. Faces
+      come from the STEP's CAD faces. In a faceted STEP (no real faces), neighboring facets in one
+      plane, or meeting at under 30°, count as one face. A simplified model snaps to its simplified
+      shape, within a grid cell.
+  - Each placement is saved on its Part (`place`) and syncs like any edit.
+
   **Adding a Part** asks first whether it's an existing EE or ME design (cards, this client
   project's first) or a generic Part (purchased or firmware). Picking a design fills in its name
   and number. A node can't be moved under itself. Deleting an assembly deletes what's inside it.
   Linked reviews are never touched.
+- **BOM:** the bill of materials.
+  - **Indented** follows the structure, numbered 1, 1.1, 1.1.1.
+  - **Consolidated** puts each distinct Part on one line, with quantities summed. Parts count as
+    the same when they link the same design, else share a number, else an MPN. A name alone never
+    merges them.
+  - You can pick the columns (picture, number, rev, source, supplier, MPN, quantity, mass, status,
+    notes), search, and sort the consolidated list.
+  - **CSV** downloads every line in the current layout.
+  - **Print** opens a report page (landscape) to print or save as PDF. It uses the columns and
+    search in use, with every assembly expanded.
+  - The mass total matches System's.
 - **Issues:** every open issue across the linked designs, worst first, with its Part. Clicking
   an issue opens that exact check in its tool (`?project=<id>&item=<check>`). A design used by
   several Parts is listed once.
@@ -137,9 +212,35 @@ A PL project is one JSON document in the PL data repo (`projects/<id>.json`):
   "meta":  { "name", "client", "clientProject", "number", "description", "phase": "EVT", "archived", "updatedAt", "updatedBy" },
   "nodes": { "n…": { "id", "parent": "" , "order": 1, "kind": "assembly | part", "name", "number",
                      "source": "ee | me | fw | purchased", "ref": { "tool": "ee", "id": "p…" },
-                     "qty": 1, "massG": 64, "supplier", "mpn", "envelopeMm", "notes",
+                     "qty": 1, "massG": 64, "supplier", "mpn", "envelopeMm", "notes", "model",
+                     "place": { "x", "y", "z", "rx", "ry", "rz" }, "boardMm": [80, 50, 1.6],
                      "createdAt", "updatedAt", "updatedBy", "deleted" } } }
 ```
+
+**Placement.** `place` is where the 3D view puts a Part. It's a move in mm from the Part's own
+coordinates, after a turn in degrees about X, then Y, then Z, around the middle of its bounding
+box. All zeros means the CAD position; no `place` means the automatic stack. `boardMm` is a board's
+size typed in PL (width, height, thickness). It wins over the size Fabcheck stores (`board` in its
+preview `index.json`). `pl.js` `cleanPlace` and `cleanBoard` check both.
+
+**Models.** `model` is set when a STEP is attached (see *3D models*):
+
+```json
+{ "file": "psu.step", "size": 2400000, "srcTris": 81000, "tris": 60000, "bboxMm": [70, 55, 38],
+  "dir": "models/<project id>/<node id>/", "at", "by",
+  "mesh": { "sha", "size" }, "step": { "sha", "size" } | null,
+  "views": [{ "key": "iso | top | front | right", "sha", "w": 480, "h": 360, "size" }] }
+```
+
+The files are in the same repo, under `dir`:
+- `mesh.plm.gz`: `PLM1` header, JSON (counts, bounding box, palette), 16-bit positions, indices,
+  a color index per triangle and, from header `v: 2`, the CAD face each triangle came from (for
+  snapping), all gzipped. See `model3d.js`.
+- `<view>.png`
+- `source.step.gz`
+
+They're read by blob sha, so a reader always gets the version the record names. `pl.js`
+`cleanModel` checks a record before it's shown.
 
 **References.** A Part refers to a design by `{tool, id}`, never by repo, because a project
 moves out of a tool's data repo into its own `review-…` repo when a contractor is added.
@@ -170,6 +271,7 @@ There are no shared `review-pl-…` repos.
 | `assets/config.js` | PL settings: repos, storage namespace, the tools a Part can link to, phases, demo data |
 | `assets/pl.js` | Data model: documents, merge, tree (cycles, orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads design summaries from the EE and ME repos |
+| `assets/model3d.js`, `assets/occt-worker.js` | 3D models: reads STEP (OpenCascade, pinned, in a worker copied from Partcheck), simplifies, encodes, renders views and the 3D view |
 | `assets/demo.js` | Builds the demo product from `config.js`, linked to the designs in `demo-designs.js` |
 | `assets/demo-designs.js`, `tools/demo_designs.html` | Snapshot of the EE and ME demo designs' summaries, and the page that generates it |
 | `assets/pl.css` | The few PL-only styles |

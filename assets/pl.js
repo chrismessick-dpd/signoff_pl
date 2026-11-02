@@ -137,6 +137,19 @@
     return out;
   }
 
+  // The product's top: its one top-level assembly, or '' when there are several top-level nodes.
+  function topAssembly(t) {
+    return t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
+  }
+  // A product of one Part, alone or inside its one top assembly: that Part's id, else ''. The map
+  // shows such a product as a single button that is both the top and the Part.
+  function soloPart(t) {
+    var ids = Object.keys(t.nodes), parts = ids.filter(function (id) { return t.nodes[id].kind === 'part'; });
+    if (parts.length !== 1) return '';
+    var top = topAssembly(t);
+    return ids.length === 1 || (ids.length === 2 && top && t.parent[parts[0]] === top) ? parts[0] : '';
+  }
+
   // Where a node may move: anywhere but itself or below itself.
   function canMove(t, id, newParent) {
     if (!newParent) return true;
@@ -290,11 +303,109 @@
     return out;
   }
 
+  // ── 3D models ────────────────────────────────────────────
+  // A Part's attached model (app.js, model3d.js), as stored on the node:
+  //   { file, size, srcTris, tris, bboxMm: [x, y, z], dir, at, by,
+  //     mesh: { sha, size }, step: { sha, size } | null, views: [{ key, sha, w, h, size }] }
+  // The files live in the PL data repo under dir (models/<project id>/<node id>/). Only what
+  // passes here is shown.
+  var SHA = /^[0-9a-f]{40}$/, VIEW_KEYS = ['iso', 'top', 'front', 'right'];
+  function cleanModel(m) {
+    if (!m || typeof m !== 'object' || !m.mesh || !SHA.test(m.mesh.sha)) return null;
+    var views = (Array.isArray(m.views) ? m.views : []).filter(function (v) { return v && VIEW_KEYS.indexOf(v.key) >= 0 && SHA.test(v.sha); })
+      .map(function (v) { return { key: v.key, sha: v.sha, w: Number(v.w) || 0, h: Number(v.h) || 0, size: Number(v.size) || 0 }; });
+    var num = function (x) { return isFinite(Number(x)) ? Number(x) : 0; };
+    return {
+      file: String(m.file || 'model.step'), size: num(m.size), srcTris: num(m.srcTris), tris: num(m.tris),
+      bboxMm: Array.isArray(m.bboxMm) ? m.bboxMm.slice(0, 3).map(num) : null, dir: String(m.dir || ''), at: String(m.at || ''), by: String(m.by || ''),
+      mesh: { sha: m.mesh.sha, size: num(m.mesh.size) }, step: m.step && SHA.test(m.step.sha) ? { sha: m.step.sha, size: num(m.step.size) } : null, views: views
+    };
+  }
+  // The blob shas a project's live Parts refer to (for uploads), as { sha: path }.
+  function modelFiles(project) {
+    var out = {};
+    liveNodes(project).forEach(function (n) {
+      var m = cleanModel(n.model);
+      if (!m) return;
+      out[m.mesh.sha] = m.dir + 'mesh.plm.gz';
+      if (m.step) out[m.step.sha] = m.dir + 'source.step.gz';
+      m.views.forEach(function (v) { out[v.sha] = m.dir + v.key + '.png'; });
+    });
+    return out;
+  }
+
+  // ── Arranging (the 3D Exploded view) ─────────────────────
+  // node.place = { x, y, z (mm), rx, ry, rz (degrees) } moves a Part from where its own
+  // coordinates put it: all zeros is its CAD position. A Part without one is stacked
+  // automatically. node.boardMm = [w, h, t] is a board's size when Fabcheck hasn't stored one.
+  function cleanPlace(p) {
+    if (!p || typeof p !== 'object') return null;
+    var out = {};
+    ['x', 'y', 'z', 'rx', 'ry', 'rz'].forEach(function (k) {
+      var v = Number(p[k]);
+      out[k] = isFinite(v) ? Math.max(-100000, Math.min(100000, v)) : 0;
+    });
+    return out;
+  }
+  function cleanBoard(b) {
+    if (!b) return null;
+    var a = Array.isArray(b) ? b : [b.w, b.h, b.t];
+    var w = Number(a[0]), h = Number(a[1]), t = a[2] == null || a[2] === '' ? 1.6 : Number(a[2]);
+    if (!(w > 0 && w <= 2000 && h > 0 && h <= 2000 && t > 0 && t <= 20)) return null;
+    return [w, h, t];
+  }
+
+  // ── Bill of materials ────────────────────────────────────
+  // mode 'indented': every node in tree order, numbered 1, 1.1, 1.2.1…
+  // mode 'flat': one line per distinct Part, quantities summed. Parts are the same when they link
+  // the same design, else share a number, else an MPN; never by name alone.
+  // Extended quantity multiplies by the assemblies above (an assembly without qty counts once),
+  // so the BOM's mass total matches rollup()'s.
+  function bom(project, index, mode) {
+    var t = tree(project), ids = flatten(t), item = {}, ext = {}, rows = [];
+    (function number(list, prefix, mult) {
+      list.forEach(function (id, i) {
+        var n = t.nodes[id], q = n.qty > 0 ? Number(n.qty) : 1;
+        item[id] = prefix + (i + 1);
+        ext[id] = mult * q;
+        number(t.children[id] || [], item[id] + '.', n.kind === 'assembly' ? mult * q : mult);
+      });
+    })(t.roots, '', 1);
+    function hasMass(n) { return n.massG != null && n.massG !== '' && !isNaN(n.massG); }
+    ids.forEach(function (id) {
+      var n = t.nodes[id], st = partStatus(n, index) || {}, e = st.entry || {}, s = st.summary;
+      var part = n.kind === 'part';
+      rows.push({
+        id: id, item: item[id], level: t.depth[id], kind: n.kind, name: n.name || '', number: (part && e.number) || n.number || '',
+        rev: e.revision || '', source: part ? n.source || '' : '', state: st.state || '', supplier: n.supplier || '', mpn: n.mpn || '',
+        qty: part ? (n.qty > 0 ? Number(n.qty) : 1) : null, extQty: part ? ext[id] : null,
+        massG: part && hasMass(n) ? Number(n.massG) : null, extMassG: part && hasMass(n) ? Math.round(Number(n.massG) * ext[id] * 10) / 10 : null,
+        stage: (s && s.stage) || e.stage || '', pct: s ? s.pct : null, notes: n.notes || '', ref: refKey(n.ref), uses: [id]
+      });
+    });
+    if (mode === 'flat') {
+      var byKey = {}, flat = [];
+      rows.filter(function (r) { return r.kind === 'part'; }).forEach(function (r) {
+        var k = r.ref ? 'ref:' + r.ref : r.number ? 'pn:' + r.number.toLowerCase() : r.mpn ? 'mpn:' + r.mpn.toLowerCase() : 'id:' + r.id;
+        var g = byKey[k];
+        if (!g) { g = byKey[k] = Object.assign({}, r, { uses: [] }); g.qty = 0; g.extQty = 0; g.extMassG = r.extMassG == null ? null : 0; flat.push(g); }
+        g.uses.push(r.id); g.qty += r.qty; g.extQty += r.extQty;
+        if (r.extMassG != null) g.extMassG = Math.round(((g.extMassG || 0) + r.extMassG) * 10) / 10;
+      });
+      flat.forEach(function (g, i) { g.item = String(i + 1); g.level = 0; });
+      rows = flat;
+    }
+    var parts = rows.filter(function (r) { return r.kind === 'part'; });
+    var mass = parts.reduce(function (a, r) { return a + (r.extMassG || 0); }, 0);
+    return { mode: mode === 'flat' ? 'flat' : 'indented', rows: rows, totals: { lines: parts.length, qty: parts.reduce(function (a, r) { return a + r.extQty; }, 0),
+      massG: Math.round(mass * 10) / 10, massMissing: parts.filter(function (r) { return r.massG == null; }).length } };
+  }
+
   S.pl = {
     SEVERITIES: SEVERITIES, sources: sources, toolById: toolById,
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
-    tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path,
+    tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
-    tokenTag: tokenTag, canSee: canSee, lockOut: lockOut
+    tokenTag: tokenTag, canSee: canSee, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanBoard: cleanBoard
   };
 })(window.Signoff = window.Signoff || {});

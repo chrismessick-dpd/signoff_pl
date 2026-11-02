@@ -31,7 +31,8 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha. The project-to-repo map is rebuilt on every refresh. |
-| `assets/app.js` | UI: Overview, Structure (Map, Gallery, Exploded, List; inspector; client-project tray; drag to place), Issues; sheets with a design picker; pictures (IndexedDB cache); sync |
+| `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
+| `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js` |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
 | `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE and ME demos' summaries |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
@@ -52,8 +53,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (70 tests as of
-   2026-11-01, after board previews).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (111 tests as of
+   2026-11-01, after the System tab).
    - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
@@ -64,11 +65,66 @@ Notes on behavior:
 ## Visual redesign (2026-11-01)
 
 Chris asked for PL to be visual and easy to build, "Apple, but technical". Map stays the default
-layout; Gallery and Exploded show stored pictures only, never made-up ones (Exploded names Parts
-without a picture). The new look stays in PL: don't port it to the hub, EE or ME (Chris, 2026-11-01).
+layout; Gallery and Exploded show stored pictures and models only, never made-up ones (Exploded
+names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE or ME (Chris, 2026-11-01).
 Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
 next time each is sent from Fabcheck. ME parts have none until a mechanical checker exists (see
 `../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout.
+
+## 3D models and BOM (2026-11-01)
+
+Chris wanted STEP files on generic Parts, so a purchased item such as a power supply shows next to
+the boards. He was worried about repo size, so PL never stores a raw STEP by default. It stores:
+- a simplified, quantized, gzipped mesh;
+- four PNG views;
+- the STEP gzipped only when the box stays checked and it's under 10 MB compressed.
+
+Models can be attached to purchased, ME and EE Parts (`MODEL_SOURCES`). A board's tiles keep
+Fabcheck's pictures (`previewFor`); its model is used in the 3D view. Files upload at sync, before the project push (`uploadModels`). Waiting files live in
+IndexedDB `signoff-pl-uploads`, which `clearPictures()` doesn't touch.
+
+Testing a STEP in the pane: `Signoff.app.attachModel(nodeId, name, bytes)` with
+`../partcheck/demo/...step` (made up). Never put a real or NIST STEP in PL's demo or tests. The
+browser caches scripts by their `?v=` stamp, so re-stamp before reloading.
+
+## Exploded in 3D (2026-11-01)
+
+Chris wanted to arrange boards and parts in X, Y and Z with edge and vertex references, without
+it becoming CAD software. So it's translation snaps plus 90° turns, and no mates or constraints.
+- **Renderer.** All in `model3d.js`, software only: `renderScene` with board textures and a pick
+  buffer. It takes about 30–40 ms per quick frame at 1000 × 560 and about 200 ms for the sharp
+  redraw; that was measured, and is why there's no WebGL.
+- **Snapping.** `features()` finds corners, edge chains, hole circles and flat faces. `alignMove()`
+  holds the snap rules and is unit-tested. Picking prefers visible features, but a part hidden only
+  by the one being moved still counts.
+- **Placements.** `node.place` is written only for the Part that moved, never for every Part, so
+  concurrent edits survive merge. Unplaced Parts keep their slot in the auto stack.
+- **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
+  `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
+- **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that
+  way.
+- **Test hooks.** `Signoff.app.scene` (`get`, `draw`, `commit`, `stackOn`, `centerOn`,
+  `featureAt`, `startSnap`) drives it from the console. Clicking by coordinates is fragile.
+
+## System tab and tree Map (2026-11-01)
+
+Chris merged Overview and Structure into one **System** tab: the structure views on top, the old
+Overview panels (`infoPanels`) underneath. A stored `ui.view` of `overview` or `structure` opens
+System. PL has no view deep link.
+- **Map is a tree** (`treeMap`): the trunk is the top assembly (`P.topAssembly`), or the product
+  itself when there are several top-level nodes. The product's selection id is then `PRODUCT`
+  (`'@product'`), which `systemPage` keeps even though it's not a node.
+- **Branches.** Assemblies branch off with CSS connector lines (`.tm-kids`/`.tm-item` `::before`
+  and `::after`). Runs of Parts are a leaf row of the old tiles.
+- **Drop targets.** Every branch is a drop target, and the innermost wins. Assembly buttons can be
+  dragged too.
+- **Inspectors.** The trunk and assemblies open `asmInspector`, the full roll-up. In Exploded,
+  only Parts get `arrangePanel`; assemblies and the product get the inspector.
+- **One Part** (`P.soloPart`), alone or in the one top assembly: the map shows a single tile that
+  is both the top and the Part. Its inspector adds *Edit assembly* and *Add Part*.
+
+The BOM is `pl.js` `bom()`. Its mass equals `rollup()`'s while assemblies have no qty. The UI
+never sets one, but `bom()` multiplies by it if present.
 
 ## Next
 

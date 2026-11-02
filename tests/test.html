@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'pl', 'model3d', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -64,6 +64,16 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(P.tree(self).flags[a.id] === 'cycle', 'a node that is its own parent is flagged');
   ok(!P.canMove(t, top.id, a.id) && !P.canMove(t, top.id, top.id) && P.canMove(t, a.id, '') && P.canMove(t, b.id, top.id), 'a node can’t move under itself or its descendants');
   eq(P.path(t, a.id).map(function (n) { return n.name; }), ['Top'], 'path to a node');
+  // The System map's trunk, and the one-Part product shown as one button
+  ok(P.topAssembly(t) === top.id && P.topAssembly(to) === '', 'the top assembly is the one top-level assembly, else none');
+  eq(P.soloPart(t), '', 'a product of two Parts has no solo Part');
+  var one = JSON.parse(JSON.stringify(proj)); one.nodes[b.id].deleted = true;
+  eq(P.soloPart(P.tree(one)), a.id, 'one Part inside the top assembly is the solo Part');
+  var alone = JSON.parse(JSON.stringify(one)); alone.nodes[top.id].deleted = true;
+  eq(P.soloPart(P.tree(alone)), a.id, 'one Part with no assembly is the solo Part');
+  var nested = JSON.parse(JSON.stringify(one)), sub = node(nested, { kind: 'assembly', name: 'Sub', parent: top.id });
+  nested.nodes[a.id].parent = sub.id;
+  eq(P.soloPart(P.tree(nested)), '', 'one Part under a sub-assembly keeps the tree');
 
   // ── Part status and roll-up ──
   function summary(total, reviewed, open, stage, list) {
@@ -152,7 +162,8 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var phub = new FakeHub();
   var pindex = { v: 1, tool: 'fabcheck', runId: 'r1', at: '2026-11-01T00:00:00Z', hero: 'top', images: [
     { key: 'top', file: 'top.webp', type: 'image/webp', w: 640, h: 320 }, { key: 'bottom', file: 'bottom.webp', type: 'image/webp', w: 640, h: 320 },
-    { key: 'evil', file: '../x.webp', type: 'image/webp' }, { key: 'svg', file: 'a.svg', type: 'image/svg+xml' }, { key: 'gone', file: 'gone.png', type: 'image/png' }] };
+    { key: 'evil', file: '../x.webp', type: 'image/webp' }, { key: 'svg', file: 'a.svg', type: 'image/svg+xml' }, { key: 'gone', file: 'gone.png', type: 'image/png' }],
+    board: { w: 80, h: '50.5', t: 1.2 } };
   phub.makeRepo('own/ee_design_review_data', { 'projects/p1.json': file('p1', 'Main', summary(100, 50, { critical: 0, major: 0, minor: 0 })),
     'fabcheck/p1/preview/index.json': JSON.stringify(pindex), 'fabcheck/p1/preview/top.webp': 'TOP', 'fabcheck/p1/preview/bottom.webp': 'BOTTOM',
     'fabcheck/p9/preview/index.json': JSON.stringify(pindex) }, ['own']);
@@ -168,6 +179,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(pix2.entries['ee:p1'].preview && !phub.calls.slice(before2).some(function (c) { return /\/git\/blobs\//.test(c); }), 'an unchanged preview index isn’t downloaded again');
   var kept = Signoff.plReader.cleanIndex(JSON.parse(JSON.stringify(pix2)));
   ok(kept.entries['ee:p1'].preview.images.length === 2, 'a stored index keeps its previews');
+  eq([pv.board, kept.entries['ee:p1'].preview.board], [[80, 50.5, 1.2], [80, 50.5, 1.2]], 'the board size Fabcheck stores with its pictures is read and kept');
   var forged = Signoff.plReader.cleanIndex({ entries: { 'ee:x': { tool: 'ee', id: 'x', preview: { images: [{ key: 'top', src: 'https://evil.example/a.svg' }, { key: 'b', src: 'javascript:alert(1)' }] } } } });
   ok(!forged.entries['ee:x'].preview, 'a stored preview can only point at the demo pictures');
   eq(Signoff.plReader.designs(ix6, 'ee').map(function (d) { return d.id; }).sort(), ['p1', 'p2'], 'designs() lists one tool’s projects');
@@ -200,6 +212,15 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   await plStore().sync(one2, null, s1.cache, {});
   var both = JSON.parse(hub.files('own/signoff_pl_data')['projects/' + proj.id + '.json']);
   ok(both.nodes[a.id].name === 'Main (local)' && both.nodes[b.id].name === 'Housing (remote)', 'two people’s edits to different nodes both survive a sync');
+
+  // Attached models' files sit beside the projects; a sync leaves them alone and reads by sha work.
+  var meshGz = await Signoff.model3d.gzip(new TextEncoder().encode('PLM1 test mesh'));
+  var meshSha = await Signoff.github.gitBlobShaBytes(meshGz);
+  await plStore().putFiles([{ path: 'models/' + proj.id + '/' + a.id + '/mesh.plm.gz', bytes: meshGz }], { message: 'PL models: 1 file' });
+  var s3 = await plStore().sync(one2, null, {}, {});
+  ok(Object.keys(s3.projects).join() === proj.id, 'model files in the data repo aren’t read as projects', Object.keys(s3.projects).join());
+  var back = await plStore().blobBytes(meshSha);
+  eq(Array.from(back).join(), Array.from(meshGz).join(), 'a stored model file reads back by its blob sha');
 
   // ── Access: PL is for FTEs ──
   var tagOwn = P.tokenTag('tok-own'), tagCon = P.tokenTag('tok-con');
@@ -236,6 +257,83 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq(dr[''].massG, 205.2, 'demo mass matches the 205 g in the ME enclosure’s mass requirement');
   ok(P.issues(demo.project, demo.index).length === 13, 'the demo lists every open issue from the four designs');
   ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
+
+  // ── Bill of materials ──
+  var bi = P.bom(demo.project, demo.index, 'indented'), bf = P.bom(demo.project, demo.index, 'flat');
+  eq([bi.totals.massG, bf.totals.massG], [dr[''].massG, dr[''].massG], 'BOM mass totals match the roll-up (205.2 g), indented and consolidated');
+  eq(bi.rows.slice(0, 3).map(function (r) { return r.item; }), ['1', '1.1', '1.1.1'], 'indented BOM numbers items by the structure');
+  ok(bi.rows.length === P.liveNodes(demo.project).length && bf.rows.every(function (r) { return r.kind === 'part'; }), 'indented lists every node; consolidated lists Parts only');
+  eq(bi.totals.qty, 9, 'the demo BOM has 9 pieces (two screws)');
+  var bp = JSON.parse(JSON.stringify(demo.project)), main = P.liveNodes(bp).filter(function (n) { return n.ref && n.ref.id === 'pdemo7'; })[0];
+  node(bp, { parent: main.parent, name: 'Main PCBA (spare)', source: 'ee', ref: { tool: 'ee', id: 'pdemo7' }, qty: 2, massG: 48 });
+  node(bp, { parent: main.parent, name: 'Cable A', source: 'purchased', massG: 1 });
+  node(bp, { parent: main.parent, name: 'Cable A', source: 'purchased', massG: 1 });
+  var bf2 = P.bom(bp, demo.index, 'flat'), mainLine = bf2.rows.filter(function (r) { return r.ref === 'ee:pdemo7'; });
+  ok(mainLine.length === 1 && mainLine[0].extQty === 3 && mainLine[0].uses.length === 2 && mainLine[0].extMassG === 144, 'consolidated BOM sums the same design across Parts', JSON.stringify(mainLine));
+  ok(bf2.rows.filter(function (r) { return r.name === 'Cable A'; }).length === 2, 'Parts with only a name in common stay on separate lines');
+  var nested = P.newProject({ name: 'Kit' }, 'ann'), kit = node(nested, { kind: 'assembly', name: 'Kit', qty: 3 });
+  node(nested, { parent: kit.id, name: 'Bolt', number: 'B-1', source: 'purchased', qty: 4, massG: 2 });
+  eq(P.bom(nested, null, 'indented').rows[1].extQty, 12, 'an assembly’s quantity multiplies the Parts in it');
+
+  // ── 3D models ──
+  var M3 = Signoff.model3d, SHA1 = 'a'.repeat(40), SHA2 = 'b'.repeat(40);
+  ok(P.cleanModel({ mesh: { sha: 'nope' } }) === null && P.cleanModel(null) === null, 'a model record without a valid mesh sha is ignored');
+  var cm = P.cleanModel({ file: 'psu.step', mesh: { sha: SHA1, size: 10 }, step: { sha: 'bad' }, dir: 'models/p/n/', views: [{ key: 'iso', sha: SHA2 }, { key: 'evil', sha: SHA2 }, { key: 'top', sha: 'x' }] });
+  ok(cm && cm.step === null && cm.views.length === 1 && cm.views[0].key === 'iso', 'model records keep only known views with valid shas', JSON.stringify(cm));
+  var mp = P.newProject({ name: 'M' }, 'ann');
+  node(mp, { name: 'PSU', source: 'purchased', model: { mesh: { sha: SHA1 }, step: { sha: SHA2 }, dir: 'models/x/y/', views: [] } });
+  node(mp, { name: 'Gone', source: 'purchased', deleted: true, model: { mesh: { sha: 'c'.repeat(40) }, dir: 'models/x/z/' } });
+  eq(P.modelFiles(mp), (function () { var o = {}; o[SHA1] = 'models/x/y/mesh.plm.gz'; o[SHA2] = 'models/x/y/source.step.gz'; return o; })(), 'files to upload are those of live Parts only');
+  // A test mesh: a 140 × 140 grid bent into a dome, two triangles per cell.
+  var G = 140, gp = [], gi = [], gc = [];
+  for (var gy = 0; gy <= G; gy++) for (var gx = 0; gx <= G; gx++) gp.push(gx, gy, 20 * Math.sin(gx / G * Math.PI) * Math.sin(gy / G * Math.PI));
+  for (gy = 0; gy < G; gy++) for (gx = 0; gx < G; gx++) { var g0 = gy * (G + 1) + gx; gi.push(g0, g0 + 1, g0 + G + 1, g0 + 1, g0 + G + 2, g0 + G + 1); gc.push(200, 50, 50, 50, 50, 200); }
+  var gm = { pos: new Float32Array(gp), idx: new Uint32Array(gi), col: new Uint8Array(gc) };
+  var small = M3.simplify(gm, 5000);
+  ok(small.idx.length / 3 <= 5000 && small.idx.length / 3 > 1000, 'simplify keeps a mesh under its triangle cap', small.idx.length / 3 + ' triangles');
+  eq(M3.simplify(gm, 1e9).idx.length, gm.idx.length, 'a mesh under the cap keeps every triangle');
+  var dec = await M3.decode(await M3.encode(small)), err = 0;
+  for (var di = 0; di < small.pos.length; di++) err = Math.max(err, Math.abs(dec.pos[di] - small.pos[di]));
+  ok(dec.idx.length === small.idx.length && err <= 140 / 65535 && dec.col.join() === small.col.join() && dec.idx.join() === small.idx.join(), 'a mesh survives encode and decode (16-bit positions)', 'max error ' + err);
+  var big = await M3.encode(gm), raw = gm.pos.byteLength + gm.idx.byteLength + gm.col.byteLength;
+  ok(big.length < raw / 3, 'the stored mesh is much smaller than the raw mesh', big.length + ' bytes vs ' + raw);
+  var text = new TextEncoder().encode('ISO-10303-21;\n' + 'DATA;\n#1=CARTESIAN_POINT(\'\',(0.,0.,0.));\n'.repeat(500));
+  eq(Array.from(await M3.gzip(await M3.gzip(text), 'gunzip')).join(), Array.from(text).join(), 'a kept STEP gunzips to the bytes picked');
+  var img = M3.render(small, { w: 64, h: 48, az: M3.VIEWS[0].az, el: M3.VIEWS[0].el }), lit = 0;
+  for (var pi = 3; pi < img.data.length; pi += 4) if (img.data[pi]) lit++;
+  ok(img.width === 64 && lit > 200 && img.data[3] === 0, 'render draws the part on a transparent background', lit + ' pixels');
+
+  // ── Arranging in 3D ──
+  var near = function (a, b) { return a.every(function (v, i) { return Math.abs(v - b[i]) < 1e-6; }); };
+  ok(near(M3.alignMove({ type: 'point', p: [1, 2, 3] }, { type: 'point', p: [4, 6, 8] }), [3, 4, 5]), 'snap: corner to corner moves by the difference');
+  ok(near(M3.alignMove({ type: 'plane', p: [5, 5, 2], n: [0, 0, -1] }, { type: 'plane', p: [0, 0, 10], n: [0, 0, 1] }), [0, 0, 8]), 'snap: face to face only closes the gap between the planes');
+  ok(near(M3.alignMove({ type: 'line', p: [3, 4, 0], d: [0, 0, 1] }, { type: 'line', p: [10, 10, 50], d: [0, 0, -1] }), [7, 6, 0]), 'snap: hole axis to hole axis lines them up and keeps the height');
+  ok(near(M3.alignMove({ type: 'line', p: [0, 0, 0], d: [1, 0, 0] }, { type: 'line', p: [5, 3, 2], d: [0, 1, 0] }), [0, 0, 2]), 'snap: crossing edges move along their common perpendicular until they meet');
+  ok(near(M3.alignMove({ type: 'point', p: [1, 1, 1] }, { type: 'line', p: [0, 0, 0], d: [1, 0, 0] }), [0, -1, -1]), 'snap: a corner onto an edge takes the shortest way');
+  ok(near(M3.alignMove({ type: 'point', p: [1, 1, 1] }, { type: 'plane', p: [0, 0, 5], n: [0, 0, 2] }), [0, 0, 4]), 'snap: a corner onto a face moves along the face normal');
+  var sl = M3.slab(80, 50, 1.6), sf = M3.features(sl);
+  ok(sf.corners.length >= 8 && Object.keys(sf.planes).length === 6 && sf.circles.length === 0, 'a board slab has corners and six flat faces', sf.corners.length + ' corners');
+  ok(near(M3.bbox(sl.pos).size, [80, 50, 1.6]), 'a board slab has the board’s size');
+  // A flat washer, 24 segments: its inner and outer edges are holes (circles) on one flat face.
+  var wp = [], wi = [], N = 24;
+  for (var wk = 0; wk < N; wk++) { var an = wk / N * 2 * Math.PI; wp.push(10 * Math.cos(an), 10 * Math.sin(an), 0, 4 * Math.cos(an), 4 * Math.sin(an), 0); }
+  for (wk = 0; wk < N; wk++) { var o0 = wk * 2, o1 = ((wk + 1) % N) * 2; wi.push(o0, o1, o0 + 1, o1, o1 + 1, o0 + 1); }
+  var washer = { pos: new Float32Array(wp), idx: new Uint32Array(wi), col: new Uint8Array(wi.length), fid: new Uint32Array(wi.length / 3) };
+  var wf = M3.features(washer), radii = wf.circles.map(function (c) { return Math.round(c.r * 100) / 100; }).sort(function (a, b) { return a - b; });
+  ok(radii.join() === '4,10', 'round edges are found as circles (washer ⌀8 and ⌀20)', radii.join());
+  ok(Object.keys(wf.planes).length === 1 && wf.corners.length === 0, 'a faceted flat face is one face, and a round edge has no corners', Object.keys(wf.planes).length + ' faces, ' + wf.corners.length + ' corners');
+  var wfaceted = Object.assign({}, washer, { fid: new Uint32Array(wi.length / 3).map(function (v, i) { return i; }) });
+  ok(Object.keys(M3.features(wfaceted).planes).length === 1, 'a faceted STEP (a CAD face per facet) still gives one flat face');
+  var dec2 = await M3.decode(await M3.encode(Object.assign({}, small, { fid: new Uint32Array(small.idx.length / 3).map(function (v, i) { return i % 7; }) })));
+  ok(dec2.fid[13] === 6 && dec2.fid.length === small.idx.length / 3, 'CAD face ids survive encode and decode');
+  ok(near(M3.place({ R: M3.rotation(0, 0, 90), pivot: [1, 0, 0], T: [0, 0, 5] }, [2, 0, 0]).map(function (v) { return Math.round(v * 1e9) / 1e9; }), [1, 1, 5]), 'a placed part turns about its pivot, then moves');
+  eq(P.cleanPlace({ x: '3', y: 'bad', z: 1e9, rz: 90 }), { x: 3, y: 0, z: 100000, rx: 0, ry: 0, rz: 90 }, 'placements keep only numbers, within reason');
+  ok(P.cleanPlace(null) === null && P.cleanBoard([0, 10]) === null && P.cleanBoard([80, 50]).join() === '80,50,1.6' && P.cleanBoard({ w: 30, h: 20, t: 0.8 }).join() === '30,20,0.8', 'board sizes need a width and height; thickness defaults to 1.6 mm');
+  var sceneObjs = [{ mesh: sl, T: [0, 0, 0] }, { mesh: M3.slab(20, 20, 2), T: [0, 0, 10] }];
+  var sr = M3.renderScene(sceneObjs, { az: 0, el: Math.PI / 2, zoom: 1, fit: 100, c: [0, 0, 0] }, 200, 200, { ss: 1 });
+  var mid = sr.pick(100, 100), side = sr.pick(100 + 30 * 200 * 0.88 / 100, 100);
+  ok(mid && mid.obj === 1 && side && side.obj === 0, 'seen from above, picking finds the part on top, and the board beside it');
+  ok(near(sr.project([0, 0, 0]).slice(0, 2).map(Math.round), [100, 100]), 'project puts the view center in the middle of the canvas');
 
   // The snapshot must match what Signoff EE's and ME's demos build today (when they're served
   // next to this folder). Times differ by design, so they're left out.

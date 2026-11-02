@@ -11,7 +11,8 @@
                 previews, ee_design_review/docs/fabcheck-link.md).
                 Adding Signoff FW later is one more entry here.
    phases:      build phases, for gates (Phase 3 of the plan).
-   demo:        the demo product. Its Parts link to Signoff EE's and ME's demo projects; their
+   demo:        the demo product. boardsMm stands in for the board size Fabcheck stores with its
+                pictures (w, h, thickness in mm). Its Parts link to Signoff EE's and ME's demo projects; their
                 summaries are in assets/demo-designs.js (tools/demo_designs.html builds it). */
 window.SIGNOFF_CONFIG = {
   "product": "Signoff PL",
@@ -53,6 +54,7 @@ window.SIGNOFF_CONFIG = {
     "previews": {
       "ee:pdemo7": [["top", 120, 76], ["bottom", 120, 76]],
       "ee:pdemo11": [["top", 110, 70], ["bottom", 110, 70]]
-    }
+    },
+    "boardsMm": { "ee:pdemo7": [80, 50.7, 1.6], "ee:pdemo11": [72, 45.8, 1.0] }
   }
 };

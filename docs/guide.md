@@ -20,9 +20,9 @@ of those designs is reviewed in its own Signoff tool. PL puts them together.
 2. **Link the reviews.** Pick each Part's review from a list of the projects PL finds. PL never
    changes a review. It reads the summary each review keeps up to date.
 3. **See where it stands.**
-   - **Overview:** the share of checks reviewed across every design, open issues by severity,
-     each design's stage, total mass, and any Part that needs attention.
-   - **Structure:** the tree, with each assembly rolling up the Parts inside it.
+   - **System:** the product as a tree, with each assembly rolling up the Parts inside it.
+     Underneath: the share of checks reviewed across every design, open issues by severity, each
+     design's stage, total mass, and any Part that needs attention.
    - **Issues:** every open issue in the product, worst first. Each one opens the exact check in
      its review.
 

@@ -46,12 +46,15 @@
   var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
-  var ui = Object.assign({ slug: '', view: 'overview', closed: {}, layout: 'map', sel: '' }, load('ui', {}));
+  var VIEWS = [{ id: 'system', label: 'System' }, { id: 'bom', label: 'BOM' }, { id: 'issues', label: 'Issues' }];
+  var VIEW_IDS = VIEWS.map(function (v) { return v.id; });
+  var ui = Object.assign({ slug: '', view: 'system', closed: {}, layout: 'map', sel: '' }, load('ui', {}));
+  if (VIEW_IDS.indexOf(ui.view) < 0) ui.view = 'system';   // Overview and Structure became System (2026-11-01)
   var syncing = false;
 
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
   // product in config.js), so a browser that saw an older demo doesn't keep it.
-  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {});
+  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {});
   if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
@@ -60,7 +63,7 @@
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
-  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel }); }
+  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -200,7 +203,6 @@
   }
 
   // ── Toolbar ──────────────────────────────────────────────
-  var VIEWS = [{ id: 'overview', label: 'Overview' }, { id: 'structure', label: 'Structure' }, { id: 'issues', label: 'Issues' }];
   function renderToolbar() {
     var p = current();
     $('#toolbar-title').textContent = p ? p.meta.name : '';
@@ -221,11 +223,13 @@
     var p = current(), page = $('#page'), scroll = $('#main').scrollTop;
     renderToolbar();
     if (!p) { page.innerHTML = allowed() ? emptyPage() : lockedPage(); return; }
-    if (ui.view === 'structure') page.innerHTML = structurePage(p);
-    else if (ui.view === 'issues') page.innerHTML = issuesPage(p);
-    else page.innerHTML = overviewPage(p);
+    if (ui.view === 'issues') page.innerHTML = issuesPage(p);
+    else if (ui.view === 'bom') page.innerHTML = bomPage(p);
+    else page.innerHTML = systemPage(p);
     $('#main').scrollTop = scroll;
     loadPictures(page);
+    loadViewers(page);
+    initScene(page);
   }
 
   function emptyPage() {
@@ -261,20 +265,36 @@
     return '<div class="card stat ' + esc(cls || '') + '"><div class="stat-num">' + esc(n) + '</div><div class="stat-label">' + esc(label) + '</div>' + (detail ? '<div class="stat-detail">' + detail + '</div>' : '') + '</div>';
   }
 
-  function overviewPage(p) {
-    var rolls = P.rollup(p, index), r = rolls[''], t = P.tree(p);
-    var ids = P.flatten(t);
-    var html = '<div class="page"><div class="page-head"><div class="page-head-text">' + headBlock(p, 'Product') +
-      (p.meta.description ? '<p style="color:var(--text-2);margin:14px 0 0;max-width:62ch">' + esc(p.meta.description) + '</p>' : '') +
-      '<p class="note" style="margin-top:12px">' + (index && index.at ? 'Designs read ' + relTime(index.at) : 'Designs not read yet') +
-      (r.designs ? ' · progress is checks reviewed across ' + plural(r.designs, 'linked design') : '') + '</p></div>' +
-      ring(r.pct, 132, 11, r.pct + '%', 'reviewed') + '</div>';
+  // ── System: the structure on top, the product's facts underneath ──
+  // The structure shows as a tree map (default), a gallery, the exploded 3D view or a table.
+  // Selecting a tile opens the inspector beside it. The map's top button selects the top assembly,
+  // or the product itself (PRODUCT) when it has several top-level nodes.
+  var PRODUCT = '@product';
+  function systemPage(p) {
+    var t = P.tree(p), rolls = P.rollup(p, index), ids = P.flatten(t);
+    var layout = LAYOUTS.some(function (l) { return l[0] === ui.layout; }) ? ui.layout : 'map', map = layout !== 'list';
+    if (ui.sel && ui.sel !== PRODUCT && !t.nodes[ui.sel]) ui.sel = '';
+    var sel = map && ids.length ? ui.sel : '';
+    var html = '<div class="page' + (map ? ' page-map' + (sel ? ' has-sel' : '') : '') + '"><div class="map-main"><div class="cl-head sys-head"><div>' + headBlock(p, 'System') +
+      (p.meta.description ? '<p class="sys-desc">' + esc(p.meta.description) + '</p>' : '') + '</div>' +
+      '<div class="cl-head-acts"><div class="seg" role="tablist" aria-label="Layout">' + LAYOUTS.map(function (l) {
+        return '<button role="tab" class="' + (layout === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
+      }).join('') + '</div><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div></div>';
     if (!ids.length) {
-      return html + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Add the product’s assemblies, then the Parts in them: boards, mechanical parts, firmware and purchased items.</p>' +
-        '<button class="btn btn-primary" data-act="add-node">Add the first assembly or Part</button></div></div>';
+      return html + trayHtml(p) + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Add the product’s top assembly, then the Parts in it: boards, mechanical parts, firmware and purchased items.</p>' +
+        '<button class="btn btn-primary" data-act="add-node">Add the first assembly or Part</button></div></div></div>';
     }
+    html += map ? (layout === 'gallery' ? gallery(p, t, ids) : layout === 'exploded' ? exploded(p, t, ids) : treeMap(p, t, rolls)) : listTable(t, rolls, ids);
+    html += infoPanels(p, t, rolls[''], ids) + '</div>';
+    // Exploded arranges the selected Part; assemblies and the product get the inspector there too.
+    if (sel) html += layout === 'exploded' && sel !== PRODUCT && t.nodes[sel].kind === 'part' ? arrangePanel(p, t, sel) : inspector(p, t, sel);
+    return html + '</div>';
+  }
+
+  // What the Overview tab used to show, under the structure.
+  function infoPanels(p, t, r, ids) {
     var stageList = Object.keys(r.stages).sort().map(function (k) { var s = k.split(':'); return srcChip(s[0]) + ' ' + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' ×' + r.stages[k] : ''); }).join('<br>');
-    html += '<div class="grid grid-4">' +
+    var html = '<div class="section-title">Status</div><div class="grid grid-4">' +
       stat(r.openTotal, 'Open issues', r.openTotal ? 'issue' : 'pass', sevs(r.open)) +
       stat(r.parts, plural(r.parts, 'Part').replace(/^\d+ /, ''), '', [r.designs && plural(r.designs, 'design'), r.purchased && r.purchased + ' purchased', r.manual && r.manual + ' firmware'].filter(Boolean).join(' · ')) +
       stat(r.unlinked + r.attention, 'Need attention', r.unlinked + r.attention ? 'issue' : '', r.unlinked + r.attention ? [r.unlinked && r.unlinked + ' not linked', r.attention && r.attention + ' unreadable'].filter(Boolean).join(' · ') : 'Every design reads') +
@@ -310,8 +330,9 @@
       }).join('') + '</div>';
     }
     if (Object.keys(r.stages).length) html += '<div class="section-title">Stages</div><div class="card" style="padding:14px 18px;font-size:13.5px;line-height:2">' + stageList + '<p class="note">Each tool keeps its own stages. Gates (EVT, DVT, PVT) will tie them together.</p></div>';
-    html += '<p class="note" style="margin-top:28px">Created ' + relTime(p.createdAt) + (p.createdBy ? ' by ' + esc(p.createdBy) : '') + '</p></div>';
-    return html;
+    return html + '<p class="note" style="margin-top:28px">' + (index && index.at ? 'Designs read ' + relTime(index.at) : 'Designs not read yet') +
+      (r.designs ? ' · progress is checks reviewed across ' + plural(r.designs, 'linked design') : '') +
+      ' · created ' + relTime(p.createdAt) + (p.createdBy ? ' by ' + esc(p.createdBy) : '') + '</p>';
   }
 
   // ── Structure: a map of tiles (default) or the table ─────
@@ -360,17 +381,157 @@
   function pvPut(sha, blob) {
     pvDb().then(function (db) { try { if (db) db.transaction('img', 'readwrite').objectStore('img').put(blob, sha); } catch (e) { /* not kept */ } });
   }
+  // A stored file by blob sha: the cache, then the files waiting to upload, then GitHub.
+  function fileBlob(repo, ref) {
+    return pvGet(ref.sha).then(function (blob) {
+      return blob || upGet(ref.sha).then(function (u) { return u ? u.blob : null; });
+    }).then(function (blob) {
+      if (blob || DEMO || !repo || !getToken()) return blob;
+      return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: getToken() }).image(repo, ref)
+        .then(function (b) { pvPut(ref.sha, b); return b; });
+    });
+  }
   function pictureUrl(repo, img) {
     if (pvUrls[img.sha]) return Promise.resolve(pvUrls[img.sha]);
     if (!pvWaiting[img.sha]) {
-      pvWaiting[img.sha] = pvGet(img.sha).then(function (blob) {
-        if (blob || !repo || !getToken()) return blob;
-        return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: getToken() }).image(repo, img)
-          .then(function (b) { pvPut(img.sha, b); return b; });
-      }).then(function (blob) { return blob ? (pvUrls[img.sha] = URL.createObjectURL(blob)) : null; }, function () { return null; })
+      pvWaiting[img.sha] = fileBlob(repo, img)
+        .then(function (blob) { return blob ? (pvUrls[img.sha] = URL.createObjectURL(blob)) : null; }, function () { return null; })
         .then(function (url) { if (!url) delete pvWaiting[img.sha]; return url; });
     }
     return pvWaiting[img.sha];
+  }
+
+  // Files of attached models wait here until a sync uploads them to the PL data repo. This store
+  // survives clearPictures(), as unsynced projects survive a lockout.
+  var upDbOpen = null;
+  function upDb() {
+    if (!upDbOpen) upDbOpen = new Promise(function (resolve) {
+      try {
+        var req = indexedDB.open(DEMO ? 'signoff-pl-demo-uploads' : 'signoff-pl-uploads', 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+    return upDbOpen;
+  }
+  function upTx(mode, fn) {
+    return upDb().then(function (db) {
+      return db ? new Promise(function (resolve) {
+        try { var r = fn(db.transaction('files', mode).objectStore('files')); r.onsuccess = function () { resolve(r.result || null); }; r.onerror = function () { resolve(null); }; } catch (e) { resolve(null); }
+      }) : null;
+    });
+  }
+  function upGet(sha) { return upTx('readonly', function (s) { return s.get(sha); }); }
+  function upPut(sha, rec) { return upTx('readwrite', function (s) { return s.put(rec, sha); }); }
+  function upDel(sha) { return upTx('readwrite', function (s) { return s.delete(sha); }); }
+  function upKeys() { return upTx('readonly', function (s) { return s.getAllKeys(); }).then(function (k) { return k || []; }); }
+
+  // Upload the waiting files that a live Part still refers to, in one commit, before the project
+  // files that refer to them are pushed. Files no Part refers to any more are dropped.
+  function uploadModels(token) {
+    var want = {};
+    Object.keys(projects).forEach(function (k) { Object.assign(want, P.modelFiles(projects[k])); });
+    return upKeys().then(function (keys) {
+      var go = keys.filter(function (k) { return want[k]; });
+      keys.filter(function (k) { return !want[k]; }).forEach(upDel);
+      if (!go.length) return 0;
+      return Promise.all(go.map(function (k) { return upGet(k).then(function (u) { return u && u.blob.arrayBuffer().then(function (b) { return { path: want[k], bytes: new Uint8Array(b), sha: k }; }); }); }))
+        .then(function (files) {
+          files = files.filter(Boolean);
+          var store = new S.GitHubStore({ owner: settings.owner, repo: settings.dataRepo, branch: settings.branch, dataPath: '', token: token });
+          return store.putFiles(files, { message: 'PL models: ' + plural(files.length, 'file') + ' (' + me() + ')' }).then(function () {
+            return Promise.all(files.map(function (f) { return upDel(f.sha); })).then(function () { return files.length; });
+          });
+        });
+    });
+  }
+
+  // A Part's own model pictures, in the shape of a design's preview.
+  function modelOf(n) { return n && n.kind === 'part' ? P.cleanModel(n.model) : null; }
+  function modelPreview(n) {
+    var m = modelOf(n);
+    if (!m || !m.views.length) return null;
+    return { repo: settings.owner + '/' + settings.dataRepo, hero: 'iso', model: true,
+      images: m.views.map(function (v) { return { key: v.key, type: 'image/png', w: v.w, h: v.h, sha: v.sha }; }) };
+  }
+  // The picture set a Part shows: its attached model's, else its design's stored preview.
+  // A board keeps its Fabcheck pictures on tiles even with a model; the model is for the 3D view.
+  function previewFor(n, entry) {
+    var pv = entry && entry.preview;
+    return (n && n.source === 'ee' && pv) || modelPreview(n) || pv || null;
+  }
+
+  function fmtBytes(b) { return b >= 1048576 ? (Math.round(b / 104857.6) / 10).toLocaleString() + ' MB' : Math.max(1, Math.round(b / 1024)).toLocaleString() + ' kB'; }
+  function storedBytes(m) { return (m.mesh.size || 0) + ((m.step && m.step.size) || 0) + m.views.reduce(function (a, v) { return a + (v.size || 0); }, 0); }
+  function modelLine(m) {
+    return esc([m.file, m.bboxMm && m.bboxMm.join(' × ') + ' mm', m.tris.toLocaleString() + ' triangles' + (m.srcTris > m.tris ? ' (simplified from ' + m.srcTris.toLocaleString() + ')' : '')].filter(Boolean).join(' · '));
+  }
+
+  // The rotatable view in the inspector, from the stored mesh (decoded once per sha).
+  var meshes = {};
+  function loadMesh(sha) {
+    if (!meshes[sha]) {
+      meshes[sha] = fileBlob(settings.owner + '/' + settings.dataRepo, { sha: sha, type: 'application/octet-stream' })
+        .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
+        .then(function (buf) { return S.model3d.decode(new Uint8Array(buf)); });
+      meshes[sha].catch(function () { delete meshes[sha]; });
+    }
+    return meshes[sha];
+  }
+  function loadViewers(root) {
+    (root || document).querySelectorAll('canvas.m3d[data-mesh]').forEach(function (cv) {
+      var sha = cv.dataset.mesh;
+      cv.removeAttribute('data-mesh');
+      loadMesh(sha).then(function (mesh) { if (cv.isConnected) S.model3d.viewer(cv, mesh); }, function () { toast('Couldn’t load the 3D model'); });
+    });
+  }
+  function downloadStep(id) {
+    var m = modelOf(current().nodes[id]);
+    if (!m || !m.step) return;
+    fileBlob(settings.owner + '/' + settings.dataRepo, { sha: m.step.sha, type: 'application/gzip' })
+      .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
+      .then(function (buf) { return S.model3d.gzip(new Uint8Array(buf), 'gunzip'); })
+      .then(function (bytes) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/step' }));
+        a.download = m.file; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      }, function () { toast('Couldn’t get the STEP file'); });
+  }
+
+  // A STEP made ready to attach (model3d.prepare) → the node's model record and the files to keep.
+  // Files are named by blob sha; they wait in the upload store until the next sync (in the demo,
+  // they stay in this browser).
+  function modelRecord(p, nodeId, prep, keepStep) {
+    var gh = S.github, dir = 'models/' + p.id + '/' + nodeId + '/';
+    var parts = [{ key: 'mesh', blob: new Blob([prep.meshGz], { type: 'application/octet-stream' }) }]
+      .concat(keepStep && prep.stepFits ? [{ key: 'step', blob: new Blob([prep.stepGz], { type: 'application/gzip' }) }] : [])
+      .concat(prep.views.map(function (v) { return { key: v.key, blob: v.blob, view: v }; }));
+    return Promise.all(parts.map(function (x) {
+      return x.blob.arrayBuffer().then(function (b) { return gh.gitBlobShaBytes(new Uint8Array(b)); }).then(function (sha) { x.sha = sha; return x; });
+    })).then(function (files) {
+      var rec = { file: prep.name, size: prep.size, srcTris: prep.srcTris, tris: prep.tris, bboxMm: prep.bboxMm, dir: dir, at: M.now(), by: me(), step: null, views: [] };
+      files.forEach(function (f) {
+        if (f.key === 'mesh') rec.mesh = { sha: f.sha, size: f.blob.size };
+        else if (f.key === 'step') rec.step = { sha: f.sha, size: f.blob.size };
+        else rec.views.push({ key: f.key, sha: f.sha, w: f.view.w, h: f.view.h, size: f.blob.size });
+      });
+      return Promise.all(files.map(function (f) {
+        pvPut(f.sha, f.blob);
+        return upPut(f.sha, { blob: f.blob, project: p.id, node: nodeId });
+      })).then(function () { return rec; });
+    });
+  }
+  // Attach a STEP to a Part without the sheet (also handy from the console): reads it, stores
+  // what PL keeps, and fills an empty envelope from its size.
+  function attachModel(nodeId, name, bytes, keepStep) {
+    var p = current();
+    return S.model3d.prepare(name, bytes).then(function (prep) { return modelRecord(p, nodeId, prep, keepStep !== false); }).then(function (rec) {
+      var n = p.nodes[nodeId], f = { model: rec };
+      if (!n.envelopeMm && rec.bboxMm) f.envelopeMm = rec.bboxMm.join(' × ');
+      setNode(nodeId, f);
+      return rec;
+    });
   }
   // Pictures are client data: they go when PL locks or the token changes, like the projects do.
   function clearPictures() {
@@ -381,20 +542,19 @@
       try { if (db) db.close(); indexedDB.deleteDatabase('signoff-pl-pictures'); } catch (e) { /* storage blocked */ }
     });
   }
-  function pictureOf(entry, key) {
-    var pv = entry && entry.preview;
+  function pictureOf(pv, key) {
     return pv ? pv.images.filter(function (i) { return i.key === (key || pv.hero); })[0] || pv.images[0] : null;
   }
   // The picture of a Part (or of a design in the picker), or its plain drawing.
   function art(n, big, entry, key) {
-    var img = pictureOf(entry, key);
+    var pv = previewFor(n, entry), img = pictureOf(pv, key);
     if (!img) return partArt(n, big);
     var url = img.src || pvUrls[img.sha];
     if (url) return '<img class="pv" alt="" src="' + esc(url) + '">';
-    return '<img class="pv" alt="" data-sha="' + esc(img.sha) + '" data-type="' + esc(img.type) + '" data-repo="' + esc(entry.preview.repo) + '">' + partArt(n, big);
+    return '<img class="pv" alt="" data-sha="' + esc(img.sha) + '" data-type="' + esc(img.type) + '" data-repo="' + esc(pv.repo) + '">' + partArt(n, big);
   }
   function loadPictures(root) {
-    if (DEMO || !allowed()) return;
+    if (!allowed()) return;
     (root || document).querySelectorAll('img.pv[data-sha]').forEach(function (el) {
       var img = { sha: el.dataset.sha, type: el.dataset.type };
       el.removeAttribute('data-sha');
@@ -405,20 +565,6 @@
         if (svg) svg.remove();
       });
     });
-  }
-
-  function structurePage(p) {
-    var t = P.tree(p), rolls = P.rollup(p, index), ids = P.flatten(t);
-    var layout = LAYOUTS.some(function (l) { return l[0] === ui.layout; }) ? ui.layout : 'map', map = layout !== 'list';
-    if (map && ui.sel && !t.nodes[ui.sel]) ui.sel = '';
-    var html = '<div class="page' + (map ? ' page-map' + (ui.sel ? ' has-sel' : '') : '') + '"><div class="map-main"><div class="cl-head"><div><div class="eyebrow">' + esc(p.meta.name) + '</div><h1 class="page-title">Structure</h1>' +
-      '<div class="page-sub"><span>' + plural(rolls[''].parts, 'Part') + '</span><span class="sep">·</span><span>' + fmtMass(rolls[''].massG) + '</span></div></div>' +
-      '<div class="cl-head-acts"><div class="seg" role="tablist" aria-label="Layout">' + LAYOUTS.map(function (l) {
-        return '<button role="tab" class="' + (layout === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
-      }).join('') + '</div><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div></div>';
-    if (!ids.length) return html + (trayHtml(p) || '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Start with the top assembly.</p><button class="btn btn-primary" data-act="add-node">Add</button></div>') + '</div></div>';
-    if (map) return html + (layout === 'gallery' ? gallery(p, t, ids) : layout === 'exploded' ? exploded(p, t, ids) : mapLanes(p, t, rolls, ids)) + '</div>' + (ui.sel ? inspector(p, t, ui.sel) : '') + '</div>';
-    return html + listTable(t, rolls, ids) + '</div></div>';
   }
 
   // Structure layouts. Map is the default; Gallery and Exploded show the stored pictures.
@@ -450,31 +596,451 @@
     }).join('') + '</div>';
   }
 
-  // The Parts that have a stored picture, stacked in tree order and pulled apart by the slider.
-  // Parts without one are named below rather than drawn, so nothing on the stack is made up.
-  function exploded(p, t, ids) {
-    var parts = ids.filter(function (id) { return t.nodes[id].kind !== 'assembly'; });
-    var shown = parts.filter(function (id) { return pictureOf(P.partStatus(t.nodes[id], index).entry); });
-    var missing = parts.filter(function (id) { return shown.indexOf(id) < 0 && P.toolById(t.nodes[id].source); });
-    if (!shown.length) {
-      return '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No pictures yet</h2><p>The exploded view stacks the Parts that have a picture. A board gets one when its Fabcheck run is stored with its review (Send to Signoff).</p></div>';
-    }
-    var gap = ui.spread == null ? 60 : ui.spread;
-    return '<div class="xp card"><div class="xp-stage"><div class="xp-stack" style="--gap:' + gap + 'px">' + shown.slice().reverse().map(function (id, i) {
+  // ── Exploded: the product in 3D ──────────────────────────
+  // A Part with an attached model shows as that model; a board as a slab carrying its Fabcheck
+  // pictures, once its size is known (Fabcheck stores it, or it's typed in here). Nothing PL doesn't
+  // have is drawn: the rest are named below the view. Each Part sits where node.place puts it (all
+  // zeros is its CAD position); Parts never moved are stacked in structure order, first on top. The
+  // slider pulls the parts apart from the middle. Click a part to arrange it in the panel.
+  var M3 = S.model3d, DEG = Math.PI / 180;
+  function boardSize(n, entry) { return P.cleanBoard(n.boardMm) || (entry && entry.preview && entry.preview.board) || null; }
+  function sceneList(t, ids) {
+    var parts = [], missing = [], sizeless = [];
+    ids.forEach(function (id) {
       var n = t.nodes[id];
-      return '<button class="xp-layer' + (ui.sel === id ? ' sel' : '') + '" style="--i:' + i + '" data-act="select-node" data-id="' + esc(id) + '" aria-label="' + esc(n.name) + '">' +
-        art(n, true, P.partStatus(n, index).entry) + '<span class="xp-label">' + esc(n.name) + '</span></button>';
-    }).join('') + '</div></div>' +
-      '<div class="xp-ctl"><label for="xp-spread">Assembled</label><input type="range" id="xp-spread" min="0" max="120" value="' + gap + '"><span>Exploded</span></div>' +
-      '<p class="note">Top of the stack is the first Part in the structure. Reorder Parts in the Map or List to change it.' +
-      (missing.length ? ' Not shown, no picture yet: ' + esc(missing.map(function (id) { return t.nodes[id].name; }).join(', ')) + '.' : '') + '</p></div>';
+      if (n.kind !== 'part') return;
+      var e = P.partStatus(n, index).entry, m = modelOf(n), pv = e && e.preview;
+      if (m) { parts.push({ id: id, n: n, kind: 'model', model: m }); return; }
+      if (n.source === 'ee' && pv) {
+        var size = boardSize(n, e);
+        if (size) parts.push({ id: id, n: n, kind: 'board', size: size, pv: pv }); else sizeless.push(id);
+        return;
+      }
+      if (P.toolById(n.source) || n.source === 'purchased') missing.push(id);
+    });
+    return { parts: parts, missing: missing, sizeless: sizeless };
+  }
+
+  // Board pictures as textures, decoded once per picture.
+  var texCache = {};
+  function loadTexture(pv, key) {
+    var img = pv.images.filter(function (i) { return i.key === key; })[0];
+    if (!img) return Promise.resolve(null);
+    var k = img.sha || img.src;
+    if (!texCache[k]) {
+      texCache[k] = (img.src ? Promise.resolve(img.src) : pictureUrl(pv.repo, img)).then(function (url) {
+        return url && new Promise(function (resolve) {
+          var im = new Image();
+          im.onload = function () {
+            var w = 1024, h = Math.max(1, Math.round(w * (im.naturalHeight || img.h || 1) / (im.naturalWidth || img.w || 1)));
+            var c = document.createElement('canvas'), g = c.getContext('2d');
+            c.width = w; c.height = h; g.drawImage(im, 0, 0, w, h);
+            resolve(M3.texture(g.getImageData(0, 0, w, h)));
+          };
+          im.onerror = function () { resolve(null); };
+          im.src = url;
+        });
+      });
+      texCache[k].then(function (r) { if (!r) delete texCache[k]; });
+    }
+    return texCache[k];
+  }
+  function sceneObjects(list) {
+    return Promise.all(list.parts.map(function (s) {
+      var made = s.kind === 'model' ? loadMesh(s.model.mesh.sha).then(function (mesh) { return { mesh: mesh, tex: null }; })
+        : Promise.all([loadTexture(s.pv, 'top'), loadTexture(s.pv, 'bottom')]).then(function (tx) { return { mesh: M3.slab(s.size[0], s.size[1], s.size[2]), tex: { 1: tx[0], 2: tx[1] } }; });
+      return made.then(function (o) {
+        var b = M3.bbox(o.mesh.pos);
+        return Object.assign(o, { id: s.id, s: s, pivot: [(b.lo[0] + b.hi[0]) / 2, (b.lo[1] + b.hi[1]) / 2, (b.lo[2] + b.hi[2]) / 2] });
+      }, function () { return null; });
+    })).then(function (objs) { return objs.filter(Boolean); });
+  }
+  // Placed Parts go where their place says. The others stack downward from z = 0 in structure
+  // order, each centered; placed Parts keep their slot in the stack, so moving one doesn't shift
+  // the rest.
+  function arrangeScene(objs) {
+    var top = 0;
+    objs.forEach(function (o) {
+      var pl = P.cleanPlace(o.s.n.place);
+      o.placed = !!pl;
+      o.rot = pl ? [pl.rx, pl.ry, pl.rz] : [0, 0, 0];
+      o.R = M3.rotation(o.rot[0], o.rot[1], o.rot[2]);
+      o.T = [0, 0, 0];
+      var b = M3.placedBox(o);
+      if (pl) o.T = [pl.x, pl.y, pl.z];
+      else o.T = [-b.c[0], -b.c[1], top - b.hi[2]];
+      top -= b.size[2];
+    });
+  }
+  function boxOf(o, T) { return M3.placedBox({ mesh: o.mesh, R: o.R, pivot: o.pivot, T: T || o.T }); }
+  function explodeOffsets(objs, k) {
+    if (!k || objs.length < 2) return objs.map(function () { return [0, 0, 0]; });
+    var boxes = objs.map(function (o) { return boxOf(o, o.liveT); }), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    boxes.forEach(function (b) { for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i]); hi[i] = Math.max(hi[i], b.hi[i]); } });
+    // Layers move apart in Z by their order from the top (thin boards need a set step, not their
+    // own spacing), and a little outward in X and Y.
+    var c = [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; }), step = Math.max(8, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 0.22);
+    var order = boxes.map(function (b, i) { return i; }).sort(function (x, y) { return boxes[y].c[2] - boxes[x].c[2] || x - y; }), rank = [];
+    order.forEach(function (oi, r) { rank[oi] = r; });
+    var mid = (boxes.length - 1) / 2;
+    return boxes.map(function (b, i) { return [(b.c[0] - c[0]) * k * 0.5, (b.c[1] - c[1]) * k * 0.5, (mid - rank[i]) * step * k]; });
+  }
+  function fitCam(objs, keepView) {
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    objs.forEach(function (o) { var b = boxOf(o); for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i]); hi[i] = Math.max(hi[i], b.hi[i]); } });
+    if (!objs.length) { lo = [-50, -50, -50]; hi = [50, 50, 50]; }
+    var old = keepView && ui.cam;
+    ui.cam = { az: old ? old.az : M3.VIEWS[0].az, el: old ? old.el : M3.VIEWS[0].el, zoom: 1,
+      n: objs.length, c: [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; }), fit: Math.max(20, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.15) };
+  }
+
+  var scene = null, snapState = null;   // snapState: { step: 1 | 2, from } while snapping the selected part
+  function exploded(p, t, ids) {
+    var list = sceneList(t, ids), spread = ui.spread == null ? 60 : ui.spread;
+    var names = function (arr) { return arr.map(function (id) { return '<button class="xs-name" data-act="select-node" data-id="' + esc(id) + '">' + esc(t.nodes[id].name || 'Unnamed') + '</button>'; }).join(', '); };
+    if (!list.parts.length && !list.sizeless.length) {
+      return '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>Nothing in 3D yet</h2><p>A board shows here once its Fabcheck run is stored with its review (Send to Signoff) and its size is known. A purchased or ME Part shows once you attach its STEP (Edit the Part).</p></div>';
+    }
+    return '<div class="xs card"><div class="xs-stage"><canvas class="xs-canvas" tabindex="0" aria-label="The product in 3D: drag to turn, Shift-drag to pan, scroll to zoom, click a part to arrange it"></canvas><canvas class="xs-over" aria-hidden="true"></canvas>' +
+      '<div class="xs-hint" hidden></div><div class="xs-load"><span class="spin" aria-hidden="true"></span>Loading 3D…</div></div>' +
+      '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
+      '<button class="btn" data-act="xs-fit">Fit</button>' +
+      '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span></div>' +
+      '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn or snap it. Parts you haven’t moved are stacked in structure order.' +
+      (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
+      (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
+  }
+
+  function sceneObjAt(id) { return scene && scene.objs.filter(function (o) { return o.id === id; })[0]; }
+  function initScene(root) {
+    var cv = root.querySelector('canvas.xs-canvas');
+    if (!cv) { scene = null; return; }
+    var p = current(), t = P.tree(p), token = {};
+    scene = { token: token, cv: cv, over: root.querySelector('canvas.xs-over'), hint: root.querySelector('.xs-hint'), objs: [], res: null, drag: null, hover: null };
+    sceneObjects(sceneList(t, P.flatten(t))).then(function (objs) {
+      if (!scene || scene.token !== token) return;
+      var load = root.querySelector('.xs-load');
+      if (load) load.remove();
+      scene.objs = objs;
+      arrangeScene(objs);
+      if (!ui.cam || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
+      bindScene(scene);
+      drawScene(true);
+      showSnapHint();
+    });
+  }
+  // fine: full resolution (and supersampled where the screen isn't already dense); otherwise a
+  // quick draw at one pixel per CSS pixel while dragging.
+  function drawScene(fine) {
+    var sc = scene;
+    if (!sc || !sc.cv.isConnected || !ui.cam) return;
+    var w = sc.cv.clientWidth, h = sc.cv.clientHeight, dpr = fine ? Math.min(2, window.devicePixelRatio || 1) : 1;
+    if (!w || !h) return;
+    var W = Math.round(w * dpr), H = Math.round(h * dpr), k = sc.drag && sc.drag.kind === 'move' ? 0 : (ui.spread == null ? 60 : ui.spread) / 60;
+    var offs = explodeOffsets(sc.objs, k), sel = -1;
+    var objs = sc.objs.map(function (o, i) {
+      if (o.id === ui.sel) sel = i;
+      var T = o.liveT || o.T;
+      return { mesh: o.mesh, R: o.R, pivot: o.pivot, T: [T[0] + offs[i][0], T[1] + offs[i][1], T[2] + offs[i][2]], tex: o.tex };
+    });
+    sc.res = M3.renderScene(objs, ui.cam, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
+    sc.placed = objs; sc.scale = W / w;
+    sc.cv.width = W; sc.cv.height = H;
+    sc.cv.getContext('2d').putImageData(sc.res.image, 0, 0);
+    drawOverlay();
+  }
+  var sceneRaf = 0, sceneIdle = 0;
+  function sceneLater() {
+    cancelAnimationFrame(sceneRaf); clearTimeout(sceneIdle);
+    sceneRaf = requestAnimationFrame(function () { drawScene(false); });
+    sceneIdle = setTimeout(function () { drawScene(true); }, 260);
+  }
+
+  // Saves where a part is: its translation now, and its turn (degrees about X, Y, Z).
+  function commitPlace(o, T, rot) {
+    var r = rot || o.rot, round = function (v) { return Math.round(v * 100) / 100; };
+    setNode(o.id, { place: { x: round(T[0]), y: round(T[1]), z: round(T[2]), rx: ((r[0] % 360) + 360) % 360, ry: ((r[1] % 360) + 360) % 360, rz: ((r[2] % 360) + 360) % 360 } });
+  }
+  function assembled() {
+    if (ui.spread !== 0) { ui.spread = 0; var sl = $('#xs-spread'); if (sl) sl.value = 0; }
+  }
+
+  function bindScene(sc) {
+    var cv = sc.cv;
+    function at(e) { var r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    cv.addEventListener('pointerdown', function (e) {
+      if (!sc.res) return;
+      cv.focus();
+      var xy = at(e), hit = sc.res.pick(xy[0] * sc.scale, xy[1] * sc.scale), o = hit && sc.objs[hit.obj];
+      if (snapState && e.button === 0 && !e.shiftKey) { if (sc.hover && !sc.hover.none) snapPick(sc.hover); return; }
+      if (e.button === 0 && !e.shiftKey && o && o.id === ui.sel) {
+        assembled();
+        sc.drag = { kind: 'move', o: o, x0: xy[0], y0: xy[1], T0: o.T.slice() };
+      } else {
+        sc.drag = { kind: e.button === 0 && !e.shiftKey ? 'orbit' : 'pan', x0: xy[0], y0: xy[1], az: ui.cam.az, el: ui.cam.el, c: ui.cam.c.slice(), hit: o ? o.id : '', moved: false };
+      }
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', function (e) {
+      var d = sc.drag, xy = at(e);
+      if (!d) { if (snapState) snapHover(xy); return; }
+      var dx = xy[0] - d.x0, dy = xy[1] - d.y0;
+      if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+      if (d.kind === 'orbit') {
+        ui.cam.az = d.az - dx * 0.01;
+        ui.cam.el = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d.el + dy * 0.01));
+      } else if (d.kind === 'pan') {
+        var w = sc.res.unproject(dx * sc.scale, dy * sc.scale);
+        ui.cam.c = [d.c[0] - w[0], d.c[1] - w[1], d.c[2] - w[2]];
+      } else {
+        // Seen from above, a part moves in X and Y; seen from the side, sideways and up or down.
+        var mv = sc.res.unproject(dx * sc.scale, dy * sc.scale);
+        if (Math.abs(ui.cam.el) > 45 * DEG) mv[2] = 0;
+        else { var k = Math.hypot.apply(null, sc.res.unproject(1, 0)) * sc.scale; mv = [sc.res.cam.r[0] * dx * k, sc.res.cam.r[1] * dx * k, -dy * k]; }
+        var grid = e.altKey ? 0.01 : 0.5;
+        d.o.liveT = d.T0.map(function (v, i) { return mv[i] ? Math.round((v + mv[i]) / grid) * grid : v; });
+        showHint(d.o.liveT.map(function (v) { return (Math.round(v * 10) / 10).toLocaleString(); }).join(', ') + ' mm');
+      }
+      sceneLater();
+    });
+    cv.addEventListener('pointerup', function () {
+      var d = sc.drag;
+      sc.drag = null;
+      if (!d) return;
+      if (d.kind === 'move') { showHint(''); if (d.o.liveT) commitPlace(d.o, d.o.liveT); return; }
+      if (!d.moved) { ui.sel = d.hit; ui.pic = ''; snapState = null; saveUi(); renderPage(); return; }
+      drawScene(true);
+    });
+    cv.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      ui.cam.zoom = Math.max(0.2, Math.min(40, ui.cam.zoom * Math.exp(-e.deltaY * 0.0015)));
+      sceneLater();
+    }, { passive: false });
+    cv.addEventListener('dblclick', function (e) { if (!snapState && !sc.res.pick(at(e)[0] * sc.scale, at(e)[1] * sc.scale)) { fitCam(sc.objs, true); drawScene(true); } });
+    // Arrows nudge the selected part 1 mm in X and Y (10 with Shift), Page Up and Down in Z; R turns it.
+    cv.addEventListener('keydown', function (e) {
+      var o = sceneObjAt(ui.sel);
+      if (!o) return;
+      var step = e.shiftKey ? 10 : 1, mv = { ArrowLeft: [-step, 0, 0], ArrowRight: [step, 0, 0], ArrowUp: [0, step, 0], ArrowDown: [0, -step, 0], PageUp: [0, 0, step], PageDown: [0, 0, -step] }[e.key];
+      if (mv) { e.preventDefault(); assembled(); commitPlace(o, [o.T[0] + mv[0], o.T[1] + mv[1], o.T[2] + mv[2]]); }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); turnPart(o, 2); }
+    });
+  }
+  function showHint(text) { if (scene && scene.hint) { scene.hint.textContent = text; scene.hint.hidden = !text; } }
+
+  function turnPart(o, axis) {
+    var rot = o.rot.slice();
+    rot[axis] += 90;
+    commitPlace(o, o.T, rot);
+  }
+  function stackOn(o, target) {
+    var b = boxOf(o), tb = boxOf(target);
+    commitPlace(o, [o.T[0] + tb.c[0] - b.c[0], o.T[1] + tb.c[1] - b.c[1], o.T[2] + tb.hi[2] - b.lo[2]]);
+  }
+  function centerOn(o, target) {
+    var b = boxOf(o), tb = boxOf(target);
+    commitPlace(o, [o.T[0] + tb.c[0] - b.c[0], o.T[1] + tb.c[1] - b.c[1], o.T[2]]);
+  }
+
+  // ── Snapping ─────────────────────────────────────────────
+  // Pick a feature on the selected part, then one on another part; the selected part moves so the
+  // first lands on the second (model3d.alignMove). Corners, edges, hole axes and flat faces.
+  var featCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function featsOf(mesh) {
+    var f = featCache && featCache.get(mesh);
+    if (!f) { f = M3.features(mesh); if (featCache) featCache.set(mesh, f); }
+    return f;
+  }
+  function vtxOf(mesh, i) { return [mesh.pos[i * 3], mesh.pos[i * 3 + 1], mesh.pos[i * 3 + 2]]; }
+  function segDist(p, a, b) {
+    var vx = b[0] - a[0], vy = b[1] - a[1], l = vx * vx + vy * vy, t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l)) : 0;
+    return Math.hypot(p[0] - a[0] - vx * t, p[1] - a[1] - vy * t);
+  }
+  // The feature under the cursor on scene object oi (x, y in render pixels).
+  function featureAt(oi, tri, x, y) {
+    var sc = scene, o = sc.objs[oi], po = sc.placed[oi], F = featsOf(o.mesh), s = sc.scale, best = null, bestD = 9 * s;
+    // Picked on screen as drawn (perhaps exploded); kept in assembled coordinates, since exploding
+    // only shifts each part, so a snap made in the exploded view lands right when assembled.
+    var asm = { R: o.R, pivot: o.pivot, T: o.T };
+    function W(p) { return M3.place(asm, p); }
+    function S2(p) { return sc.res.project(M3.place(po, p)); }
+    // Seen, or hidden only by the part being moved (which may cover the spot it should go).
+    var tol = (ui.cam.fit || 100) * 0.01;
+    function seen(q) {
+      var h = sc.res.pick(Math.min(Math.max(q[0], 0), sc.cv.width - 1), Math.min(Math.max(q[1], 0), sc.cv.height - 1));
+      return !h || h.obj === oi || q[2] >= h.depth - tol || (snapState && snapState.step === 2 && sc.objs[h.obj].id === ui.sel);
+    }
+    F.corners.forEach(function (v) {
+      var p = vtxOf(o.mesh, v), q = S2(p), d = Math.hypot(q[0] - x, q[1] - y);
+      if (d < bestD && seen(q)) { bestD = d; best = { type: 'point', p: W(p), label: 'Corner', obj: oi, rank: 0, dist: d, draw: { dot: p } }; }
+    });
+    if (best) return best;
+    bestD = 7 * s;
+    var hitSeg = -1;
+    F.segs.forEach(function (e, i) {
+      var a = S2(vtxOf(o.mesh, e.a)), b = S2(vtxOf(o.mesh, e.b)), d = segDist([x, y], a, b);
+      if (d >= bestD) return;
+      var vx = b[0] - a[0], vy = b[1] - a[1], l = vx * vx + vy * vy, u = l ? Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / l)) : 0;
+      if (seen([a[0] + vx * u, a[1] + vy * u, a[2] + (b[2] - a[2]) * u])) { bestD = d; hitSeg = i; }
+    });
+    if (hitSeg >= 0) {
+      var e = F.segs[hitSeg];
+      if (e.circle >= 0) {
+        var c = F.circles[e.circle];
+        return { type: 'line', p: W(c.c), d: M3.turn(po, c.n), label: 'Hole axis, ⌀' + fmtLen(c.r * 2), obj: oi, rank: 1, dist: bestD, draw: { circle: e.circle, center: c.c } };
+      }
+      var A = vtxOf(o.mesh, e.a), B = vtxOf(o.mesh, e.b);
+      return { type: 'line', p: W(A), d: M3.turn(po, [B[0] - A[0], B[1] - A[1], B[2] - A[2]]), label: 'Edge', obj: oi, rank: 1, dist: bestD, draw: { group: e.g } };
+    }
+    if (tri >= 0) {
+      var f = F.region[tri], pl = F.planes[f];
+      if (pl) return { type: 'plane', p: W(pl.p), n: M3.turn(po, pl.n), label: 'Flat face', obj: oi, rank: 2, dist: 0, draw: { face: f } };
+      return { none: true, label: 'Curved face: pick an edge, a hole or a flat face', obj: oi, draw: {} };
+    }
+    return null;
+  }
+  function fmtLen(mm) { return (Math.round(mm * 100) / 100).toLocaleString() + ' mm'; }
+  function snapHover(xy) {
+    var sc = scene, x = xy[0] * sc.scale, y = xy[1] * sc.scale, found = null;
+    var want = function (oi) { var id = sc.objs[oi].id; return snapState.step === 1 ? id === ui.sel : id !== ui.sel; };
+    // The part under the cursor first. Failing that (the cursor is on the outline, or on the part
+    // being moved, which may hide the spot it should go), the nearest corner or edge of any part
+    // that can be picked.
+    var h = sc.res.pick(x, y);
+    sc.objs.forEach(function (o, oi) {
+      if (!want(oi)) return;
+      var f = featureAt(oi, h && h.obj === oi ? h.tri : -1, x, y);
+      if (f && (!found || (found.none && !f.none) || f.rank < found.rank || (f.rank === found.rank && f.dist < found.dist))) found = f;
+    });
+    sc.hover = found;
+    showHint(found ? found.label : '');
+    drawOverlay();
+  }
+  function snapPick(f) {
+    if (snapState.step === 1) { snapState = { step: 2, from: f }; scene.hover = null; showSnapHint(); drawOverlay(); return; }
+    var o = sceneObjAt(ui.sel), mv = M3.alignMove(snapState.from, f), from = snapState.from;
+    snapState = null;
+    toast('Snapped: ' + from.label.toLowerCase() + ' to ' + f.label.toLowerCase());
+    commitPlace(o, [o.T[0] + mv[0], o.T[1] + mv[1], o.T[2] + mv[2]]);
+  }
+  function showSnapHint() {
+    var el = $('.xs-snap-step');
+    if (!el) return;
+    var n = sceneObjAt(ui.sel);
+    el.textContent = !snapState ? '' : snapState.step === 1 ? 'Step 1 of 2: pick a corner, edge, hole or flat face on ' + (n ? n.s.n.name : 'this part') + '.'
+      : 'Step 2 of 2: pick where it goes on another part (' + snapState.from.label.toLowerCase() + ' picked).';
+  }
+  // Draws the hovered feature (accent) and, while placing it, the one picked first (orange).
+  function drawOverlay() {
+    var sc = scene;
+    if (!sc || !sc.over || !sc.res) return;
+    var ov = sc.over, g = ov.getContext('2d');
+    ov.width = sc.cv.width; ov.height = sc.cv.height;
+    g.clearRect(0, 0, ov.width, ov.height);
+    [[snapState && snapState.from, '#e07800'], [sc.hover, '#00a3b4']].forEach(function (pair) {
+      var f = pair[0];
+      if (!f || f.none || !sc.placed[f.obj]) return;
+      var o = sc.objs[f.obj], po = sc.placed[f.obj], F = featsOf(o.mesh);
+      var P2 = function (p) { var q = sc.res.project(M3.place(po, p)); return [q[0], q[1]]; };
+      g.strokeStyle = g.fillStyle = pair[1]; g.lineWidth = 3 * sc.scale; g.lineCap = 'round';
+      if (f.draw.dot) { var q = P2(f.draw.dot); g.beginPath(); g.arc(q[0], q[1], 5 * sc.scale, 0, 7); g.fill(); }
+      if (f.draw.group != null || f.draw.circle != null) {
+        g.beginPath();
+        F.segs.forEach(function (e) {
+          if (f.draw.group != null ? e.g !== f.draw.group : e.circle !== f.draw.circle) return;
+          var a = P2(vtxOf(o.mesh, e.a)), b = P2(vtxOf(o.mesh, e.b));
+          g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+        });
+        g.stroke();
+      }
+      if (f.draw.center) {
+        var c = P2(f.draw.center), r = 7 * sc.scale;
+        g.lineWidth = 1.5 * sc.scale; g.beginPath(); g.moveTo(c[0] - r, c[1]); g.lineTo(c[0] + r, c[1]); g.moveTo(c[0], c[1] - r); g.lineTo(c[0], c[1] + r); g.stroke();
+      }
+      if (f.draw.face != null) {
+        g.globalAlpha = 0.35; g.beginPath();
+        for (var t = 0; t < o.mesh.idx.length / 3; t++) {
+          if (F.region[t] !== f.draw.face) continue;
+          var a2 = P2(vtxOf(o.mesh, o.mesh.idx[t * 3])), b2 = P2(vtxOf(o.mesh, o.mesh.idx[t * 3 + 1])), c2 = P2(vtxOf(o.mesh, o.mesh.idx[t * 3 + 2]));
+          g.moveTo(a2[0], a2[1]); g.lineTo(b2[0], b2[1]); g.lineTo(c2[0], c2[1]); g.closePath();
+        }
+        g.fill(); g.globalAlpha = 1;
+      }
+    });
+  }
+
+  // The panel beside the 3D view: where the selected part is, and the tools that move it.
+  function arrangePanel(p, t, id) {
+    var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
+    html += '<h2>' + esc(n.name || 'Unnamed') + '</h2><p class="map-ins-sub">' + esc([e && e.number || n.number || n.mpn, n.kind === 'assembly' ? 'Assembly' : ''].filter(Boolean).join(' · ')) + '</p>';
+    if (n.kind !== 'part') return html + '<p class="map-ins-text">Assemblies aren’t drawn; arrange the Parts in them.</p></aside>';
+    var list = sceneList(t, [id]), inScene = list.parts.length > 0, board = n.source === 'ee' && e && e.preview;
+    if (inScene) {
+      var pl = P.cleanPlace(n.place) || null;
+      html += '<div class="xs-xyz">' + ['x', 'y', 'z'].map(function (k, i) {
+        return '<label><span>' + k.toUpperCase() + '</span><input class="input" type="number" step="0.5" data-xyz="' + i + '" value="' + (pl ? pl[k] : '') + '" placeholder="auto"></label>';
+      }).join('') + '<span class="xs-unit">mm</span></div>' +
+        '<div class="field-label">Turn 90°</div><div class="seg full xs-turn">' + ['X', 'Y', 'Z'].map(function (a, i) { return '<button data-act="xs-turn" data-axis="' + i + '">' + a + '</button>'; }).join('') + '</div>' +
+        (pl && (pl.rx || pl.ry || pl.rz) ? '<p class="note">Turned ' + [pl.rx, pl.ry, pl.rz].map(function (v, i) { return 'XYZ'[i] + ' ' + v + '°'; }).join(', ') + '</p>' : '') +
+        '<div class="field-label">Snap</div>' +
+        (snapState ? '<p class="xs-snap-step"></p><button class="btn" data-act="xs-snap-cancel">Cancel</button>'
+          : '<button class="btn btn-primary" data-act="xs-snap">Snap to another part…</button><p class="note">Pick a corner, edge, hole or flat face here, then one on another part. Faces become flush, edges and hole axes line up, corners meet.</p>');
+      var others = sceneList(t, P.flatten(t)).parts.filter(function (s) { return s.id !== id; });
+      if (others.length) {
+        html += '<div class="field-label">Line up with</div><div class="xs-line"><select class="input" id="xs-target">' + others.map(function (s) { return '<option value="' + esc(s.id) + '"' + (ui.xsTarget === s.id ? ' selected' : '') + '>' + esc(s.n.name || 'Unnamed') + '</option>'; }).join('') + '</select>' +
+          '<button class="btn" data-act="xs-stack" title="Put this part on top of it, centered">Stack on</button><button class="btn" data-act="xs-center" title="Center this part over it in X and Y">Center on</button></div>';
+      }
+      html += '<div class="map-ins-acts">' + (pl ? '<button class="btn" data-act="xs-auto" title="Forget where it was put; stack it with the others">Back to stack</button>' : '') +
+        (list.parts[0].kind === 'model' ? '<button class="btn" data-act="xs-cad" title="Where its STEP puts it: parts exported from one CAD assembly line up">CAD position</button>' : '') + '</div>' +
+        '<p class="note">Drag the part to move it (from above in X and Y, from the side up and down; Alt for no grid). Arrows nudge 1 mm, Shift 10 mm, Page Up/Down in Z, R turns it.</p>';
+    } else if (!board) {
+      html += '<p class="map-ins-text">' + (MODEL_SOURCES[n.source] ? 'No 3D yet. Attach its STEP to show it here.' : 'No 3D for this kind of Part.') + '</p>';
+    }
+    if (board) {
+      var size = boardSize(n, e), fab = e.preview.board;
+      html += '<div class="field-label">Board size (mm)</div><div class="xs-xyz">' + ['W', 'H', 'T'].map(function (k, i) {
+        return '<label><span>' + k + '</span><input class="input" type="number" min="0" step="0.1" data-board="' + i + '" value="' + (size ? size[i] : i === 2 ? 1.6 : '') + '"></label>';
+      }).join('') + '</div><div class="map-ins-acts"><button class="btn' + (size ? '' : ' btn-primary') + '" data-act="xs-size">' + (size ? 'Update size' : 'Set size') + '</button></div>' +
+        '<p class="note">' + (fab && !P.cleanBoard(n.boardMm) ? 'From Fabcheck.' : fab ? 'Typed in; Fabcheck measured ' + fab.join(' × ') + '.' : 'Fabcheck stores the size with the board’s pictures from its next Send to Signoff; until then, type it in.') + '</p>';
+    }
+    return html + '<div class="map-ins-acts"><button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit Part</button></div></aside>';
   }
   document.addEventListener('input', function (e) {
-    if (e.target.id !== 'xp-spread') return;
+    if (e.target.id !== 'xs-spread') return;
     ui.spread = Number(e.target.value);
-    var st = document.querySelector('.xp-stack');
-    if (st) st.style.setProperty('--gap', ui.spread + 'px');
+    sceneLater();
   });
+  document.addEventListener('change', function (e) {
+    var o = sceneObjAt(ui.sel);
+    if (e.target.dataset.xyz != null && o) {
+      var T = o.T.slice(), v = Number(e.target.value);
+      if (e.target.value !== '' && isFinite(v)) { T[Number(e.target.dataset.xyz)] = v; assembled(); commitPlace(o, T); }
+    }
+    if (e.target.id === 'xs-target') ui.xsTarget = e.target.value;
+  });
+  function sceneAction(act, el) {
+    var o = sceneObjAt(ui.sel), sel = $('#xs-target'), target = sel && sceneObjAt(sel.value);
+    switch (act) {
+      case 'xs-view':
+        var v = M3.VIEWS.filter(function (x) { return x.key === el.dataset.key; })[0];
+        if (v && ui.cam) { ui.cam.az = v.az; ui.cam.el = v.el; drawScene(true); }
+        break;
+      case 'xs-fit': if (scene) { fitCam(scene.objs, true); drawScene(true); } break;
+      case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
+      case 'xs-stack': if (o && target) { assembled(); stackOn(o, target); } break;
+      case 'xs-center': if (o && target) { assembled(); centerOn(o, target); } break;
+      case 'xs-auto': if (o) setNode(o.id, { place: null }); break;
+      case 'xs-cad': if (o) setNode(o.id, { place: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 } }); break;
+      case 'xs-snap': if (o) { snapState = { step: 1 }; renderPage(); } break;
+      case 'xs-snap-cancel': snapState = null; renderPage(); break;
+      case 'xs-size':
+        var vals = [].map.call(document.querySelectorAll('[data-board]'), function (i) { return i.value; }), b = P.cleanBoard(vals);
+        if (!b) { toast('Type the board’s width and height in mm (thickness defaults to 1.6)'); break; }
+        setNode(ui.sel, { boardMm: b });
+        break;
+    }
+  }
 
   // ── Building from the client project ─────────────────────
   // Each EE and ME summary names its client project. The designs of this product's client project
@@ -515,6 +1081,9 @@
     return node;
   }
   var GROUPS = { ee: 'Electronics', me: 'Mechanical' };   // where "Add all" puts each tool's designs
+  // Parts that can carry an attached STEP: purchased ones, ME parts (until a mechanical checker
+  // stores their pictures) and boards, whose tiles keep Fabcheck's pictures (previewFor).
+  var MODEL_SOURCES = { purchased: 1, me: 1, ee: 1 };
   function placeAll(p) {
     var list = unplaced(p), t = P.tree(p);
     var top = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
@@ -568,53 +1137,68 @@
     dragDone();
     if (what.design) { var n = designPart(p, what.design, parent); if (n) { ui.sel = n.id; saveUi(); touch(p); } return; }
     var t = P.tree(p), id = what.node;
-    if (!t.nodes[id] || (t.parent[id] || '') === parent) return;
+    if (!t.nodes[id] || id === parent || (t.parent[id] || '') === parent) return;
     if (!P.canMove(t, id, parent)) { toast('An assembly can’t go inside itself'); return; }
     setNode(id, { parent: parent, order: P.nextOrder(p, parent) });
   });
 
-  // One lane per assembly under the top assembly (or per top-level assembly when there are
-  // several). Parts at the top level share a lane; deeper assemblies are headed groups in their lane.
-  function mapLanes(p, t, rolls, ids) {
-    var top = t.roots.length === 1 && t.nodes[t.roots[0]].kind === 'assembly' ? t.roots[0] : '';
-    var level = top ? t.children[top] || [] : t.roots;
-    var lanes = level.filter(function (id) { return t.nodes[id].kind === 'assembly'; });
-    var loose = level.filter(function (id) { return t.nodes[id].kind !== 'assembly'; });
+  // ── Map: the structure as a tree ─────────────────────────
+  // The top assembly is the trunk. Assemblies branch off it, indented and joined by connector
+  // lines, and the Parts of each assembly sit in a row of tiles on their own branch. Every branch
+  // is a drop target (data-drop is the assembly's id; '' is the top level). A product of one Part
+  // shows one button, which is both the top and the Part (P.soloPart).
+  var ICON_ASM = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 2.5l6.5 3.3v8.4L10 17.5l-6.5-3.3V5.8z"/><path d="M3.5 5.8L10 9.1l6.5-3.3M10 9.1v8.4"/></svg>';
+  function treeMap(p, t, rolls) {
+    var top = P.topAssembly(t), solo = P.soloPart(t);
+    if (solo) {
+      return trayHtml(p) + '<div class="tm"><div class="tm-trunk tm-solo" data-drop="' + esc(top) + '"><div class="tm-eyebrow">' + (top ? 'Top assembly · ' + esc(t.nodes[top].name || 'Unnamed') : 'Product') + ' · one Part</div>' + tile(t.nodes[solo]) + '</div></div>';
+    }
     function tiles(list) {
-      var big = list.filter(function (id) { return P.toolById(t.nodes[id].source); }), small = list.filter(function (id) { return !P.toolById(t.nodes[id].source); });
+      function isBig(id) { return P.toolById(t.nodes[id].source) || modelOf(t.nodes[id]); }
+      var big = list.filter(isBig), small = list.filter(function (id) { return !isBig(id); });
       return (big.length ? '<div class="map-tiles">' + big.map(function (id) { return tile(t.nodes[id]); }).join('') + '</div>' : '') +
         (small.length ? '<div class="map-tiles small">' + small.map(function (id) { return tile(t.nodes[id]); }).join('') + '</div>' : '');
     }
-    function laneHead(id, name, r) {
-      return '<div class="map-lane-head"><button class="map-lane-name" data-act="edit-node" data-id="' + esc(id) + '" title="Edit assembly">' + esc(name) + '</button>' +
-        '<span class="map-lane-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') +
-        '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button></div>';
-    }
-    var html = trayHtml(p) + '<div class="map-lanes">' + lanes.map(function (lane) {
-      var inside = P.descendants(t, lane), groups = [{ id: lane, parts: [] }];
-      ids.forEach(function (id) {
-        if (!inside[id]) return;
-        if (t.nodes[id].kind === 'assembly') groups.push({ id: id, parts: [] });
-        else groups.filter(function (g) { return g.id === t.parent[id]; }).concat(groups.slice(-1))[0].parts.push(id);
+    // Children in tree order: each assembly is a branch, and each run of Parts one leaf row.
+    function kids(list) {
+      var items = [], run = [];
+      function flush() { if (run.length) items.push('<div class="tm-item tm-leaves">' + tiles(run) + '</div>'); run = []; }
+      list.forEach(function (id) {
+        if (t.nodes[id].kind !== 'assembly') { run.push(id); return; }
+        flush(); items.push('<div class="tm-item">' + branch(id) + '</div>');
       });
-      return '<section class="map-lane" data-drop="' + esc(lane) + '">' + laneHead(lane, t.nodes[lane].name || 'Unnamed', rolls[lane]) +
-        groups.map(function (g, k) {
-          if (!k) return tiles(g.parts);
-          return '<div class="map-group" data-drop="' + esc(g.id) + '"><button class="map-group-name" data-act="edit-node" data-id="' + esc(g.id) + '">' + esc(t.nodes[g.id].name || 'Unnamed') + '</button>' +
-            (g.parts.length ? tiles(g.parts) : '<div class="map-empty">Empty</div>') + '</div>';
-        }).join('') + (Object.keys(inside).length ? '' : '<div class="map-empty">No Parts yet</div>') + '</section>';
-    }).join('');
-    if (loose.length) {
-      html += '<section class="map-lane" data-drop="' + esc(top) + '"><div class="map-lane-head"><span class="map-lane-name static">' + esc(top ? t.nodes[top].name : 'Top level') + '</span>' +
-        '<span class="map-lane-sub">' + plural(loose.length, 'Part') + '</span></div>' + tiles(loose) + '</section>';
+      flush();
+      return '<div class="tm-kids">' + items.join('') + '</div>';
     }
-    return html + '</div>';
+    function branch(id) {
+      var n = t.nodes[id], r = rolls[id], list = t.children[id] || [];
+      return '<div class="tm-asm" data-drop="' + esc(id) + '"><div class="tm-head">' +
+        '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
+        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' +
+        '<span class="tm-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') + '</button>' +
+        '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(n.name) + '">' + ICON.plus + '</button></div>' +
+        (list.length ? kids(list) : '<div class="tm-kids"><div class="tm-item tm-leaves"><div class="map-empty">Empty: drag a Part here, or use +</div></div></div>') + '</div>';
+    }
+    var id = top || PRODUCT, r = rolls[top] || rolls[''], n = top ? t.nodes[top] : null;
+    var name = n ? n.name || 'Unnamed' : p.meta.name, num = n ? n.number : p.meta.number;
+    var trunk = '<div class="tm-head tm-top-head"><button class="tm-top' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '">' +
+      ring(r.designs ? r.pct : 0, 54, 6, r.designs ? pct(r.pct) + '%' : '—') +
+      '<span class="tm-top-text"><span class="tm-eyebrow">' + (top ? 'Top assembly' : 'Product') + (num ? ' · ' + esc(num) : '') + '</span>' +
+      '<span class="tm-top-name">' + esc(name) + '</span>' +
+      '<span class="tm-sub">' + [plural(r.parts, 'Part'), r.designs && plural(r.designs, 'design'), r.massG && fmtMass(r.massG)].filter(Boolean).join(' · ') + '</span></span>' +
+      (r.openTotal ? sevs(r.open) : '<span class="tm-sub">No open issues</span>') + '</button>' +
+      (top ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(top) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button>' : '') + '</div>';
+    return trayHtml(p) + '<div class="tm"><div class="tm-trunk" data-drop="' + esc(top) + '">' + trunk + kids(top ? t.children[top] || [] : t.roots) + '</div></div>';
   }
 
   function tile(n) {
     var st = P.partStatus(n, index), s = st && st.summary, tool = P.toolById(n.source);
-    var cls = 'map-tile' + (tool ? '' : ' small') + (ui.sel === n.id ? ' sel' : '');
+    var cls = 'map-tile' + (tool || modelOf(n) ? '' : ' small') + (ui.sel === n.id ? ' sel' : '');
     var qty = n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '';
+    if (!tool && modelOf(n)) {
+      return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true) + '</div>' +
+        '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || cap(st.state === 'purchased' ? 'Purchased' : '')) + '</span>' + srcChip(n.source) + '</div></button>';
+    }
     if (!tool) {
       return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
         '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
@@ -627,20 +1211,16 @@
 
   // The selected Part's detail, beside the map (over it on narrow screens).
   function inspector(p, t, id) {
+    if (id === PRODUCT || t.nodes[id].kind === 'assembly') return asmInspector(p, t, id);
     var n = t.nodes[id], st = P.partStatus(n, index), tool = P.toolById(n.source);
     var html = '<aside class="map-ins card" aria-label="' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
-    if (n.kind === 'assembly') {
-      var r = P.rollup(p, index)[id];
-      return html + '<h2>' + esc(n.name) + '</h2><p class="map-ins-sub">' + esc(P.path(t, id).map(function (x) { return x.name; }).concat(['Assembly']).join(' › ')) + '</p>' +
-        '<div class="map-ins-row">' + (r.designs ? ring(r.pct, 56, 6, pct(r.pct) + '%') : '') + '<div>' + plural(r.parts, 'Part') + '<br>' + sevs(r.open) + '</div></div>' +
-        '<div class="map-ins-acts"><button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button></div></aside>';
-    }
     var e = st.entry || {}, s = st.summary;
-    var pv = e.preview, side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
-    html += '<div class="map-ins-art">' + art(n, true, e, side) +
-      (pv && pv.images.length > 1 ? '<div class="seg map-ins-flip">' + pv.images.map(function (i) {
-        return '<button class="' + ((side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
-      }).join('') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
+    var pv = previewFor(n, st.entry), mdl = modelOf(n), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
+    var turn = mdl && ui.pic === '3d';
+    html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '" aria-label="3D view: drag to turn, scroll to zoom"></canvas>' : art(n, true, e, side)) +
+      (pv && (pv.images.length > 1 || mdl) ? '<div class="seg map-ins-flip">' + pv.images.map(function (i) {
+        return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
+      }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, scroll to zoom">3D</button>' : '') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
       '<p class="map-ins-sub">' + esc([e.number || n.number || n.mpn, e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
     if (s) {
       var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
@@ -660,8 +1240,54 @@
       html += '<p class="map-ins-text">' + stateChip(st) + ' ' + esc(STATE_TEXT[st.state][2]) + '</p>';
     }
     if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
+    if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
+    var solo = P.soloPart(t) === id && P.topAssembly(t);
     return html + '<div class="map-ins-acts">' + (tool && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(tool.name) + '</a>' : '') +
-      '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button></div></aside>';
+      '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button>' +
+      (solo ? '<button class="btn" data-act="edit-node" data-id="' + esc(solo) + '">Edit assembly</button><button class="btn" data-act="add-child" data-id="' + esc(solo) + '">' + ICON.plus + ' Add Part</button>' : '') + '</div></aside>';
+  }
+
+  // An assembly's (or the whole product's) detail: everything below it, rolled up.
+  function asmInspector(p, t, id) {
+    var prod = id === PRODUCT, n = prod ? null : t.nodes[id], rolls = P.rollup(p, index), r = rolls[prod ? '' : id];
+    var inside = prod ? null : P.descendants(t, id), name = prod ? p.meta.name : n.name || 'Unnamed';
+    var kind = prod ? 'Product' : id === P.topAssembly(t) ? 'Top assembly' : 'Assembly';
+    var where = (prod ? [p.meta.client, p.meta.number, p.meta.phase] : [n.number, P.path(t, id).map(function (x) { return x.name; }).join(' › ')]).filter(Boolean);
+    var html = '<aside class="map-ins card" aria-label="' + esc(name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>' +
+      '<div class="ins-eyebrow">' + kind + '</div><h2>' + esc(name) + '</h2>' +
+      (where.length ? '<p class="map-ins-sub">' + esc(where.join(' · ')) + '</p>' : '');
+    html += '<div class="map-ins-row">' + ring(r.designs ? r.pct : 0, 64, 7, r.designs ? pct(r.pct) + '%' : '—') + '<div>' +
+      (r.designs ? '<b>' + pct(r.pct) + '% reviewed</b><br>across ' + plural(r.designs, 'linked design') : '<b>No linked designs yet</b>') + '</div></div>';
+    var attn = r.unlinked + r.attention;
+    html += '<div class="ins-stats">' +
+      '<div><span>Open issues</span><b>' + esc(r.openTotal) + '</b>' + (r.openTotal ? sevs(r.open) : '<i>None</i>') + '</div>' +
+      '<div><span>Mass</span><b>' + fmtMass(r.massG) + '</b><i>' + (r.massMissing ? plural(r.massMissing, 'Part') + ' without one' : 'All Parts weighed') + '</i></div>' +
+      '<div><span>Parts</span><b>' + esc(r.parts) + '</b><i>' + esc([r.designs && plural(r.designs, 'design'), r.purchased && r.purchased + ' purchased', r.manual && r.manual + ' firmware'].filter(Boolean).join(' · ')) + '</i></div>' +
+      '<div><span>Need attention</span><b>' + esc(attn) + '</b><i>' + esc(attn ? [r.unlinked && r.unlinked + ' not linked', r.attention && r.attention + ' unreadable'].filter(Boolean).join(' · ') : 'Every design reads') + '</i></div></div>';
+    // The children, each a row that selects it.
+    var list = prod ? t.roots : t.children[id] || [];
+    if (list.length) {
+      html += '<div class="ins-kids"><div class="ins-label">In this ' + (prod ? 'product' : 'assembly') + '</div>' + list.map(function (k) {
+        var c = t.nodes[k], right;
+        if (c.kind === 'assembly') right = '<span>' + plural(rolls[k].parts, 'Part') + (rolls[k].designs ? ' · ' + pct(rolls[k].pct) + '%' : '') + '</span>' + (rolls[k].openTotal ? sevs(rolls[k].open) : '');
+        else {
+          var st = P.partStatus(c, index), s = st.summary;
+          right = s ? '<span>' + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : st.state === 'purchased' ? '<span>Purchased</span>' : stateChip(st);
+        }
+        return '<button class="ins-kid" data-act="select-node" data-id="' + esc(k) + '"><span class="ins-kid-art">' + (c.kind === 'assembly' ? ICON_ASM : partArt(c)) + '</span>' +
+          '<span class="ins-kid-name">' + esc(c.name || 'Unnamed') + (c.qty > 1 ? ' <span class="map-qty">×' + esc(c.qty) + '</span>' : '') + '</span><span class="ins-kid-r">' + right + '</span></button>';
+      }).join('') + '</div>';
+    }
+    var stages = Object.keys(r.stages).sort();
+    if (stages.length) html += '<div class="ins-stages"><div class="ins-label">Stages</div>' + stages.map(function (k) { var s = k.split(':'); return '<span>' + srcChip(s[0]) + ' ' + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' ×' + r.stages[k] : '') + '</span>'; }).join('') + '</div>';
+    var iss = P.issues(p, index).filter(function (i) { return prod || inside[i.node.id]; }), shown = iss.slice(0, 5);
+    if (shown.length) {
+      html += '<div class="map-ins-issues"><div class="ins-label">Top open issues</div>' + shown.map(function (i) {
+        return '<a href="' + esc(designUrl(i.node, i.id)) + '" target="_blank" rel="noopener"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '<span class="ins-from"> · ' + esc(i.node.name) + '</span></span></a>';
+      }).join('') + (iss.length > shown.length ? '<button class="ins-more" data-act="view" data-view="issues">All ' + esc(iss.length) + ' in Issues ›</button>' : '') + '</div>';
+    }
+    return html + '<div class="map-ins-acts">' + (prod ? '<button class="btn" data-act="edit-project">Edit project</button><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button>'
+      : '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button><button class="btn" data-act="add-child" data-id="' + esc(id) + '">' + ICON.plus + ' Add inside</button>') + '</div></aside>';
   }
 
   function listTable(t, rolls, ids) {
@@ -710,6 +1336,166 @@
     return html;
   }
 
+  // ── Bill of materials ────────────────────────────────────
+  // Indented (the structure, numbered) or consolidated (one line per distinct Part, summed). Pick
+  // columns, search, sort the consolidated list, export CSV, or print it on a report page.
+  var BOM_COLS = [['item', 'Item', 1], ['pic', 'Picture', 1], ['number', 'Number', 1], ['rev', 'Rev', 1], ['source', 'Source', 1], ['supplier', 'Supplier', 1],
+    ['mpn', 'MPN', 1], ['qty', 'Qty', 1], ['massG', 'Mass each', 0], ['extMassG', 'Mass', 1], ['status', 'Status', 1], ['notes', 'Notes', 0]];
+  function bomCols() {
+    var on = ui.bomCols || {};
+    return BOM_COLS.filter(function (c) { return on[c[0]] == null ? c[2] : on[c[0]]; }).map(function (c) { return c[0]; });
+  }
+  function bomData(p) { return P.bom(p, index, ui.bomMode === 'flat' ? 'flat' : 'indented'); }
+  // The rows shown: search matches (with their assemblies, when indented), sorted when consolidated.
+  function bomRows(p, b, forPrint) {
+    var q = String(ui.bomQ || '').trim().toLowerCase(), rows = b.rows;
+    if (q) {
+      var t = P.tree(p), keep = {};
+      rows.forEach(function (r) {
+        if ([r.name, r.number, r.mpn, r.supplier, r.notes, r.item].join(' ').toLowerCase().indexOf(q) < 0) return;
+        keep[r.id] = 1;
+        if (b.mode === 'indented') P.path(t, r.id).forEach(function (a) { keep[a.id] = 1; });
+      });
+      rows = rows.filter(function (r) { return keep[r.id]; });
+    }
+    if (b.mode === 'indented' && !forPrint && !q) {
+      var hidden = {}, t2 = P.tree(p);
+      rows.forEach(function (r) { if (ui.closed[r.id]) Object.keys(P.descendants(t2, r.id)).forEach(function (d) { hidden[d] = 1; }); });
+      rows = rows.filter(function (r) { return !hidden[r.id]; });
+    }
+    var srt = ui.bomSort;
+    if (b.mode === 'flat' && srt && srt.key) {
+      var k = srt.key === 'qty' ? 'extQty' : srt.key === 'status' ? 'stage' : srt.key, dir = srt.dir === 'desc' ? -1 : 1;
+      rows = rows.slice().sort(function (x, y) {
+        var a = x[k], c = y[k];
+        if (a == null || a === '') return 1; if (c == null || c === '') return -1;
+        return (typeof a === 'number' ? a - c : String(a).localeCompare(String(c), undefined, { numeric: true })) * dir;
+      });
+    }
+    return rows;
+  }
+  function bomCell(p, r, key, b, print) {
+    var n = p.nodes[r.id], part = r.kind === 'part';
+    switch (key) {
+      case 'item': return esc(r.item);
+      case 'pic': return part ? '<div class="bom-pic map-art">' + art(n, false, (P.partStatus(n, index) || {}).entry) + '</div>' : '';
+      case 'source': return part ? (print ? esc((P.sources().filter(function (s) { return s.id === r.source; })[0] || {}).label || '') : srcChip(r.source)) : '';
+      case 'qty': return part ? esc(b.mode === 'flat' ? r.extQty : r.qty) : '';
+      case 'massG': return r.massG != null ? fmtMass(r.massG) : '';
+      case 'extMassG': return r.extMassG != null ? fmtMass(r.extMassG) : part ? '<span class="muted">—</span>' : esc(fmtMass(bomAsmMass(p, b, r.id)).replace('—', ''));
+      case 'status':
+        if (!part) return '';
+        if (r.pct != null) return esc((r.stage ? r.stage + ' · ' : '') + pct(r.pct) + '%');
+        if (r.state === 'purchased') return '';
+        return print ? esc((STATE_TEXT[r.state] || [])[1] || '') : stateChip({ state: r.state });
+      default: return esc(r[key] || '');
+    }
+  }
+  function bomAsmMass(p, b, id) {
+    var t = P.tree(p), inside = P.descendants(t, id);
+    return Math.round(b.rows.reduce(function (a, r) { return a + (inside[r.id] && r.extMassG ? r.extMassG : 0); }, 0) * 10) / 10;
+  }
+  function bomName(p, r, b, print) {
+    var t = P.tree(p), kids = r.kind === 'assembly' && (t.children[r.id] || []).length;
+    var caret = b.mode === 'indented' && !print ? (kids ? '<button class="t-caret' + (ui.closed[r.id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(r.id) + '" aria-label="' + (ui.closed[r.id] ? 'Expand' : 'Collapse') + '">' + ICON.chev + '</button>' : '<span class="t-spacer"></span>') : '';
+    var uses = b.mode === 'flat' && r.uses.length > 1 ? '<div class="t-sub">In ' + esc(r.uses.map(function (u) { var a = P.path(t, u); return a.length ? a[a.length - 1].name : 'top level'; }).filter(function (x, i, all) { return all.indexOf(x) === i; }).join(', ')) + '</div>' : '';
+    return '<div class="t-name" style="padding-left:' + (b.mode === 'indented' ? r.level * (print ? 14 : 18) : 0) + 'px">' + caret + '<div class="t-label">' + (r.kind === 'assembly' ? '<b>' + esc(r.name || 'Unnamed') + '</b>' : esc(r.name || 'Unnamed')) + uses + '</div></div>';
+  }
+  var BOM_NUM = { qty: 1, massG: 1, extMassG: 1 };
+  function bomTable(p) {
+    var b = bomData(p), cols = bomCols(), rows = bomRows(p, b), srt = ui.bomSort || {};
+    if (!b.rows.length) return '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>Nothing to list yet</h2><p>Add Parts on the System page; they show here with quantities and mass.</p></div>';
+    function th(key, label) {
+      var sortable = b.mode === 'flat' && key !== 'pic';
+      var mark = srt.key === key ? (srt.dir === 'desc' ? ' ↓' : ' ↑') : '';
+      return '<th class="' + (BOM_NUM[key] ? 'num' : '') + (key === 'pic' ? ' bom-pic-col' : '') + '">' + (sortable ? '<button class="bom-sort" data-act="bom-sort" data-key="' + key + '">' + esc(label) + mark + '</button>' : esc(label)) + '</th>';
+    }
+    var labels = {}; BOM_COLS.forEach(function (c) { labels[c[0]] = c[1]; });
+    var head = cols.filter(function (c) { return c === 'item' || c === 'pic'; });
+    var rest = cols.filter(function (c) { return head.indexOf(c) < 0; });
+    return '<div class="card bom-card"><table class="table tree bom"><thead><tr>' + head.map(function (c) { return th(c, labels[c]); }).join('') + th('name', 'Name') + rest.map(function (c) { return th(c, labels[c]); }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr class="' + (r.kind === 'assembly' ? 'asm' : 'part') + '" data-act="edit-node" data-id="' + esc(r.uses[0]) + '">' + head.map(function (c) { return '<td class="' + (c === 'item' ? 'bom-item' : '') + '">' + bomCell(p, r, c, b) + '</td>'; }).join('') +
+          '<td>' + bomName(p, r, b) + '</td>' + rest.map(function (c) { return '<td class="' + (BOM_NUM[c] ? 'num' : c === 'notes' ? 'bom-notes' : '') + '">' + bomCell(p, r, c, b) + '</td>'; }).join('') + '</tr>';
+      }).join('') + (rows.length ? '' : '<tr><td colspan="' + (cols.length + 1) + '" class="muted">Nothing matches “' + esc(ui.bomQ) + '”.</td></tr>') + '</tbody>' +
+      '<tfoot><tr><td colspan="' + (head.length + 1) + '"><b>' + plural(b.totals.lines, 'line') + '</b> · ' + plural(b.totals.qty, 'piece') + '</td>' + rest.map(function (c) {
+        return '<td class="num">' + (c === 'extMassG' ? '<b>' + fmtMass(b.totals.massG) + '</b>' : '') + '</td>';
+      }).join('') + '</tr></tfoot></table></div>' +
+      '<p class="note" style="margin-top:12px">' + (b.mode === 'flat' ? 'One line per distinct Part: the same linked design, else the same number, else the same MPN. Quantities are summed across the structure.' : 'Item numbers follow the structure. Quantities are per assembly.') +
+      (b.totals.massMissing ? ' ' + plural(b.totals.massMissing, 'line') + ' without a mass ' + (b.totals.massMissing === 1 ? 'isn’t' : 'aren’t') + ' in the total.' : '') + '</p>';
+  }
+  function bomPage(p) {
+    var b = bomData(p), mode = b.mode, on = bomCols();
+    return '<div class="page page-bom"><div class="cl-head"><div><div class="eyebrow">' + esc(p.meta.name) + '</div><h1 class="page-title">Bill of materials</h1>' +
+      '<div class="page-sub"><span>' + plural(b.totals.lines, 'line') + '</span><span class="sep">·</span><span>' + plural(b.totals.qty, 'piece') + '</span><span class="sep">·</span><span>' + fmtMass(b.totals.massG) + '</span></div></div>' +
+      '<div class="cl-head-acts"><button class="btn" data-act="bom-csv" title="Download as CSV">CSV</button><button class="btn btn-primary" data-act="bom-print" title="Print or save as PDF">Print</button></div></div>' +
+      '<div class="bom-bar"><div class="seg" role="tablist" aria-label="BOM layout">' + [['indented', 'Indented'], ['flat', 'Consolidated']].map(function (m) {
+        return '<button role="tab" class="' + (mode === m[0] ? 'on' : '') + '" data-act="bom-mode" data-mode="' + m[0] + '">' + m[1] + '</button>';
+      }).join('') + '</div>' +
+      '<input class="input bom-q" id="bom-q" type="search" placeholder="Search name, number, MPN, supplier" value="' + esc(ui.bomQ || '') + '" autocomplete="off" aria-label="Search the BOM">' +
+      '<details class="bom-cols"><summary class="btn">Columns</summary><div class="bom-cols-pop">' + BOM_COLS.map(function (c) {
+        return '<label class="check"><input type="checkbox" data-bom-col="' + c[0] + '"' + (on.indexOf(c[0]) >= 0 ? ' checked' : '') + '> ' + esc(c[1]) + '</label>';
+      }).join('') + '</div></details></div>' +
+      '<div id="bom-table">' + bomTable(p) + '</div></div>';
+  }
+  function refreshBom() {
+    var box = $('#bom-table'), p = current();
+    if (!box || !p) return;
+    box.innerHTML = bomTable(p);
+    loadPictures(box);
+  }
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'bom-q') return;
+    ui.bomQ = e.target.value; refreshBom();
+  });
+  document.addEventListener('change', function (e) {
+    var c = e.target.dataset && e.target.dataset.bomCol;
+    if (!c) return;
+    ui.bomCols = Object.assign({}, ui.bomCols); ui.bomCols[c] = e.target.checked;
+    saveUi(); refreshBom();
+  });
+
+  // CSV of every line in the current layout, whatever the columns and search. Names come from
+  // review files other people write, so cells that a spreadsheet would run as a formula are quoted.
+  function bomCsv(p) {
+    var b = P.bom(p, index, ui.bomMode === 'flat' ? 'flat' : 'indented');
+    function cell(v) { v = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
+    var head = ['Item', 'Level', 'Kind', 'Name', 'Number', 'Rev', 'Source', 'Supplier', 'MPN', 'Qty', 'Mass each (g)', 'Mass (g)', 'Stage', 'Progress (%)', 'Notes'];
+    var lines = [head.map(cell).join(',')].concat(b.rows.map(function (r) {
+      var src = (P.sources().filter(function (s) { return s.id === r.source; })[0] || {}).label || '';
+      return [r.item, r.level, r.kind, r.name, r.number, r.rev, src, r.supplier, r.mpn, r.kind === 'part' ? (b.mode === 'flat' ? r.extQty : r.qty) : '',
+        r.massG, r.extMassG, r.stage, r.pct == null ? '' : pct(r.pct), r.notes].map(cell).join(',');
+    }));
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv' }));
+    a.download = (p.slug || 'product') + '-bom' + (b.mode === 'flat' ? '-consolidated' : '') + '.csv'; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // The printable BOM: the suite's report page (suite.css .report/.paper), with the columns and
+  // search in use and every assembly expanded.
+  function bomReport(p) {
+    var b = bomData(p), cols = bomCols(), rows = bomRows(p, b, true), m = p.meta, labels = {};
+    BOM_COLS.forEach(function (c) { labels[c[0]] = c[1]; });
+    var head = cols.filter(function (c) { return c === 'item' || c === 'pic'; }), rest = cols.filter(function (c) { return head.indexOf(c) < 0; });
+    var today = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    var html = '<div class="report-bar"><b>Bill of materials</b><div style="display:flex;gap:8px"><button class="btn" data-act="close-report">Close</button><button class="btn btn-primary" data-act="print">Print / Save PDF</button></div></div>' +
+      '<div class="paper bom-paper"><div class="r-head"><div><div class="r-brand">DOVETAIL · SIGNOFF PL</div><h1>' + esc(m.name) + '</h1><div style="color:#515154">Bill of materials, ' + (b.mode === 'flat' ? 'consolidated' : 'indented') + '</div></div>' +
+      '<div style="text-align:right;color:#515154">' + esc(today) + '</div></div>' +
+      '<div class="r-meta"><div><span>Product number</span>' + esc(m.number || '—') + '</div><div><span>Client</span>' + esc(m.client || '—') + '</div><div><span>Build phase</span>' + esc(m.phase || '—') + '</div>' +
+      '<div><span>Totals</span>' + plural(b.totals.lines, 'line') + ' · ' + plural(b.totals.qty, 'piece') + ' · ' + fmtMass(b.totals.massG) + '</div></div>' +
+      (ui.bomQ ? '<p style="color:#515154">Filtered: “' + esc(ui.bomQ) + '”</p>' : '') +
+      '<table><thead><tr>' + head.map(function (c) { return '<th>' + esc(labels[c]) + '</th>'; }).join('') + '<th>Name</th>' + rest.map(function (c) { return '<th class="' + (BOM_NUM[c] ? 'num' : '') + '">' + esc(labels[c]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr class="' + (r.kind === 'assembly' ? 'asm' : '') + '">' + head.map(function (c) { return '<td>' + bomCell(p, r, c, b, true) + '</td>'; }).join('') + '<td>' + bomName(p, r, b, true) + '</td>' +
+          rest.map(function (c) { return '<td class="' + (BOM_NUM[c] ? 'num' : '') + '">' + bomCell(p, r, c, b, true) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody><tfoot><tr><td colspan="' + (head.length + 1) + '"><b>Total</b></td>' + rest.map(function (c) { return '<td class="num">' + (c === 'extMassG' ? '<b>' + fmtMass(b.totals.massG) + '</b>' : c === 'qty' ? '<b>' + b.totals.qty + '</b>' : '') + '</td>'; }).join('') + '</tr></tfoot></table>' +
+      (b.totals.massMissing ? '<p style="color:#86868b;margin-top:10px">' + plural(b.totals.massMissing, 'line') + ' without a mass ' + (b.totals.massMissing === 1 ? 'is' : 'are') + ' left out of the total.</p>' : '') +
+      '<div class="r-foot"><span>Signoff PL' + (window.SIGNOFF_VERSION ? ' · ' + esc(window.SIGNOFF_VERSION.hash) : '') + '</span><span>' + esc(m.name) + (m.number ? ' · ' + esc(m.number) : '') + ' · ' + esc(today) + '</span></div></div>';
+    var r = $('#report'); r.innerHTML = html; r.hidden = false;
+    loadPictures(r);
+  }
+
   // ── Sheets ───────────────────────────────────────────────
   function sheet(html, opts) {
     closeSheet();
@@ -734,7 +1520,7 @@
       '<div class="field"><label for="f-number">Product number</label><input class="input" id="f-number" value="' + esc(m.number) + '" placeholder="e.g. PRD-1042"></div></div>' +
       '<div class="field"><label for="f-cproj">Client project in Signoff EE and ME</label><input class="input" id="f-cproj" list="f-cproj-list" value="' + esc(m.clientProject || '') + '" placeholder="' + esc(m.name || 'Same as the product name') + '" autocomplete="off">' +
         '<datalist id="f-cproj-list">' + clientProjects().map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
-        '<p class="note">The boards and parts tagged with this project are offered on the Structure page. Leave it empty to use the product name.</p></div>' +
+        '<p class="note">The boards and parts tagged with this project are offered on the System page. Leave it empty to use the product name.</p></div>' +
       '<div class="field"><label for="f-phase">Build phase</label><select class="input" id="f-phase">' + (C.phases || []).map(function (s) { return '<option' + (s === m.phase ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><label for="f-desc">Description</label><textarea class="input" id="f-desc" placeholder="What the product is and where the project stands">' + esc(m.description) + '</textarea></div>' +
       '</div><div class="sheet-foot">' + (p ? '<button class="btn btn-danger" data-sheet="archive">' + (m.archived ? 'Unarchive' : 'Archive') + '</button><span class="spacer"></span>' : '<span class="spacer"></span>') +
@@ -750,7 +1536,7 @@
       var doc = P.newProject(fields, me()), slug = doc.slug, k = 2;
       while (projects[slug]) slug = doc.slug + '-' + k++;
       doc.slug = slug; projects[slug] = doc;
-      ui.slug = slug; ui.view = 'structure'; saveUi();
+      ui.slug = slug; ui.view = 'system'; saveUi();
       closeSheet(); touch(doc);
     });
   }
@@ -848,8 +1634,54 @@
       '<div class="field"><label for="f-mass">Mass each (g)</label><input class="input" id="f-mass" type="number" min="0" step="0.1" value="' + esc(n.massG == null ? '' : n.massG) + '" placeholder="Optional"></div></div>' +
       (source === 'purchased' ? '<div class="row2"><div class="field"><label for="f-supplier">Supplier</label><input class="input" id="f-supplier" value="' + esc(n.supplier || '') + '"></div>' +
         '<div class="field"><label for="f-mpn">Manufacturer part number</label><input class="input" id="f-mpn" value="' + esc(n.mpn || '') + '"></div></div>' +
-        '<div class="field"><label for="f-env">Envelope (mm)</label><input class="input" id="f-env" value="' + esc(n.envelopeMm || '') + '" placeholder="e.g. 70 × 55 × 38"></div>' : '');
+        '<div class="field"><label for="f-env">Envelope (mm)</label><input class="input" id="f-env" value="' + esc(n.envelopeMm || '') + '" placeholder="e.g. 70 × 55 × 38"></div>' : '') +
+      (MODEL_SOURCES[source] ? '<div class="field"><span class="field-label">3D model</span><div class="m-attach" id="f-model">' + modelField() + '</div></div>' : '');
     }
+    // A STEP is read here when picked and stored on Save. `mdl` is the Part's model (null once
+    // removed); `prep` a newly read one.
+    var mdl = id ? modelOf(n) : null, prep = null, keepStep = true, reading = '';
+    function modelField() {
+      if (reading) return '<div class="m-busy"><span class="spin" aria-hidden="true"></span>' + esc(reading) + '</div>';
+      var pick = '<label class="btn m-pick"><input type="file" accept=".step,.stp" id="f-step" hidden>' + (prep || mdl ? 'Replace…' : 'Attach STEP…') + '</label>';
+      if (prep) {
+        var stored = prep.meshGz.length + prep.views.reduce(function (a, v) { return a + v.blob.size; }, 0);
+        return '<div class="m-row"><div class="m-thumb"><img alt="" src="' + esc(prepUrl(prep)) + '"></div><div class="m-info"><b>' + esc(prep.name) + '</b>' +
+          '<span>' + esc(prep.bboxMm.join(' × ')) + ' mm · ' + prep.tris.toLocaleString() + ' triangles' + (prep.srcTris > prep.tris ? ' (simplified from ' + prep.srcTris.toLocaleString() + ')' : '') + '</span>' +
+          '<span>Stored: model and pictures ' + fmtBytes(stored) + (keepStep && prep.stepFits ? ' + STEP ' + fmtBytes(prep.stepGz.length) + ' compressed (' + fmtBytes(prep.size) + ' as picked)' : '') + '</span>' +
+          '<label class="check"><input type="checkbox" id="f-keep-step"' + (keepStep && prep.stepFits ? ' checked' : '') + (prep.stepFits ? '' : ' disabled') + '> Also keep the original STEP' +
+            (prep.stepFits ? ' (' + fmtBytes(prep.stepGz.length) + ' compressed)' : ': too big, over ' + fmtBytes(S.model3d.STEP_CAP) + ' compressed') + '</label></div></div>' +
+          '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
+      }
+      if (mdl) {
+        return '<div class="m-row"><div class="m-thumb map-art">' + art(n, false) + '</div><div class="m-info"><b>' + esc(mdl.file) + '</b><span>' + modelLine(mdl).replace(esc(mdl.file) + ' · ', '') + '</span>' +
+          '<span>Stored: ' + fmtBytes(storedBytes(mdl)) + (mdl.step ? ', original STEP included' : ', model and pictures only') + '</span></div></div>' +
+          '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
+      }
+      return '<div class="m-drop">' + pick + '<span class="note">Read in this browser. PL stores a simplified model (at most ' + S.model3d.MAX_TRIS.toLocaleString() + ' triangles) and pictures in its data repo; the original STEP too if you choose, compressed. It shows on the map, in Gallery and Exploded, and turns in 3D in the inspector.</span></div>';
+    }
+    var prepUrls = [];
+    function prepUrl(pr) { var u = URL.createObjectURL(pr.views[0].blob); prepUrls.push(u); return u; }
+    function refreshModel() { var box = w.querySelector('#f-model'); if (box) { box.innerHTML = modelField(); loadPictures(box); } }
+    function readFile(file) {
+      if (!file) return;
+      if (!/\.(step|stp)$/i.test(file.name)) { toast('Pick a STEP file (.step or .stp)'); return; }
+      if (file.size > 300 * 1048576) { toast('That STEP is over 300 MB; export a lighter one (no internal detail) and try again'); return; }
+      reading = 'Reading ' + file.name + '…'; refreshModel();
+      file.arrayBuffer().then(function (buf) {
+        return S.model3d.prepare(file.name, new Uint8Array(buf), function (msg) { reading = msg; refreshModel(); });
+      }).then(function (pr) { prep = pr; keepStep = pr.stepFits; reading = ''; refreshModel(); },
+        function (err) { reading = ''; refreshModel(); toast('Couldn’t read ' + file.name + ': ' + err.message); });
+    }
+    w.addEventListener('change', function (e) {
+      if (e.target.id === 'f-step') readFile(e.target.files[0]);
+      if (e.target.id === 'f-keep-step') { keepStep = e.target.checked; refreshModel(); }
+    });
+    w.addEventListener('dragover', function (e) { if (e.target.closest('#f-model')) { e.preventDefault(); e.stopPropagation(); } });
+    w.addEventListener('drop', function (e) {
+      if (!e.target.closest('#f-model')) return;
+      e.preventDefault(); e.stopPropagation();
+      readFile(e.dataTransfer.files[0]);
+    });
     partFields();
     w.addEventListener('input', function (e) { if (e.target.id === 'f-ref-q') refreshPicks(); });
     w.addEventListener('click', function (e) {
@@ -863,6 +1695,7 @@
       }
       var s = e.target.closest('[data-source]');
       if (s) { source = lastGeneric = s.dataset.source; partFields(); return; }
+      if (e.target.closest('[data-model="remove"]')) { prep = null; mdl = null; refreshModel(); return; }
       var pk = e.target.closest('[data-pick]');
       if (pk) {
         linked = linked === pk.dataset.pick ? '' : pk.dataset.pick;
@@ -894,17 +1727,30 @@
           source: source, ref: P.toolById(source) && refId ? { tool: source, id: refId } : null,
           qty: qty > 0 ? qty : 1, massG: mass === '' ? null : Math.max(0, Number(mass)),
           supplier: source === 'purchased' ? val(w, '#f-supplier') : n.supplier || '', mpn: source === 'purchased' ? val(w, '#f-mpn') : n.mpn || '',
-          envelopeMm: source === 'purchased' ? val(w, '#f-env') : n.envelopeMm || ''
+          envelopeMm: source === 'purchased' ? val(w, '#f-env') : n.envelopeMm || '',
+          // Removed in the sheet → gone; a Part whose kind doesn't take models keeps any it had.
+          model: MODEL_SOURCES[source] && !mdl ? null : n.model || null
         });
+      }
+      if (reading) { toast('Still reading the STEP…'); return; }
+      // A newly read STEP is stored once the Part exists (its files are named under its id).
+      var pr = kind === 'part' && MODEL_SOURCES[source] ? prep : null, keep = keepStep;
+      function attach(nodeId) {
+        if (!pr) return;
+        modelRecord(p, nodeId, pr, keep).then(function (rec) {
+          var f = { model: rec };
+          if (source === 'purchased' && !p.nodes[nodeId].envelopeMm) f.envelopeMm = rec.bboxMm.join(' × ');
+          setNode(nodeId, f);
+        }, function (err) { toast('Couldn’t keep the model: ' + err.message); });
       }
       if (id) {
         if (parent !== (n.parent || '')) fields.order = P.nextOrder(p, parent);
-        closeSheet(); setNode(id, fields); return;
+        closeSheet(); setNode(id, fields); attach(id); return;
       }
       var node = P.newNode(p, fields, me());
       p.nodes[node.id] = node;
       if (parent) delete ui.closed[parent];
-      closeSheet(); touch(p);
+      closeSheet(); touch(p); attach(node.id);
     });
   }
 
@@ -977,7 +1823,13 @@
         started = Object.assign({}, dirty);
         var byId = {}; Object.keys(projects).forEach(function (k) { byId[projects[k].id] = projects[k]; });
         var names = Object.keys(dirty).map(function (id) { return byId[id] ? byId[id].meta.name : id; });
-        return store.sync(byId, null, cache, { message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' });
+        // Attached models' files go up first, so a pushed project never names a file the repo lacks.
+        // A token that can't write leaves them waiting; a 404 is dealt with by the sync below.
+        return uploadModels(token).catch(function (err) {
+          if (err.status !== 404) errors.push({ repo: settings.dataRepo, message: 'Models not uploaded yet: ' + err.message });
+        }).then(function () {
+          return store.sync(byId, null, cache, { message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' });
+        });
       })
       .then(function (res) {
         access.state = 'fte';
@@ -1083,11 +1935,25 @@
       case 'open-project': ui.slug = el.dataset.slug; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
       case 'view': ui.view = el.dataset.view; saveUi(); renderPage(); break;
       case 'add-node': nodeSheet(null, {}); break;
+      case 'edit-project': projectSheet(current()); break;
       case 'add-child': e.stopPropagation(); nodeSheet(null, { parent: id }); break;
       case 'edit-node': nodeSheet(id); break;
-      case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; saveUi(); renderPage(); break;
+      case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
+      case 'xs-view': case 'xs-fit': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+        sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
-      case 'close-ins': ui.sel = ''; saveUi(); renderPage(); break;
+      case 'get-step': e.preventDefault(); downloadStep(id); break;
+      case 'bom-mode': ui.bomMode = el.dataset.mode; ui.bomSort = null; saveUi(); renderPage(); break;
+      case 'bom-sort': (function () {
+        var k = el.dataset.key, s0 = ui.bomSort || {};
+        ui.bomSort = s0.key !== k ? { key: k, dir: 'asc' } : s0.dir === 'asc' ? { key: k, dir: 'desc' } : null;
+        refreshBom();
+      })(); break;
+      case 'bom-csv': bomCsv(current()); break;
+      case 'bom-print': bomReport(current()); break;
+      case 'close-report': $('#report').hidden = true; break;
+      case 'print': window.print(); break;
+      case 'close-ins': ui.sel = ''; snapState = null; saveUi(); renderPage(); break;
       case 'layout': ui.layout = el.dataset.layout; saveUi(); renderPage(); break;
       case 'place-all': placeAll(current()); break;
       case 'place-design': (function () {
@@ -1115,7 +1981,9 @@
   $('#project-search').addEventListener('input', renderSidebar);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'structure') { ui.sel = ''; saveUi(); renderPage(); return; }
+      if (!$('#report').hidden) { $('#report').hidden = true; return; }
+      if (snapState && !$('#sheet')) { snapState = null; renderPage(); return; }
+      if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'system') { ui.sel = ''; saveUi(); renderPage(); return; }
       closeSheet(); closeMenu(); return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); sync(); return; }
@@ -1144,5 +2012,8 @@
   render();
   if (!DEMO && getToken()) sync();
 
-  S.app = { sync: sync, render: render };
+  // Hooks for driving the 3D view from the console or a test (clicking by coordinates is fragile).
+  S.app = { sync: sync, render: render, attachModel: attachModel,
+    scene: { get: function () { return scene; }, draw: drawScene, commit: commitPlace, stackOn: stackOn, centerOn: centerOn, featureAt: featureAt, snapPick: snapPick,
+      startSnap: function () { snapState = { step: 1 }; renderPage(); } } };
 })(window.Signoff = window.Signoff || {});
