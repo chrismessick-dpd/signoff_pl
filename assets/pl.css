@@ -123,9 +123,13 @@
 .map-ins-text { margin: 0; font-size: 13px; color: var(--text-2); }
 .map-ins-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .map-ins .note { margin: 0; }
+.map-ins-scrim { display: none; }
 @media (max-width: 1100px) {
   .page-map.has-sel { display: block; }
   .map-ins { position: fixed; z-index: 40; top: auto; right: 12px; bottom: 12px; width: min(360px, calc(100vw - 24px)); max-height: 70vh; box-shadow: var(--shadow-lg); }
+  /* The close button stays pinned while the panel scrolls, and the dimmed page behind closes it too. */
+  .map-ins-close { position: sticky; top: 0; align-self: flex-end; flex: none; z-index: 2; width: 36px; height: 36px; margin: -8px -8px -42px 0; font-size: 22px; background: var(--bg-elev); box-shadow: var(--shadow); border-radius: 50%; }
+  .map-ins-scrim { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, 0.18); }
 }
 
 /* Design picker in the Part sheet */

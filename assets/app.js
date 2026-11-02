@@ -305,6 +305,8 @@
     html += infoPanels(p, t, rolls[''], ids) + '</div>';
     // Exploded arranges the selected Part; assemblies and the product get the inspector there too.
     if (sel) html += layout === 'exploded' && sel !== PRODUCT && t.nodes[sel].kind === 'part' ? arrangePanel(p, t, sel) : inspector(p, t, sel);
+    // On narrow screens the panel floats over the page; tapping the dimmed page closes it.
+    if (sel) html += '<div class="map-ins-scrim" data-act="close-ins" aria-hidden="true"></div>';
     return html + '</div>';
   }
 
