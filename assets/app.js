@@ -383,7 +383,7 @@
 
   // ── Structure: a map of tiles (default) or the table ─────
   // Until designs carry a picture, a Part's tile shows a plain drawing of what it is: a board
-  // outline for EE, a part outline for ME, a box for purchased, braces for firmware.
+  // outline for EE, a part outline for ME, a box for purchased, braces for firmware (linked or not).
   function partArt(n, big) {
     var num = esc(((n.ref && P.partStatus(n, index).entry) || {}).number || n.number || '');
     var label = big && num ? '<text class="pa-text" x="60" y="44" text-anchor="middle">' + num + '</text>' : '';
@@ -397,7 +397,7 @@
     if (n.source === 'purchased') {
       return '<svg viewBox="0 0 120 76" aria-hidden="true"><path class="pa-box" d="M38 26 L60 16 L82 26 L82 52 L60 62 L38 52 Z"/><path class="pa-edge" d="M38 26 L60 36 L82 26 M60 36 V62 M49 21 L71 31"/></svg>';
     }
-    if (P.toolById(n.source)) return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-unknown" x="20" y="12" width="80" height="52" rx="8"/></svg>';
+    if (n.source !== 'fw' && P.toolById(n.source)) return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-unknown" x="20" y="12" width="80" height="52" rx="8"/></svg>';
     return '<svg viewBox="0 0 120 76" aria-hidden="true"><text class="pa-fw" x="60" y="47" text-anchor="middle">{ }</text></svg>';
   }
 

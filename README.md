@@ -7,7 +7,7 @@ product. It is structured as a tree of **assemblies** whose leaves are **Parts**
 
 - a board reviewed in Signoff EE
 - a part or enclosure reviewed in Signoff ME
-- firmware (tracked here until Signoff FW exists)
+- firmware reviewed in Signoff FW
 - a purchased item
 
 PL shows where the whole product stands:

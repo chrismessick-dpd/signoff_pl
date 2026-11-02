@@ -42,8 +42,8 @@
       ids[r.key] = n.id;
       project.nodes[n.id] = n;
     });
-    // Requirements: System ones in the project, firmware ones held in PL, and the EE/ME demo
-    // requirements given the parent links PL would have written into those reviews.
+    // Requirements: System ones in the project (and any firmware ones held in PL), and the
+    // EE/ME/FW demo requirements given the parent links PL would have written into those reviews.
     var R = S.plReqs, reqIds = {};
     project.reqs = {};
     (R ? D.requirements || [] : []).forEach(function (r) {

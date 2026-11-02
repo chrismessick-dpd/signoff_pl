@@ -98,12 +98,13 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var r2 = P.rollup(p2, index);
   ok(r2[''].total === 400 && r2[''].designs === 2 && r2[''].massG === 550, 'a design used twice counts once; mass uses quantity');
   var bought = node(p2, { parent: top.id, name: 'Battery', source: 'purchased' });
-  var fw = node(p2, { parent: top.id, name: 'Firmware', source: 'fw' });
+  // A source with no Signoff tool configured (firmware was one until Signoff FW).
+  var appPart = node(p2, { parent: top.id, name: 'Mobile app', source: 'app' });
   var loose = node(p2, { parent: top.id, name: 'Unlinked board', source: 'ee' });
   var gone = node(p2, { parent: top.id, name: 'Moved away', source: 'ee', ref: { tool: 'ee', id: 'pGONE' } });
   var r3 = P.rollup(p2, index);
   ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].unlinked === 1 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
-    'purchased, firmware, unlinked and missing Parts are counted but not in progress', JSON.stringify(r3['']));
+    'purchased, tool-less, unlinked and missing Parts are counted but not in progress', JSON.stringify(r3['']));
   eq(P.partStatus(p2.nodes[gone.id], index).state, 'notfound', 'a link to a project no repo holds is not found');
   eq(P.partStatus(p2.nodes[gone.id], { entries: {}, errors: [{ tool: 'ee' }] }).state, 'error', 'a link whose tool failed to read is an error, not missing');
   var noSum = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: null } }, errors: [] };
@@ -251,11 +252,11 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   // ── Demo ──
   var demo = Signoff.plDemo.build();
   var dr = P.rollup(demo.project, demo.index);
-  ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs === 4 && dr[''].attention === 0 && dr[''].unlinked === 0 &&
-    dr[''].purchased === 3 && dr[''].manual === 1, 'the demo product links four designs, three purchased Parts and firmware', JSON.stringify(dr['']));
+  ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs === 5 && dr[''].attention === 0 && dr[''].unlinked === 0 &&
+    dr[''].purchased === 3 && dr[''].manual === 0, 'the demo product links five designs (firmware in Signoff FW) and three purchased Parts', JSON.stringify(dr['']));
   ok(Signoff.config.demo.tree.filter(function (r) { return r.link; }).every(function (r) { return Signoff.plDemo.snapshot.designs[r.link]; }), 'every demo link has a design in the snapshot');
   eq(dr[''].massG, 205.2, 'demo mass matches the 205 g in the ME enclosure’s mass requirement');
-  ok(P.issues(demo.project, demo.index).length === 20, 'the demo lists every open issue from the four designs');
+  ok(P.issues(demo.project, demo.index).length === 25, 'the demo lists every open issue from the five designs');
   var talk = [];
   Object.keys(demo.index.entries).forEach(function (k) { ((demo.index.entries[k].summary || {}).recent || []).forEach(function (c) { talk.push(c); }); });
   ok(talk.length > 0 && talk.every(function (c) { return c.author && c.text && c.at <= new Date().toISOString(); }), 'the demo designs bring their recent discussion, dated in the past');
@@ -267,16 +268,17 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var R = Signoff.plReqs, rq = R.rollup(demo.project, demo.index);
   var bySysText = function (s) { return rq.sys.filter(function (x) { return x.rec.text.indexOf(s) === 0; })[0]; };
   ok(rq.sys.length === 10 && rq.sys.every(function (s) { return /^REQ-\d{3}$/.test(s.rec.ref) && s.rec.discipline === 'sys'; }), 'the demo has ten System requirements, all REQ- with discipline sys');
-  eq(rq.counts, { fail: 0, risk: 2, gap: 1, open: 5, pass: 2, deprecated: 0 }, 'System roll-up: at risk from linked open issues, met when every child passes');
+  eq(rq.counts, { fail: 1, risk: 2, gap: 1, open: 4, pass: 2, deprecated: 0 }, 'System roll-up: failing from a failed child, at risk from linked open issues, met when every child passes');
   var temp = bySysText('The thermostat shall measure');
   ok(temp.state === 'risk' && temp.kids.length === 2 && Object.keys(temp.cells).length === 2, 'a System requirement rolls up its children on each allocated Part');
   var iso = bySysText('Mains shall be separated');
   ok(iso.state === 'gap' && Object.keys(iso.cells).filter(function (k) { return iso.cells[k] === 'gap'; }).length === 1, 'a Part allocated with no derived requirement is a gap');
   ok(bySysText('The installed thermostat').state === 'pass' && bySysText('The thermostat shall run from').state === 'pass', 'mass and mains are met');
-  eq(rq.untraced.map(function (it) { return it.design.id + ':' + it.req.ref; }).sort(), ['mdemo13:REQ-002', 'mdemo5:REQ-004', 'pdemo11:REQ-003', 'pdemo11:REQ-004', 'pdemo7:REQ-004'], 'requirements with no System parent are untraced');
+  eq(rq.untraced.map(function (it) { return it.design.id + ':' + it.req.ref; }).sort(), ['fdemo3:REQ-003', 'fdemo3:REQ-004', 'fdemo3:REQ-005', 'mdemo13:REQ-002', 'mdemo5:REQ-004', 'pdemo11:REQ-003', 'pdemo11:REQ-004', 'pdemo7:REQ-004'], 'requirements with no System parent are untraced');
   ok(rq.inbox.unallocated.length === 1 && rq.inbox.approval.length === 1 && rq.inbox.approval[0].req.ref === 'REQ-005', 'the inbox lists the unallocated System requirement and the reworded child');
   var esd = bySysText('Every user-accessible');
-  ok(esd.kids.some(function (it) { return it.home.tool === 'pl' && it.req.discipline === 'fw'; }), 'firmware requirements are held in PL and count as children');
+  ok(esd.state === 'fail' && esd.kids.some(function (it) { return it.home.tool === 'fw' && it.req.discipline === 'fw' && it.req.state === 'fail'; }), 'a firmware child in Signoff FW counts, and its failed verification fails the System requirement');
+  eq(bySysText('Firmware shall update').state, 'risk', 'the OTA requirement is at risk from Signoff FW’s open update finding');
   // A claimed parent that isn't a System requirement of this project doesn't count.
   var forged = JSON.parse(JSON.stringify(demo.index));
   forged.entries['ee:pdemo11'].summary.reqList[2].parent = { tool: 'pl', project: 'pl-other', id: esd.rec.id, ref: 'REQ-002' };
@@ -370,7 +372,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(mid && mid.obj === 1 && side && side.obj === 0, 'seen from above, picking finds the part on top, and the board beside it');
   ok(near(sr.project([0, 0, 0]).slice(0, 2).map(Math.round), [100, 100]), 'project puts the view center in the middle of the canvas');
 
-  // The snapshot must match what Signoff EE's and ME's demos build today (when they're served
+  // The snapshot must match what Signoff EE's, ME's and FW's demos build today (when they're served
   // next to this folder). Times differ by design, so they're left out.
   var live = await new Promise(function (resolve) {
     var f = document.createElement('iframe'); f.style.display = 'none'; f.src = '../tools/demo_designs.html?t=' + Date.now();
@@ -387,9 +389,9 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   }
   if (live) {
     var liveData = JSON.parse(live.slice(live.indexOf('{'), live.lastIndexOf(';')));
-    ok(strip(liveData.designs) === strip(Signoff.plDemo.snapshot.designs), 'demo-designs.js matches the EE and ME demos (regenerate it with tools/demo_designs.html if not)');
+    ok(strip(liveData.designs) === strip(Signoff.plDemo.snapshot.designs), 'demo-designs.js matches the EE, ME and FW demos (regenerate it with tools/demo_designs.html if not)');
   } else {
-    ok(true, 'skipped: EE and ME aren’t served next to this folder, so the demo snapshot wasn’t compared');
+    ok(true, 'skipped: EE, ME and FW aren’t served next to this folder, so the demo snapshot wasn’t compared');
   }
 
   var failed = results.filter(function (r) { return !r.ok; });

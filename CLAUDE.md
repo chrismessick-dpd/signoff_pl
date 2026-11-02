@@ -1,8 +1,8 @@
 # Signoff PL (signoff_pl): notes for Claude
 
 Signoff PL (project lead) is the product-level tool. A PL project is a whole product: a tree of
-assemblies and **Parts**. Each Part links to a Signoff EE or ME review by `{tool, id}`, or is
-firmware or purchased. PL rolls up progress, issues, stages and mass from each review's
+assemblies and **Parts**. Each Part links to a Signoff EE, ME or FW review by `{tool, id}`, or is
+purchased. PL rolls up progress, issues, stages and mass from each review's
 `summary`. The one thing it writes into EE or ME is requirement records, from the Requirements
 tab (Chris, 2026-11-01; see *Requirements tab* below).
 
@@ -37,7 +37,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
 | `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js` |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
-| `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE and ME demos' summaries |
+| `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE, ME and FW demos' summaries |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
 
 Notes on behavior:
@@ -48,7 +48,7 @@ Notes on behavior:
   designs are read for non-FTEs. There's no local-only mode.
 - **Roll-up rules:**
   - A design used by several Parts counts once.
-  - Purchased and firmware Parts are left out of progress.
+  - Purchased Parts, and Parts whose source has no Signoff tool, are left out of progress.
   - Mass is the sum of `massG × qty` (grams).
   - A missing summary means "not summarized yet", never 0%.
 
@@ -56,9 +56,9 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (128 tests as of
-   2026-11-02, after Recent discussion).
-   - The snapshot test compares `assets/demo-designs.js` with the live EE and ME demos.
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (129 tests as of
+   2026-11-02, after Signoff FW joined).
+   - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
 3. Real-repo behavior has been verified only through the fake GitHub (`tests/fake-hub.js`) and
@@ -135,8 +135,10 @@ never sets one, but `bom()` multiplies by it if present.
 
 The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In short:
 - **One home per requirement.** System requirements live in the PL project (`reqs`, with `parts`
-  for allocation). A board's or part's requirement lives in its EE or ME review. Firmware ones are
-  held in PL with a `parent` and `part` until Signoff FW exists.
+  for allocation). A board's, part's or firmware target's requirement lives in its EE, ME or FW review.
+  A Part whose source has no Signoff tool can still hold its requirements in PL, with a `parent`
+  and `part`. Firmware did until Signoff FW joined `tools` on 2026-11-02; the demo's firmware
+  requirements now live in FW's demo (`fdemo3` REQ-001 and REQ-002).
 - **IDs.** Every requirement is `REQ-###`, with `discipline` sys / ee / me / fw / other. Links use
   the record `id`, never the `ref`.
 - **Flow-down.** It's the child's `parent: { tool: 'pl', project, id, ref, text }`. A child counts
