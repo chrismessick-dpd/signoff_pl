@@ -284,7 +284,8 @@
       return html + trayHtml(p) + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Add the product’s top assembly, then the Parts in it: boards, mechanical parts, firmware and purchased items.</p>' +
         '<button class="btn btn-primary" data-act="add-node">Add the first assembly or Part</button></div></div></div>';
     }
-    html += map ? (layout === 'gallery' ? gallery(p, t, ids) : layout === 'exploded' ? exploded(p, t, ids) : treeMap(p, t, rolls)) : listTable(t, rolls, ids);
+    html += layout === 'map' || layout === 'gallery' ? '<div class="sys-diagram">' + (layout === 'gallery' ? gallery(p, t, ids) : treeMap(p, t, rolls)) + '</div>'
+      : layout === 'exploded' ? exploded(p, t, ids) : listTable(t, rolls, ids);
     html += infoPanels(p, t, rolls[''], ids) + '</div>';
     // Exploded arranges the selected Part; assemblies and the product get the inspector there too.
     if (sel) html += layout === 'exploded' && sel !== PRODUCT && t.nodes[sel].kind === 'part' ? arrangePanel(p, t, sel) : inspector(p, t, sel);
@@ -293,30 +294,28 @@
 
   // What the Overview tab used to show, under the structure.
   function infoPanels(p, t, r, ids) {
-    var stageList = Object.keys(r.stages).sort().map(function (k) { var s = k.split(':'); return srcChip(s[0]) + ' ' + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' ×' + r.stages[k] : ''); }).join('<br>');
+    var stageList = Object.keys(r.stages).sort().map(function (k) { var s = k.split(':'); return '<span class="sys-stage">' + srcChip(s[0]) + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' <span class="map-qty">×' + r.stages[k] + '</span>' : '') + '</span>'; }).join('');
     var html = '<div class="section-title">Status</div><div class="grid grid-4">' +
       stat(r.openTotal, 'Open issues', r.openTotal ? 'issue' : 'pass', sevs(r.open)) +
       stat(r.parts, plural(r.parts, 'Part').replace(/^\d+ /, ''), '', [r.designs && plural(r.designs, 'design'), r.purchased && r.purchased + ' purchased', r.manual && r.manual + ' firmware'].filter(Boolean).join(' · ')) +
       stat(r.unlinked + r.attention, 'Need attention', r.unlinked + r.attention ? 'issue' : '', r.unlinked + r.attention ? [r.unlinked && r.unlinked + ' not linked', r.attention && r.attention + ' unreadable'].filter(Boolean).join(' · ') : 'Every design reads') +
       stat(fmtMass(r.massG), 'Mass', '', r.massMissing ? plural(r.massMissing, 'Part') + ' without a mass' : 'All Parts weighed') + '</div>';
 
-    // One card per linked design, in tree order.
+    // One row per linked design, in tree order.
     var seen = {}, cards = [];
     ids.forEach(function (id) {
       var n = t.nodes[id], st = P.partStatus(n, index);
       if (!st || ['ok', 'nosummary'].indexOf(st.state) < 0 || seen[P.refKey(n.ref)]) return;
       seen[P.refKey(n.ref)] = 1;
       var s = st.summary, e = st.entry;
-      cards.push('<div class="card cl-card design-card">' +
-        '<div class="cl-card-top"><div><div class="cl-card-title">' + srcChip(n.source) + esc(n.name) + '</div>' +
-        '<div class="cl-card-desc">' + esc([e.name !== n.name ? e.name : '', e.number, e.revision && 'Rev ' + e.revision].filter(Boolean).join(' · ')) + '</div></div>' +
-        (s ? ring(s.pct, 46, 5, s.pct, '') : '') + '</div>' +
-        (s ? pbar(s.pct) : stateChip(st)) +
-        '<div class="cl-card-foot"><span>' + esc((s && s.stage) || e.stage || '') + '</span>' + (s ? sevs((s.issues || {}).open || {}) : '') + '</div>' +
-        '<div class="cl-card-foot"><span class="muted" style="color:var(--text-3);font-size:12px">' + (s && s.at ? 'Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') : '') + '</span>' +
-        '<a class="open-link" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(P.toolById(n.source).name) + ' ›</a></div></div>');
+      cards.push('<div class="sys-design">' +
+        '<div class="sys-design-name">' + srcChip(n.source) + '<div><b>' + esc(n.name) + '</b><span>' + esc([e.name !== n.name ? e.name : '', e.number, e.revision && 'Rev ' + e.revision].filter(Boolean).join(' · ')) + '</span></div></div>' +
+        '<span class="sys-design-stage">' + esc((s && s.stage) || e.stage || '') + (s && s.at ? '<i>Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</i>' : '') + '</span>' +
+        '<div class="sys-design-pct">' + (s ? pbar(s.pct) : stateChip(st)) + '</div>' +
+        '<div class="sys-design-sev">' + (s ? sevs((s.issues || {}).open || {}) : '') + '</div>' +
+        '<a class="open-link" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(P.toolById(n.source).short) + ' ›</a></div>');
     });
-    if (cards.length) html += '<div class="section-title">Designs</div><div class="grid grid-3">' + cards.join('') + '</div>';
+    if (cards.length) html += '<div class="section-title">Designs</div><div class="card sys-designs">' + cards.join('') + '</div>';
 
     var attn = ids.filter(function (id) {
       var st = P.partStatus(t.nodes[id], index);
@@ -329,7 +328,7 @@
           '<div class="attn-text">' + esc(n.name) + '<div>' + esc(STATE_TEXT[st.state][2]) + '</div></div>' + stateChip(st) + '</div>';
       }).join('') + '</div>';
     }
-    if (Object.keys(r.stages).length) html += '<div class="section-title">Stages</div><div class="card" style="padding:14px 18px;font-size:13.5px;line-height:2">' + stageList + '<p class="note">Each tool keeps its own stages. Gates (EVT, DVT, PVT) will tie them together.</p></div>';
+    if (Object.keys(r.stages).length) html += '<div class="section-title">Stages</div><div class="card sys-stages"><div class="sys-stage-list">' + stageList + '</div><p class="note">Each tool keeps its own stages. Gates (EVT, DVT, PVT) will tie them together.</p></div>';
     return html + '<p class="note" style="margin-top:28px">' + (index && index.at ? 'Designs read ' + relTime(index.at) : 'Designs not read yet') +
       (r.designs ? ' · progress is checks reviewed across ' + plural(r.designs, 'linked design') : '') +
       ' · created ' + relTime(p.createdAt) + (p.createdBy ? ' by ' + esc(p.createdBy) : '') + '</p>';

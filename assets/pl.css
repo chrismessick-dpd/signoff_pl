@@ -341,3 +341,34 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .ins-from { color: var(--text-3); }
 .ins-more { align-self: flex-start; background: none; border: none; padding: 6px 0 0; font: inherit; font-size: 12.5px; color: var(--accent); cursor: pointer; }
 .ins-more:hover { text-decoration: underline; }
+
+/* System: the structure diagram (Map, Gallery) in its own panel */
+.sys-diagram { background: var(--bg-sunk); border-radius: var(--radius); padding: 18px; }
+.sys-diagram .tm { --tm-line: rgba(0, 0, 0, 0.2); }
+.sys-diagram .map-tray { margin-bottom: 14px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sys-diagram .tm { --tm-line: rgba(255, 255, 255, 0.2); } }
+:root[data-theme="dark"] .sys-diagram .tm { --tm-line: rgba(255, 255, 255, 0.2); }
+@media (max-width: 600px) { .sys-diagram { padding: 12px; margin: 0 -4px; } }
+
+/* System: compact Designs and Stages */
+.sys-designs { padding: 4px 16px; }
+.sys-design { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 150px 92px auto; gap: 14px; align-items: center; padding: 9px 0; font-size: 13px; }
+.sys-design + .sys-design { border-top: 1px solid var(--hair); }
+.sys-design-name { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.sys-design-name > div { min-width: 0; display: flex; flex-direction: column; }
+.sys-design-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-design-name span, .sys-design-stage i { font-size: 11.5px; color: var(--text-3); font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-design-stage { display: flex; flex-direction: column; min-width: 0; color: var(--text-2); }
+.sys-design .sevs { gap: 6px; font-size: 12px; }
+.sys-stages { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.sys-stage-list { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.sys-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; background: var(--bg-sunk); border-radius: 999px; padding: 3px 10px 3px 4px; }
+.sys-stages .note { margin: 0; }
+@media (max-width: 700px) {
+  .sys-design { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .sys-design-stage { grid-column: 1; }
+  .sys-design-pct { grid-column: 1; }
+  .sys-design-sev { grid-column: 2; grid-row: 2 / 4; align-self: center; }
+  .sys-design .open-link { grid-column: 2; grid-row: 1; }
+}
+.sys-design-name .src, .sys-stage .src { min-width: 26px; text-align: center; flex: none; }

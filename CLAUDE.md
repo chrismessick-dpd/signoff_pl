@@ -120,6 +120,8 @@ System. PL has no view deep link.
   dragged too.
 - **Inspectors.** The trunk and assemblies open `asmInspector`, the full roll-up. In Exploded,
   only Parts get `arrangePanel`; assemblies and the product get the inspector.
+- **Panels.** Map and Gallery sit in a gray `.sys-diagram` panel. Underneath, Designs is one compact
+  card with a row per design (`.sys-design`), and Stages is a row of chips (Chris, 2026-11-01).
 - **One Part** (`P.soloPart`), alone or in the one top assembly: the map shows a single tile that
   is both the top and the Part. Its inspector adds *Edit assembly* and *Add Part*.
 
