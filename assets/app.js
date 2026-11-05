@@ -192,6 +192,7 @@
   }
 
   function renderSyncState(state) {
+    markSyncButtons();
     var dot = $('#sync-dot'), title = $('#sync-title'), sub = $('#sync-sub');
     var n = Object.keys(dirty).length;
     if (DEMO) { dot.dataset.tone = 'idle'; title.textContent = 'Demo mode'; sub.textContent = 'Changes stay in this browser'; return; }
@@ -206,6 +207,24 @@
     sub.textContent = errs ? lastSync.errors[0].message : lastSync ? relTime(lastSync.at) : 'Click to sync';
   }
 
+  // A Sync button: while a sync runs its arrows turn and it says Syncing… (suite.css .is-syncing).
+  function syncButton(label, cls, title) {
+    return '<button class="btn' + (cls ? ' ' + cls : '') + (syncing ? ' is-syncing' : '') + '" data-act="sync" data-label="' + esc(label) + '"' +
+      (title ? ' data-title="' + esc(title) + '" title="' + esc(syncing ? 'Syncing with GitHub…' : title) + '"' : '') + '>' +
+      ICON.sync + '<span class="btn-label">' + (syncing ? 'Syncing…' : esc(label)) + '</span>';
+  }
+  // Starting or ending a sync updates every Sync button in place, without a render.
+  function markSyncButtons() {
+    var on = !!syncing;
+    document.querySelectorAll('.btn[data-act="sync"]').forEach(function (b) {
+      if (b.classList.contains('is-syncing') === on) return;
+      b.classList.toggle('is-syncing', on);
+      var label = b.querySelector('.btn-label');
+      if (label) label.textContent = on ? 'Syncing…' : (b.dataset.label || 'Sync');
+      if (b.dataset.title) b.title = on ? 'Syncing with GitHub…' : b.dataset.title;
+    });
+  }
+
   // ── Toolbar ──────────────────────────────────────────────
   function renderToolbar() {
     var p = current();
@@ -217,7 +236,7 @@
       var extra = v.id === 'issues' && r.openTotal ? '<span class="count">' + esc(r.openTotal) + '</span>' : need ? '<span class="count" title="Waiting in Needs you">' + need + '</span>' : '';
       return '<button role="tab" class="' + (v.id === ui.view ? 'on' : '') + '" data-act="view" data-view="' + v.id + '">' + v.label + extra + '</button>';
     }).join('');
-    $('#toolbar-actions').innerHTML = (DEMO ? '' : '<button class="btn" data-act="sync" title="Sync PL projects and read the designs again (Ctrl+S)">' + ICON.sync + '<span class="btn-label">Sync</span>' +
+    $('#toolbar-actions').innerHTML = (DEMO ? '' : syncButton('Sync', '', 'Sync PL projects and read the designs again (Ctrl+S)') +
       (Object.keys(dirty).length ? '<span class="badge">' + Object.keys(dirty).length + '</span>' : '') + '</button>') +
       '<button class="btn btn-primary" data-act="add-node" title="Add a Part or assembly">' + ICON.plus + '<span class="btn-label">Add</span></button>' +
       '<button class="icon-btn" data-act="project-menu" title="More" aria-label="More">' + ICON.more + '</button>';
@@ -255,7 +274,7 @@
       '<p>' + (none ? 'A PL project is the whole product: assemblies and the Parts in them. Link each Part to its review in Signoff EE or ME, and see where the product stands in one place.'
         : 'Choose a project from the sidebar, or start a new one.') + '</p>' +
       '<button class="btn btn-primary" data-act="new-project">New project</button>' +
-      (none && !DEMO ? ' <button class="btn" data-act="sync">Pull from GitHub</button>' : '') + '</div></div>';
+      (none && !DEMO ? ' ' + syncButton('Pull from GitHub') + '</button>' : '') + '</div></div>';
   }
 
   // Shown instead of the projects until a sync confirms an FTE's token (see allowed()).
@@ -263,9 +282,10 @@
     var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
     var head = !getToken() ? ['Sign in to Signoff PL', 'Signoff PL is for Dovetail FTEs. Add your GitHub token in Settings; PL shows the projects once it confirms the token can open ' + repo + '.']
       : denied() ? ['Signoff PL is for Dovetail FTEs', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + '. An FTE adds you from People in Signoff EE. Accept GitHub’s invitation, then sync again.']
+      : syncing ? ['Syncing with GitHub', 'Checking that your token can open ' + repo + '. The projects show here as soon as the sync finishes.']
       : ['Not checked yet', 'PL shows the projects once a sync confirms your token can open ' + repo + '.'];
     return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
-      (getToken() ? '<button class="btn btn-primary" data-act="sync">' + (denied() ? 'Sync again' : 'Sync') + '</button> <button class="btn" data-act="settings">Settings</button>'
+      (getToken() ? syncButton(denied() ? 'Sync again' : 'Sync', 'btn-primary') + '</button> <button class="btn" data-act="settings">Settings</button>'
         : '<button class="btn btn-primary" data-act="settings">Settings</button>') +
       (denied() && kept ? '<p class="note" style="margin-top:16px">' + plural(kept, 'unsynced project') + ' from an earlier sign-in ' + (kept === 1 ? 'stays' : 'stay') + ' in this browser, hidden. ' + (kept === 1 ? 'It’s' : 'They’re') + ' pushed the next time an FTE syncs here.</p>' : '') +
       '</div></div>';
@@ -1874,6 +1894,7 @@
     if (syncing) return;
     if (!getToken()) { settingsSheet(); return; }
     syncing = true; renderSyncState('busy');
+    if (!current()) renderPage();   // an empty or locked page says the sync is running
     var token = getToken(), tag = P.tokenTag(token), signedIn = false, started = {}, errors = [], pushed = 0;
     var store = new S.GitHubStore({ owner: settings.owner, repo: settings.dataRepo, branch: settings.branch, dataPath: '', token: token, merge: P.merge });
     store.user()
