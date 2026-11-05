@@ -17,11 +17,15 @@
   function build() {
     var user = 'Demo';
     var project = P.newProject(D.project || { name: 'Demo product' }, user);
+    // Fixed ids, so the EE, ME and FW demos' requirements can name their PL parents (`parent` in
+    // their config.js): the project is pldemo and each System requirement qdemo-<key>.
+    project.id = 'pldemo';
     var ids = {}, index = { at: new Date().toISOString(), entries: {}, errors: [], files: {}, demo: true };
     Object.keys(SNAP.designs).forEach(function (key) {
       var d = SNAP.designs[key], at = key.indexOf(':');
       var summary = d.summary ? Object.assign({}, d.summary, { at: shifted(d.summary.at),
-        recent: (d.summary.recent || []).map(function (c) { return Object.assign({}, c, { at: shifted(c.at) }); }) }) : null;
+        recent: (d.summary.recent || []).map(function (c) { return Object.assign({}, c, { at: shifted(c.at) }); }) },
+        d.summary.revisions ? { revisions: d.summary.revisions.map(function (r) { return r.sentAt ? Object.assign({}, r, { sentAt: shifted(r.sentAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {}) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
       // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo).
@@ -54,6 +58,8 @@
         parts: (r.parts || []).map(function (k) { return ids[k]; }).filter(Boolean)
       }, user);
       if (parent) { q.parent = R.parentLink(project, parent); q.part = ids[r.part] || ''; delete q.parts; }
+      delete project.reqs[q.id];
+      q.id = 'qdemo-' + r.key;
       reqIds[r.key] = q.id;
       project.reqs[q.id] = q;
       (r.children || []).forEach(function (c) {

@@ -39,19 +39,19 @@ window.SIGNOFF_CONFIG = {
   "demo": {
     "project": {
       "name": "Smart Thermostat", "client": "Acme Climate", "number": "DT-1000", "phase": "EVT",
-      "description": "Wi-Fi smart thermostat for 24 V AC HVAC systems: touch display, room temperature and humidity sensing, relay outputs. First engineering build."
+      "description": "Wi-Fi smart thermostat powered from 100–240 V AC mains: touch display, room temperature and humidity sensing, and relays that switch the HVAC system's heat, cool and fan calls. First engineering build (EVT)."
     },
     "tree": [
       { "key": "top", "kind": "assembly", "name": "Smart Thermostat", "number": "DT-1000" },
       { "key": "elec", "parent": "top", "kind": "assembly", "name": "Electronics" },
       { "key": "main", "parent": "elec", "kind": "part", "name": "Main PCBA", "source": "ee", "link": "ee:pdemo7", "massG": 48 },
-      { "key": "disp", "parent": "elec", "kind": "part", "name": "Display & sensor board", "source": "ee", "link": "ee:pdemo11", "massG": 22 },
+      { "key": "disp", "parent": "elec", "kind": "part", "name": "Display & Sensor Board", "source": "ee", "link": "ee:pdemo11", "massG": 22 },
       { "key": "tft", "parent": "elec", "kind": "part", "name": "2.8\" TFT display module", "source": "purchased", "supplier": "Example Displays", "mpn": "TFT28-IPS-SPI", "massG": 18, "envelopeMm": "69 × 50 × 3.4" },
       { "key": "ffc", "parent": "elec", "kind": "part", "name": "FFC, 24-pin, 0.5 mm pitch", "source": "purchased", "supplier": "Example Interconnect", "mpn": "FFC-24-05-60", "massG": 1 },
-      { "key": "fw", "parent": "elec", "kind": "part", "name": "Thermostat firmware", "source": "fw", "link": "fw:fdemo3" },
+      { "key": "fw", "parent": "elec", "kind": "part", "name": "Thermostat Firmware", "source": "fw", "link": "fw:fdemo3" },
       { "key": "mech", "parent": "top", "kind": "assembly", "name": "Housing" },
-      { "key": "enc", "parent": "mech", "kind": "part", "name": "Enclosure", "source": "me", "link": "me:mdemo5", "massG": 75 },
-      { "key": "brkt", "parent": "mech", "kind": "part", "name": "Wall bracket", "source": "me", "link": "me:mdemo13", "massG": 38 },
+      { "key": "enc", "parent": "mech", "kind": "part", "name": "Enclosure", "source": "me", "link": "me:mdemo5", "massG": 50 },
+      { "key": "brkt", "parent": "mech", "kind": "part", "name": "Wall Bracket", "source": "me", "link": "me:mdemo13", "massG": 69.4 },
       { "key": "screw", "parent": "mech", "kind": "part", "name": "Screw, M3.5 × 25, pan head", "source": "purchased", "supplier": "Example Fasteners", "mpn": "M35-25-PH-ZN", "qty": 2, "massG": 1.6 }
     ],
     "previews": {

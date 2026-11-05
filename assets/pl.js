@@ -205,7 +205,7 @@
        Purchased and firmware Parts aren't in it.
      - A design used twice (two of the same board) counts once in each total.
      - Mass is per Part times quantity, and only over Parts that have one; massMissing counts
-       the rest. Assemblies have no mass of their own.
+       the rest, except firmware Parts, which have none. Assemblies have no mass of their own.
      - Stages are listed per tool, not mapped onto each other. */
   function rollup(project, index) {
     var t = tree(project), out = {};
@@ -214,7 +214,7 @@
       roll.parts++;
       var qty = node.qty > 0 ? node.qty : 1;
       if (node.massG != null && node.massG !== '' && !isNaN(node.massG)) { roll.massG += Number(node.massG) * qty; roll.massParts++; }
-      else roll.massMissing++;
+      else if (node.source !== 'fw') roll.massMissing++;   // firmware has no mass
       if (st.state === 'purchased') { roll.purchased++; return; }
       if (st.state === 'manual') { roll.manual++; return; }
       if (st.state === 'unlinked') { roll.unlinked++; return; }
@@ -402,7 +402,7 @@
     var parts = rows.filter(function (r) { return r.kind === 'part'; });
     var mass = parts.reduce(function (a, r) { return a + (r.extMassG || 0); }, 0);
     return { mode: mode === 'flat' ? 'flat' : 'indented', rows: rows, totals: { lines: parts.length, qty: parts.reduce(function (a, r) { return a + r.extQty; }, 0),
-      massG: Math.round(mass * 10) / 10, massMissing: parts.filter(function (r) { return r.massG == null; }).length } };
+      massG: Math.round(mass * 10) / 10, massMissing: parts.filter(function (r) { return r.massG == null && r.source !== 'fw'; }).length } };
   }
 
   S.pl = {
