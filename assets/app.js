@@ -1864,13 +1864,15 @@
         '<div class="field"><label for="s-branch">Branch</label><input class="input" id="s-branch" value="' + esc(settings.branch) + '"></div></div>' +
         '<div class="field"><label for="s-data">PL data repo</label><input class="input" id="s-data" value="' + esc(settings.dataRepo) + '"></div>' +
         '<p class="note">Designs are read from ' + C.tools.map(function (t) { return esc(t.dataRepo) + ' and ' + esc(t.prefix) + '…'; }).join(', ') + ' (set in assets/config.js).</p></details>') +
-      '</div><div class="sheet-foot"><span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (DEMO ? 'Done' : 'Save & sync') + '</button></div>');
+      '</div><div class="sheet-foot">' + (DEMO || !token ? '' : '<button class="btn" data-sheet="signout" title="Remove the token and every Signoff and Fabcheck copy kept in this browser">Sign out</button>') +
+      '<span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (DEMO ? 'Done' : 'Save & sync') + '</button></div>');
     var theme = settings.theme;
     w.addEventListener('click', function (e) {
       var t = e.target.closest('#s-theme [data-theme]');
       if (t) { theme = t.dataset.theme; w.querySelectorAll('#s-theme button').forEach(function (b) { b.classList.toggle('on', b === t); }); applyTheme(theme); return; }
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') { applyTheme(settings.theme); return closeSheet(); }
+      if (b.dataset.sheet === 'signout') return signOut();
       settings.user = val(w, '#s-user'); settings.theme = theme;
       if (!DEMO) {
         settings.owner = val(w, '#s-owner') || C.repos.owner; settings.branch = val(w, '#s-branch') || 'main'; settings.dataRepo = val(w, '#s-data') || C.repos.dataRepo;
@@ -1881,6 +1883,37 @@
       save('settings', settings); saveSharedTheme(theme);
       closeSheet(); render();
       if (!DEMO && getToken()) sync();
+    });
+  }
+
+  // Sign out of this browser, as Signoff EE's Settings does: the token goes (it's shared), and so
+  // does every copy the suite keeps here (EE, ME, FW and PL working copies, PL's pictures and
+  // waiting model files, Fabcheck's runs and hand-offs). Only the theme stays. Unsynced changes
+  // would be lost, so they're counted first.
+  var SUITE_NS = ['signoff.v1.', 'signoff-me.v1.', 'signoff-fw.v1.', 'signoff-pl.v1.', 'fabcheck.v1.'];
+  var SUITE_DBS = ['fabcheck', 'dovetail-handoff', 'dovetail-handoff-demo', 'signoff-pl-pictures', 'signoff-pl-uploads'];
+  function signOut() {
+    var unsynced = 0;
+    SUITE_NS.forEach(function (ns) {
+      try { unsynced += Object.keys(JSON.parse(localStorage.getItem(ns + 'dirty') || '{}') || {}).length; } catch (e) { /* unreadable: nothing counted */ }
+    });
+    try { unsynced += Object.keys((JSON.parse(localStorage.getItem('signoff.v1.held') || '{}') || {}).projects || {}).length; } catch (e) { /* ignore */ }
+    var ask = 'Sign out of this browser? This removes your GitHub token and every Signoff and Fabcheck copy kept here. Your projects and reviews stay on GitHub.';
+    if (unsynced) ask = plural(unsynced, 'project, review or list has', 'projects, reviews or lists have') + ' changes that aren’t on GitHub yet and would be lost. Sync first unless you mean to throw them away.\n\n' + ask;
+    if (!confirm(ask)) return;
+    var theme = settings.theme;
+    try {
+      sessionStorage.removeItem(TOKEN_KEY);
+      Object.keys(localStorage).forEach(function (k) {
+        if (k === TOKEN_KEY || SUITE_NS.some(function (ns) { return k.indexOf(ns) === 0; })) localStorage.removeItem(k);
+      });
+    } catch (e) { /* storage blocked */ }
+    clearPictures();
+    var up = upDbOpen; upDbOpen = null;
+    (up || Promise.resolve(null)).then(function (db) { try { if (db) db.close(); } catch (e) { /* closed */ } }).then(function () {
+      try { SUITE_DBS.forEach(function (db) { indexedDB.deleteDatabase(db); }); } catch (e) { /* no IndexedDB */ }
+      saveSharedTheme(theme);
+      location.reload();
     });
   }
 
