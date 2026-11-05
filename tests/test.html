@@ -256,8 +256,8 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(P.liveNodes(demo.project).length === Signoff.config.demo.tree.length && dr[''].designs === 5 && dr[''].attention === 0 && dr[''].unlinked === 0 &&
     dr[''].purchased === 3 && dr[''].manual === 0, 'the demo product links five designs (firmware in Signoff FW) and three purchased Parts', JSON.stringify(dr['']));
   ok(Signoff.config.demo.tree.filter(function (r) { return r.link; }).every(function (r) { return Signoff.plDemo.snapshot.designs[r.link]; }), 'every demo link has a design in the snapshot');
-  eq(dr[''].massG, 205.2, 'demo mass matches the 205 g in the ME enclosure’s mass requirement');
-  ok(P.issues(demo.project, demo.index).length === 25, 'the demo lists every open issue from the five designs');
+  eq(dr[''].massG, 211.6, 'demo mass matches the 212 g in the ME enclosure’s mass requirement');
+  ok(P.issues(demo.project, demo.index).length === 26, 'the demo lists every open issue from the five designs');
   var talk = [];
   Object.keys(demo.index.entries).forEach(function (k) { ((demo.index.entries[k].summary || {}).recent || []).forEach(function (c) { talk.push(c); }); });
   ok(talk.length > 0 && talk.every(function (c) { return c.author && c.text && c.at <= new Date().toISOString(); }), 'the demo designs bring their recent discussion, dated in the past');
@@ -314,7 +314,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 
   // ── Bill of materials ──
   var bi = P.bom(demo.project, demo.index, 'indented'), bf = P.bom(demo.project, demo.index, 'flat');
-  eq([bi.totals.massG, bf.totals.massG], [dr[''].massG, dr[''].massG], 'BOM mass totals match the roll-up (205.2 g), indented and consolidated');
+  eq([bi.totals.massG, bf.totals.massG], [dr[''].massG, dr[''].massG], 'BOM mass totals match the roll-up (211.6 g), indented and consolidated');
   eq(bi.rows.slice(0, 3).map(function (r) { return r.item; }), ['1', '1.1', '1.1.1'], 'indented BOM numbers items by the structure');
   ok(bi.rows.length === P.liveNodes(demo.project).length && bf.rows.every(function (r) { return r.kind === 'part'; }), 'indented lists every node; consolidated lists Parts only');
   eq(bi.totals.qty, 9, 'the demo BOM has 9 pieces (two screws)');
@@ -401,7 +401,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   });
   function strip(designs) {
     var out = {};
-    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; (d.summary.reqList || []).forEach(function (q) { delete q.at; }); (d.summary.recent || []).forEach(function (c) { delete c.at; }); out[k] = d; });
+    Object.keys(designs).forEach(function (k) { var d = JSON.parse(JSON.stringify(designs[k])); delete d.summary.at; (d.summary.reqList || []).forEach(function (q) { delete q.at; }); (d.summary.recent || []).forEach(function (c) { delete c.at; }); (d.summary.revisions || []).forEach(function (r) { delete r.sentAt; }); out[k] = d; });
     return M.stableStringify(out);
   }
   if (live) {
