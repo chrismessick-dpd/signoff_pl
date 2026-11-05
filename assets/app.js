@@ -1980,6 +1980,7 @@
         if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ': Signoff PL is for Dovetail FTEs.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
+        checkForUpdate();
       })
       .catch(function (err) {
         syncing = false; render();
@@ -2138,6 +2139,54 @@
     banner.innerHTML = 'You’re exploring a demo of Signoff PL, Dovetail’s project lead tool. The product and its designs are made up; changes stay in this browser.<button id="reset-demo">Reset demo</button>';
     banner.querySelector('#reset-demo').addEventListener('click', resetDemo);
   }
+  // ── Tool updates (as in Signoff EE) ──────────────────────
+  // A page left open keeps running the version it loaded. Now and then (on opening, every few
+  // minutes, when the tab comes back into view, after a sync) it asks this site which version it
+  // serves now. If that's another one, it reloads into it as soon as nothing is being typed
+  // or edited (no sheet open, where a STEP is read), and the new page says "Tool updated". If the site serves the same version, or
+  // can't be reached, the page stays as it is. A version it already reloaded for is never tried
+  // twice, so a stale cache can't make it loop.
+  var UPDATE_KEY = 'signoff.toolUpdate';   // sessionStorage: { tried: hash, from: hash }
+  var updateWaiting = '', updateBusy = false;
+  function updateMemo(v) {
+    try {
+      if (v === undefined) return JSON.parse(sessionStorage.getItem(UPDATE_KEY) || '{}') || {};
+      if (v) sessionStorage.setItem(UPDATE_KEY, JSON.stringify(v)); else sessionStorage.removeItem(UPDATE_KEY);
+    } catch (e) { return null; }
+  }
+  function pageIdle() {
+    var a = document.activeElement;
+    var typing = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+    return !syncing && !typing && !$('#sheet') && !$('#menu') && !document.hidden;
+  }
+  function reloadWhenIdle() {
+    if (!updateWaiting) return;
+    if (!pageIdle()) { setTimeout(reloadWhenIdle, 3000); return; }
+    if (updateMemo({ tried: updateWaiting, from: (window.SIGNOFF_VERSION || {}).hash }) === null) { updateWaiting = ''; return; }
+    location.reload();
+  }
+  function checkForUpdate() {
+    var have = (window.SIGNOFF_VERSION || {}).hash;
+    if (!have || updateBusy || updateWaiting || !window.fetch) return;
+    updateBusy = true;
+    fetch('assets/version.js?nc=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (text) {
+        updateBusy = false;
+        var m = /hash:\s*'([0-9a-f]+)'/.exec(text || '');
+        if (!m || m[1] === have || (updateMemo() || {}).tried === m[1]) return;
+        updateWaiting = m[1];
+        reloadWhenIdle();
+      }, function () { updateBusy = false; });
+  }
+  (function () {
+    var memo = updateMemo() || {};
+    if (memo.from && memo.from !== (window.SIGNOFF_VERSION || {}).hash) { updateMemo({ tried: memo.tried }); setTimeout(function () { toast('Tool updated'); }, 300); }
+    setTimeout(checkForUpdate, 5000);
+    setInterval(checkForUpdate, 5 * 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkForUpdate(); });
+  })();
+
   if (!projects[ui.slug]) ui.slug = firstSlug();
   render();
   if (!DEMO && getToken()) sync();
