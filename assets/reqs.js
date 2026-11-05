@@ -171,7 +171,7 @@
             segRing(d.items.filter(function (it) { return it.req.state !== 'deprecated'; }).map(function (it) { return it.req.state; }), 24) +
             '<span class="rq-text"><span class="rq-t"><b>' + esc(d.design.name || d.design.id) + '</b>' + (parts.length ? ' <span class="rq-meta">as ' + esc(parts.join(', ')) + '</span>' : '') + '</span>' +
             '<span class="rq-meta">' + ctx.plural(d.counts.live, 'requirement') + stateDots(d.counts) + (d.counts.deprecated ? ' · <a href="#" data-rq="dep">' + (ui.rqDep ? 'hide' : 'show') + ' ' + d.counts.deprecated + ' deprecated</a>' : '') + '</span></span>' +
-            (tool ? '<a class="btn btn-sm" href="' + esc(reqUrl({ home: { tool: d.tool, project: d.design.id } })) + '" target="_blank" rel="noopener" data-stop>Open in ' + esc(tool.short) + '</a>' : '<span></span>') + '</div>';
+            (tool ? '<a class="btn btn-sm" href="' + esc(reqUrl({ home: { tool: d.tool, project: d.design.id } })) + '" data-stop>Open in ' + esc(tool.short) + '</a>' : '<span></span>') + '</div>';
           if (dOpen) html += x.rows.map(function (it) { return kidRow(p, t, it, sel, false, true); }).join('') || '<div class="rq-row kid"><span></span><span></span><span></span><span class="rq-text"><span class="rq-t muted">No requirements in this review yet.</span></span><span></span></div>';
         });
       });
@@ -205,7 +205,7 @@
       var q = it.req, key = it.key, tool = P.toolById(it.home.tool);
       var issues = (q.issues || []).map(function (id) {
         var o = it.design && it.design.summary && (it.design.summary.open || []).filter(function (x) { return x.id === id; })[0];
-        return '<a class="rq-pill" href="' + esc(reqUrl(it, id)) + '" target="_blank" rel="noopener" data-stop title="' + esc(o ? o.text : id) + '"><i class="sev-dot ' + esc(o ? o.severity : 'minor') + '"></i>' + esc(id) + (o ? ' · ' + esc(o.severity) : '') + '</a>';
+        return '<a class="rq-pill" href="' + esc(reqUrl(it, id)) + '" data-stop title="' + esc(o ? o.text : id) + '"><i class="sev-dot ' + esc(o ? o.severity : 'minor') + '"></i>' + esc(id) + (o ? ' · ' + esc(o.severity) : '') + '</a>';
       }).join('');
       return '<div class="rq-row kid' + (sel === key ? ' sel' : '') + (q.state === 'deprecated' ? ' dep' : '') + '" data-rq="sel" data-id="' + esc(key) + '"><span>' + (isNew(p, q.at) ? '<i class="rq-new" title="Changed since you last looked"></i>' : '') + '</span>' +
         (inSection ? '<span></span>' : discChip(q.discipline)) + '<span class="rq-ref">' + esc(q.ref) + '</span><span class="rq-text"><span class="rq-t">' + (inSection ? '' : esc(homeName(t, it)) + ' · ') + esc(q.text) + '</span>' +
@@ -280,11 +280,11 @@
         html += '<div class="rq-ins-h">Verification</div><p>' + esc(WORD[q.verify]) + ' · ' + ctx.plural(q.links || 0, 'traced check') + '</p>' +
           ((q.issues || []).length ? '<div class="rq-issues">' + q.issues.map(function (id) {
             var o = (it.design.summary.open || []).filter(function (x) { return x.id === id; })[0];
-            return '<a href="' + esc(reqUrl(it, id)) + '" target="_blank" rel="noopener"><span class="sev ' + esc(o ? o.severity : 'minor') + '">' + esc(o ? o.severity : 'issue') + '</span><span>' + esc(o ? o.text : id) + '</span></a>';
+            return '<a href="' + esc(reqUrl(it, id)) + '"><span class="sev ' + esc(o ? o.severity : 'minor') + '">' + esc(o ? o.severity : 'issue') + '</span><span>' + esc(o ? o.text : id) + '</span></a>';
           }).join('') + '</div>' : '');
       }
       if (q.at) html += '<p class="note">' + (isNew(p, q.at) ? '<i class="rq-new"></i>' : '') + 'Changed ' + esc(ctx.relTime(q.at)) + (q.by ? ' by ' + esc(q.by) : '') + '</p>';
-      html += '<div class="rq-ins-acts">' + (tool ? '<a class="btn btn-primary" href="' + esc(reqUrl(it)) + '" target="_blank" rel="noopener">Open in ' + esc(tool.name) + '</a>' : '') +
+      html += '<div class="rq-ins-acts">' + (tool ? '<a class="btn btn-primary" href="' + esc(reqUrl(it)) + '">Open in ' + esc(tool.name) + '</a>' : '') +
         '<button class="btn" data-rq="edit-kid" data-id="' + esc(it.key) + '">Edit</button>' +
         (q.status === 'changed' ? '<button class="btn" data-rq="approve" data-id="' + esc(it.key) + '">Approve</button>' : '') + '</div></aside>';
       return html;

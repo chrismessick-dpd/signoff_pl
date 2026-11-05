@@ -330,7 +330,7 @@
       (all ? 'Show fewer' : 'View all ' + rows.length) + '</button>' : '') + '</div>' +
       '<div class="card sys-talk' + (all ? ' all' : '') + '">' + (all ? rows : rows.slice(0, DISCUSSION)).map(function (x) {
       var c = x.c, n = x.n;
-      return '<a class="cmt sys-talk-row" href="' + esc(designUrl(n, c.item)) + '" target="_blank" rel="noopener">' + avatar(c.author) +
+      return '<a class="cmt sys-talk-row" href="' + esc(designUrl(n, c.item)) + '">' + avatar(c.author) +
         '<div><div class="cmt-head"><b>' + esc(c.author || 'Someone') + '</b><span>' + relTime(c.at) + '</span><span class="sys-talk-on">' + srcChip(n.source) + esc(n.name) + '</span></div>' +
         (c.check ? '<div class="sys-talk-check">' + esc(c.check) + '</div>' : '') +
         '<div class="cmt-text">' + esc(c.text) + '</div></div></a>';
@@ -363,7 +363,7 @@
         '<span class="sys-design-stage">' + esc((s && s.stage) || e.stage || '') + (s && s.at ? '<i>Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</i>' : '') + '</span>' +
         '<div class="sys-design-pct">' + (s ? pbar(s.pct) : stateChip(st)) + '</div>' +
         '<div class="sys-design-sev">' + (s ? sevs((s.issues || {}).open || {}) : '') + '</div>' +
-        '<a class="open-link" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(P.toolById(n.source).short) + ' ›</a></div>');
+        '<a class="open-link" href="' + esc(designUrl(n)) + '">Open in ' + esc(P.toolById(n.source).short) + ' ›</a></div>');
     });
     if (cards.length) html += '<div class="section-title">Designs</div><div class="card sys-designs">' + cards.join('') + '</div>';
 
@@ -1291,7 +1291,7 @@
       var top = (s.open || []).slice().sort(function (a, b) { return P.SEVERITIES.indexOf(a.severity) - P.SEVERITIES.indexOf(b.severity); }).slice(0, 4);
       if (top.length) {
         html += '<div class="map-ins-issues">' + top.map(function (i) {
-          return '<a href="' + esc(designUrl(n, i.id)) + '" target="_blank" rel="noopener"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '</span></a>';
+          return '<a href="' + esc(designUrl(n, i.id)) + '"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '</span></a>';
         }).join('') + (total > top.length ? '<p class="note">' + plural(total - top.length, 'more issue') + ' in ' + esc(tool.short) + '</p>' : '') + '</div>';
       }
       if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
@@ -1303,7 +1303,7 @@
     if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
     if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
     var solo = P.soloPart(t) === id && P.topAssembly(t);
-    return html + '<div class="map-ins-acts">' + (tool && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(tool.name) + '</a>' : '') +
+    return html + '<div class="map-ins-acts">' + (tool && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '">Open in ' + esc(tool.name) + '</a>' : '') +
       '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button>' +
       (solo ? '<button class="btn" data-act="edit-node" data-id="' + esc(solo) + '">Edit assembly</button><button class="btn" data-act="add-child" data-id="' + esc(solo) + '">' + ICON.plus + ' Add Part</button>' : '') + '</div></aside>';
   }
@@ -1344,7 +1344,7 @@
     var iss = P.issues(p, index).filter(function (i) { return prod || inside[i.node.id]; }), shown = iss.slice(0, 5);
     if (shown.length) {
       html += '<div class="map-ins-issues"><div class="ins-label">Top open issues</div>' + shown.map(function (i) {
-        return '<a href="' + esc(designUrl(i.node, i.id)) + '" target="_blank" rel="noopener"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '<span class="ins-from"> · ' + esc(i.node.name) + '</span></span></a>';
+        return '<a href="' + esc(designUrl(i.node, i.id)) + '"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '<span class="ins-from"> · ' + esc(i.node.name) + '</span></span></a>';
       }).join('') + (iss.length > shown.length ? '<button class="ins-more" data-act="view" data-view="issues">All ' + esc(iss.length) + ' in Issues ›</button>' : '') + '</div>';
     }
     return html + '<div class="map-ins-acts">' + (prod ? '<button class="btn" data-act="edit-project">Edit project</button><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button>'
@@ -1392,7 +1392,7 @@
           '<td>' + esc(i.text) + '<div class="muted">' + esc([i.checklist, i.ref].filter(Boolean).join(' · ')) + '</div></td>' +
           '<td>' + srcChip(i.tool) + ' ' + esc(i.node.name) + '<div class="muted">' + esc(where) + '</div></td>' +
           '<td class="muted">' + esc(i.assignee || '—') + '</td>' +
-          '<td><a class="open-link" href="' + esc(designUrl(i.node, i.id)) + '" target="_blank" rel="noopener" data-stop="1">Open ›</a></td></tr>';
+          '<td><a class="open-link" href="' + esc(designUrl(i.node, i.id)) + '" data-stop="1">Open ›</a></td></tr>';
       }).join('') + '</tbody></table></div></div>';
     return html;
   }
@@ -1626,7 +1626,7 @@
       '<div id="f-part"></div>' +
       '<div class="field"><label for="f-notes">Notes</label><textarea class="input" id="f-notes" placeholder="Optional">' + esc(n.notes || '') + '</textarea></div>' +
       '</div><div class="sheet-foot">' + (id ? '<button class="btn btn-danger" data-sheet="delete">Delete</button>' : '') + '<span class="spacer"></span>' +
-      (id && st && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn" href="' + esc(designUrl(n)) + '" target="_blank" rel="noopener">Open in ' + esc(P.toolById(n.source).short) + '</a>' : '') +
+      (id && st && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn" href="' + esc(designUrl(n)) + '">Open in ' + esc(P.toolById(n.source).short) + '</a>' : '') +
       '<button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (id ? 'Save' : 'Add') + '</button></div>', { wide: true });
 
     var kind = n.kind, source = n.source || '';
@@ -1978,10 +1978,24 @@
   }
 
   // ── Events ───────────────────────────────────────────────
+  // A click on blank space in the main area (nothing to click or type in, no text being selected)
+  // closes an open inspector, as its × does: the System tab's (ui.sel) or the Requirements tab's (ui.rqSel).
+  var LIVE = 'a, button, input, select, textarea, label, summary, [contenteditable], [role="button"], [tabindex], [data-rq], [draggable="true"], canvas, svg, .map-ins, .rq-ins, #sheet';
+  function blankClick(e) {
+    return !!e.target.closest('#main') && !e.target.closest(LIVE) && !!document.querySelector('#main .map-ins, #main .rq-ins') &&
+      !String(window.getSelection ? window.getSelection() : '');
+  }
+  function closeDetails() {
+    if (ui.view === 'reqs') { if (!ui.rqSel) return; ui.rqSel = ''; }
+    else { if (!ui.sel) return; ui.sel = ''; snapState = null; }
+    saveUi(); renderPage();
+  }
+
   document.addEventListener('click', function (e) {
     if (!e.target.closest('#menu')) closeMenu();
     if (e.target.closest('[data-stop]')) return;   // links inside clickable rows
     var el = e.target.closest('[data-act]');
+    if (!el && blankClick(e)) { closeDetails(); return; }
     if (!el || el.closest('#sheet')) return;
     var act = el.dataset.act, id = el.dataset.id;
     if (!allowed() && ['nav', 'theme', 'settings', 'sync'].indexOf(act) < 0) return;
@@ -2022,7 +2036,7 @@
         var d = index && index.entries[el.dataset.key];
         if (d) nodeSheet(null, { source: d.tool, ref: { tool: d.tool, id: d.id }, name: d.name || d.id, number: d.number || '' });
       })(); break;
-      case 'open-url': if (el.dataset.url) window.open(el.dataset.url, '_blank', 'noopener'); break;
+      case 'open-url': if (el.dataset.url) location.href = el.dataset.url; break;
       case 'toggle-node': e.stopPropagation(); if (ui.closed[id]) delete ui.closed[id]; else ui.closed[id] = 1; saveUi(); renderPage(); break;
       case 'move-up': e.stopPropagation(); move(id, -1); break;
       case 'move-down': e.stopPropagation(); move(id, 1); break;
