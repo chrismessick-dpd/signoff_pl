@@ -34,7 +34,7 @@
     return new S.GitHubStore({ owner: this.owner, repo: repo, branch: this.branch, dataPath: '', token: this.token }, this.fetch);
   };
 
-  var SEVERITIES = ['critical', 'major', 'minor'];
+  var SEVERITIES = ['critical', 'major', 'minor'], REV_STATUS = ['sent', 'built', 'withdrawn'];
   function str(v) { return v == null || typeof v === 'object' ? '' : String(v); }
   function num(v, max) { v = Math.max(0, Math.round(Number(v)) || 0); return max ? Math.min(v, max) : v; }
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
@@ -62,6 +62,12 @@
     if (Array.isArray(s.recent)) {
       out.recent = s.recent.filter(function (c) { return c && typeof c === 'object'; }).slice(0, 20).map(function (c) {
         return { id: str(c.id).slice(0, 80), item: str(c.item).slice(0, 80), check: str(c.check).slice(0, 200), author: str(c.author).slice(0, 100), at: str(c.at).slice(0, 40), text: str(c.text).slice(0, 600) };
+      });
+    }
+    // summary.revisions: the board's tagged fab revisions in order (EE README, "The project summary").
+    if (Array.isArray(s.revisions)) {
+      out.revisions = s.revisions.filter(function (r) { return r && typeof r === 'object'; }).slice(0, 50).map(function (r) {
+        return { label: str(r.label).slice(0, 40), status: REV_STATUS.indexOf(r.status) >= 0 ? r.status : '', sentAt: str(r.sentAt).slice(0, 20) };
       });
     }
     if (Array.isArray(s.open)) {
@@ -150,8 +156,8 @@
 
   // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
-  // (2: summary.reqList, which a cache from before the Requirements tab dropped).
-  var CACHE_V = 2;
+  // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions).
+  var CACHE_V = 3;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

@@ -31,7 +31,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | File | What it does |
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
-| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha. The project-to-repo map is rebuilt on every refresh. |
+| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 3 since `summary.revisions`, 2026-11-04). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
 | `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
 | `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
@@ -56,8 +56,8 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (136 tests as of
-   2026-11-02, after requirement sections).
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (138 tests as of
+   2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.

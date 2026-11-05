@@ -1259,6 +1259,16 @@
       '<div class="map-meta">' + (s ? '<span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : stateChip(st)) + srcChip(n.source) + '</div></button>';
   }
 
+  // A board's fab revisions (summary.revisions, tagged in Signoff EE's Revisions tab), oldest first:
+  // what was sent to the fab and which one was built.
+  function revisionsHtml(revs) {
+    if (!revs || !revs.length) return '';
+    var said = { sent: 'Sent', built: 'Built', withdrawn: 'Withdrawn' };
+    return '<div class="map-ins-revs"><div class="ins-eyebrow">Fab revisions</div>' + revs.map(function (r) {
+      return '<div class="map-rev ' + esc(r.status || '') + '"><b>' + esc(r.label || '?') + '</b><span>' + esc([said[r.status], r.sentAt].filter(Boolean).join(' · ')) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   // The selected Part's detail, beside the map (over it on narrow screens).
   function inspector(p, t, id) {
     if (id === PRODUCT || t.nodes[id].kind === 'assembly') return asmInspector(p, t, id);
@@ -1277,6 +1287,7 @@
       html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
       var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
       if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
+      html += revisionsHtml(s.revisions);
       var top = (s.open || []).slice().sort(function (a, b) { return P.SEVERITIES.indexOf(a.severity) - P.SEVERITIES.indexOf(b.severity); }).slice(0, 4);
       if (top.length) {
         html += '<div class="map-ins-issues">' + top.map(function (i) {
