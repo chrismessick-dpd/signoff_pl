@@ -2119,9 +2119,32 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); sync(); return; }
     if (e.target.closest('input,textarea,select') || $('#sheet')) return;
+    // Up and down step through the list shown: Requirements rows, or the System tiles (Map, Gallery, List).
+    // The 3D view's canvas keeps its own arrows (it nudges the selected Part).
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
+        e.target.tagName !== 'CANVAS' && !$('#menu') && stepList(e.key === 'ArrowDown')) { e.preventDefault(); return; }
     if (e.key === '[') toggleSidebar();
     if (allowed() && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); projectSheet(null); }
   });
+  // Moves the selection one row along the page's list and keeps it in view. False when there's no list.
+  function stepList(down) {
+    var page = $('#page'), seen = {}, rows, rq;
+    if (!page) return false;
+    var shown = function (el) { return el.offsetParent && !el.closest('aside, .ins-kids, .xs-name'); };
+    rows = Array.prototype.filter.call(page.querySelectorAll('.rq-row[data-rq="sel"], tr[data-rq="sel"]'), shown);
+    rq = rows.length > 0;
+    if (!rq) rows = Array.prototype.filter.call(page.querySelectorAll('[data-act="select-node"]'), shown);
+    var ids = rows.map(function (el) { return el.dataset.id; }).filter(function (id) { return seen[id] ? false : (seen[id] = true); });
+    if (!ids.length) return false;
+    var cur = rq ? ui.rqSel : ui.sel, i = ids.indexOf(cur);
+    var next = ids[i < 0 ? (down ? 0 : ids.length - 1) : Math.max(0, Math.min(ids.length - 1, i + (down ? 1 : -1)))];
+    if (next === cur) return true;
+    if (rq) ui.rqSel = next; else { ui.sel = next; ui.pic = ''; snapState = null; }
+    saveUi(); renderPage();
+    var el = $('#page').querySelector((rq ? '[data-rq="sel"]' : '[data-act="select-node"]') + '[data-id="' + CSS.escape(next) + '"]');
+    if (el) el.scrollIntoView({ block: 'nearest' });
+    return true;
+  }
   function resetDemo() {
     Object.keys(localStorage).forEach(function (k) { if (k.indexOf(C.storage.demoNs) === 0) localStorage.removeItem(k); });
     location.reload();
