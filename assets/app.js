@@ -2031,6 +2031,13 @@
     $('#app').classList.toggle('side-collapsed', ui.sideCollapsed);
     saveUi();
   }
+  // On a narrow window a tap outside the open menu (on its scrim, suite.css) closes it and goes
+  // no further, as in Signoff EE and Loom.
+  document.addEventListener('click', function (e) {
+    var app = $('#app');
+    if (!app.classList.contains('nav-open') || e.target !== app) return; // the scrim is #app's ::after
+    app.classList.remove('nav-open'); e.preventDefault(); e.stopPropagation();
+  }, true);
 
   // ── Events ───────────────────────────────────────────────
   // A click on blank space in the main area (nothing to click or type in, no text being selected)
@@ -2123,7 +2130,7 @@
     // The 3D view's canvas keeps its own arrows (it nudges the selected Part).
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
         e.target.tagName !== 'CANVAS' && !$('#menu') && stepList(e.key === 'ArrowDown')) { e.preventDefault(); return; }
-    if (e.key === '[') toggleSidebar();
+    if (e.key === '[' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); toggleSidebar(); }
     if (allowed() && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); projectSheet(null); }
   });
   // Moves the selection one row along the page's list and keeps it in view. False when there's no list.
@@ -2154,7 +2161,9 @@
 
   // ── Start ────────────────────────────────────────────────
   applyTheme(settings.theme);
-  if (ui.sideCollapsed && !narrow.matches) $('#app').classList.add('side-collapsed');
+  // Applied on narrow windows too (suite.css only hides it above 860 px), so widening the window
+  // later shows the sidebar as it was left.
+  if (ui.sideCollapsed) $('#app').classList.add('side-collapsed');
   if (DEMO) {
     var banner = $('#demo-banner');
     banner.hidden = false;
