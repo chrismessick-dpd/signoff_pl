@@ -57,6 +57,15 @@
       reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), risk: num(q.risk), open: num(q.open), unlinked: num(q.unlinked) } : null,
       at: str(s.at), by: str(s.by)
     };
+    // A Loom harness (loom/assets/store.js, summarize): when its name and number were last edited
+    // there, and what it holds.
+    if (s.identAt != null) out.identAt = str(s.identAt).slice(0, 40);
+    if (s.harness && typeof s.harness === 'object') {
+      var hs = s.harness;
+      out.harness = { ends: num(hs.ends), splices: num(hs.splices), wires: num(hs.wires), cables: num(hs.cables), sets: num(hs.sets),
+        wireMm: num(hs.wireMm), errors: num(hs.errors), warnings: num(hs.warnings),
+        boards: Array.isArray(hs.boards) ? hs.boards.filter(function (b) { return typeof b === 'string'; }).slice(0, 50).map(function (b) { return b.slice(0, 80); }) : [] };
+    }
     if (Array.isArray(s.reqList)) out.reqList = s.reqList.slice(0, 2000).map(cleanReq).filter(Boolean);
     // summary.recent: the review's latest comments (EE README, "The project summary").
     if (Array.isArray(s.recent)) {
@@ -151,13 +160,15 @@
 
   function keep(doc) {
     var m = obj(doc.meta);
-    return cleanEntry({ id: doc.id, name: m.name, number: m.board, revision: m.revision, stage: m.stage, archived: m.archived, summary: doc.summary });
+    // EE and ME keep the number as meta.board; Loom as meta.number. A deleted harness reads as archived.
+    return cleanEntry({ id: doc.id, name: m.name, number: m.board || m.number, revision: m.revision, stage: m.stage, archived: m.archived || m.deleted, summary: doc.summary });
   }
 
   // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
-  // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions).
-  var CACHE_V = 3;
+  // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
+  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness).
+  var CACHE_V = 4;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {
@@ -227,7 +238,7 @@
     }
 
     return Promise.all(this.tools.map(function (tool) {
-      return self.account.listRepos(self.owner, tool.prefix).then(function (names) {
+      return (tool.prefix ? self.account.listRepos(self.owner, tool.prefix) : Promise.resolve([])).then(function (names) {
         var repos = [tool.dataRepo].concat(names.filter(function (n) { return n !== tool.dataRepo; }));
         return repos.reduce(function (chain, repo) { return chain.then(function () { return readRepo(tool, repo); }); }, Promise.resolve());
       }).catch(function (err) {

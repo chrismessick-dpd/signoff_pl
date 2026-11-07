@@ -6,7 +6,10 @@
                 theme (signoff.v1.settings -> theme) are shared by every Signoff tool.
    repos:       where PL keeps its own projects (FTEs only; there are no shared PL repos).
    tools:       the Signoff tools a Part can link to. PL reads each project file's `summary`
-                from the tool's data repo and from every repo starting with its prefix.
+                from the tool's data repo and from every repo starting with its prefix (none when
+                the prefix is empty). `review: false` marks a tool whose designs aren't reviews
+                (Loom's harnesses): they have no checks, so they stay out of progress and stages,
+                and their name and number sync both ways (pl.js adoptHarnesses).
                 `previews` is the folder a checker stores pictures in (Fabcheck's board
                 previews, ee_design_review/docs/fabcheck-link.md).
    phases:      build phases, for gates (Phase 3 of the plan).
@@ -34,7 +37,9 @@ window.SIGNOFF_CONFIG = {
     { "id": "me", "name": "Signoff ME", "short": "ME", "desc": "Mechanical design review",
       "dataRepo": "me_design_review_data", "prefix": "review-me-", "app": "../me_design_review/index.html" },
     { "id": "fw", "name": "Signoff FW", "short": "FW", "desc": "Firmware design review",
-      "dataRepo": "fw_design_review_data", "prefix": "review-fw-", "app": "../fw_design_review/index.html" }
+      "dataRepo": "fw_design_review_data", "prefix": "review-fw-", "app": "../fw_design_review/index.html" },
+    { "id": "loom", "name": "Loom", "short": "Loom", "desc": "Harness drawing",
+      "dataRepo": "loom_data", "prefix": "", "app": "../loom/index.html", "review": false }
   ],
   "demo": {
     "project": {

@@ -30,6 +30,8 @@
     return out;
   }
   function toolById(id) { return (C.tools || []).filter(function (t) { return t.id === id; })[0] || null; }
+  // A Part linked to a tool whose designs aren't reviews (Loom's harnesses: config `review: false`).
+  function isDrawing(source) { var t = toolById(source); return !!t && t.review === false; }
 
   // ── Documents ────────────────────────────────────────────
 
@@ -195,7 +197,7 @@
   function emptyRoll() {
     var r = { total: 0, reviewed: 0, pct: 0, open: {}, openTotal: 0, fixed: 0, waived: 0,
       parts: 0, designs: 0, summarized: 0, attention: 0, purchased: 0, manual: 0, unlinked: 0,
-      massG: 0, massParts: 0, massMissing: 0, stages: {} };
+      massG: 0, massParts: 0, massMissing: 0, stages: {}, harnesses: 0 };
     SEVERITIES.forEach(function (s) { r.open[s] = 0; });
     return r;
   }
@@ -219,6 +221,8 @@
       if (st.state === 'manual') { roll.manual++; return; }
       if (st.state === 'unlinked') { roll.unlinked++; return; }
       if (st.state !== 'ok') { roll.attention++; return; }
+      // A harness has no checks: it's counted, but stays out of progress, issues and stages.
+      if (isDrawing(node.source)) { roll.harnesses++; return; }
       var key = refKey(node.ref);
       if (seen[key]) return;
       seen[key] = 1;
@@ -384,7 +388,7 @@
         rev: e.revision || '', source: part ? n.source || '' : '', state: st.state || '', supplier: n.supplier || '', mpn: n.mpn || '',
         qty: part ? (n.qty > 0 ? Number(n.qty) : 1) : null, extQty: part ? ext[id] : null,
         massG: part && hasMass(n) ? Number(n.massG) : null, extMassG: part && hasMass(n) ? Math.round(Number(n.massG) * ext[id] * 10) / 10 : null,
-        stage: (s && s.stage) || e.stage || '', pct: s ? s.pct : null, notes: n.notes || '', ref: refKey(n.ref), uses: [id]
+        stage: (s && s.stage) || e.stage || '', pct: s && !isDrawing(n.source) ? s.pct : null, notes: n.notes || '', ref: refKey(n.ref), uses: [id]
       });
     });
     if (mode === 'flat') {
@@ -405,8 +409,26 @@
       massG: Math.round(mass * 10) / 10, massMissing: parts.filter(function (r) { return r.massG == null && r.source !== 'fw'; }).length } };
   }
 
+  /* Name and number of Parts linked to Loom harnesses go both ways (loom/assets/store.js). Whichever
+     side edited them last wins, by `identAt`: Loom stamps it on the harness, PL on the node when the
+     Part sheet changes either. Here a harness whose stamp is newer than its Part's brings its name and
+     number over. Returns the ids of the nodes it changed (stamped with `user`). */
+  function adoptHarnesses(project, index, user) {
+    var changed = [];
+    liveNodes(project).forEach(function (n) {
+      if (n.kind !== 'part' || !isDrawing(n.source)) return;
+      var st = partStatus(n, index), s = st && st.summary;
+      if (!s || !s.identAt || s.identAt <= (n.identAt || '')) return;
+      var name = s.name || n.name, number = s.number || '';
+      if (name === n.name && number === (n.number || '')) return;
+      project.nodes[n.id] = M.stamp(Object.assign({}, n, { name: name, number: number, identAt: s.identAt }), user);
+      changed.push(n.id);
+    });
+    return changed;
+  }
+
   S.pl = {
-    SEVERITIES: SEVERITIES, sources: sources, toolById: toolById,
+    SEVERITIES: SEVERITIES, sources: sources, toolById: toolById, isDrawing: isDrawing, adoptHarnesses: adoptHarnesses,
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,

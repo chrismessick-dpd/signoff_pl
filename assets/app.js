@@ -137,6 +137,19 @@
     var t = st && STATE_TEXT[st.state];
     return t ? '<span class="pstate ' + t[0] + '" title="' + esc(t[2]) + '">' + t[1] + '</span>' : '';
   }
+  // A design's line: a review's stage and progress, or what a Loom harness holds (plain text).
+  function designStat(s) {
+    if (s && s.harness) return plural(s.harness.wires, 'wire') + ' · ' + plural(s.harness.ends, 'end');
+    return (s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%';
+  }
+  // A harness Part's detail in the inspector: what it holds and what Loom's checks say.
+  function harnessHtml(s) {
+    var h = s.harness, m = h.wireMm / 1000;
+    var holds = [plural(h.wires, 'wire'), plural(h.ends, 'end'), h.splices && plural(h.splices, 'splice'), h.cables && plural(h.cables, 'cable')].filter(Boolean).join(', ');
+    var checks = h.errors || h.warnings ? [h.errors && plural(h.errors, 'error'), h.warnings && plural(h.warnings, 'warning')].filter(Boolean).join(', ') + ' in Loom’s checks' : 'Loom’s checks pass';
+    return '<p class="map-ins-text">' + esc(holds) + (h.wireMm ? '<br>' + esc(m.toFixed(2) + ' m (' + (h.wireMm / 304.8).toFixed(2) + ' ft) of wire') : '') + '<br>' +
+      '<span class="pstate ' + (h.errors ? 'err' : h.warnings ? 'warn' : 'dim') + '">' + esc(checks) + '</span></p>';
+  }
   // Where a linked design opens: its project in its tool, and with `item` that check. In the
   // demo the links open the other tools' demos, whose projects these Parts are.
   function designUrl(node, item) {
@@ -381,8 +394,8 @@
       cards.push('<div class="sys-design">' +
         '<div class="sys-design-name">' + srcChip(n.source) + '<div><b>' + esc(n.name) + '</b><span>' + esc([e.name !== n.name ? e.name : '', e.number, e.revision && 'Rev ' + e.revision].filter(Boolean).join(' · ')) + '</span></div></div>' +
         '<span class="sys-design-stage">' + esc((s && s.stage) || e.stage || '') + (s && s.at ? '<i>Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</i>' : '') + '</span>' +
-        '<div class="sys-design-pct">' + (s ? pbar(s.pct) : stateChip(st)) + '</div>' +
-        '<div class="sys-design-sev">' + (s ? sevs((s.issues || {}).open || {}) : '') + '</div>' +
+        '<div class="sys-design-pct">' + (s && s.harness ? '<span class="muted">' + esc(designStat(s)) + '</span>' : s ? pbar(s.pct) : stateChip(st)) + '</div>' +
+        '<div class="sys-design-sev">' + (s && !s.harness ? sevs((s.issues || {}).open || {}) : '') + '</div>' +
         '<a class="open-link" href="' + esc(designUrl(n)) + '">Open in ' + esc(P.toolById(n.source).short) + ' ›</a></div>');
     });
     if (cards.length) html += '<div class="section-title">Designs</div><div class="card sys-designs">' + cards.join('') + '</div>';
@@ -420,6 +433,10 @@
     }
     if (n.source === 'purchased') {
       return '<svg viewBox="0 0 120 76" aria-hidden="true"><path class="pa-box" d="M38 26 L60 16 L82 26 L82 52 L60 62 L38 52 Z"/><path class="pa-edge" d="M38 26 L60 36 L82 26 M60 36 V62 M49 21 L71 31"/></svg>';
+    }
+    if (n.source === 'loom') {
+      return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-box" x="10" y="26" width="18" height="24" rx="3"/><rect class="pa-box" x="92" y="26" width="18" height="24" rx="3"/>' +
+        '<path class="pa-wire" d="M28 32 C52 32 68 44 92 44 M28 38 C52 38 68 38 92 38 M28 44 C52 44 68 32 92 32"/></svg>';
     }
     if (n.source !== 'fw' && P.toolById(n.source)) return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-unknown" x="20" y="12" width="80" height="52" rx="8"/></svg>';
     return '<svg viewBox="0 0 120 76" aria-hidden="true"><text class="pa-fw" x="60" y="47" text-anchor="middle">{ }</text></svg>';
@@ -1139,18 +1156,19 @@
         var s = d.summary;
         return '<button class="pick" draggable="true" data-drag-design="' + esc(d.tool + ':' + d.id) + '" data-act="place-design" data-key="' + esc(d.tool + ':' + d.id) + '">' +
           '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
-          '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span><span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span></div>' +
+          '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span><span>' + esc(designStat(s)) + '</span></div>' +
           '<div class="pick-tags">' + srcChip(d.tool) + '</div></div></button>';
       }).join('') + '</div></section>';
   }
   function designPart(p, key, parent) {
     var d = index && index.entries[key];
     if (!d) return null;
-    var node = P.newNode(p, { kind: 'part', name: d.name || d.id, number: d.number || '', parent: parent || '', source: d.tool, ref: { tool: d.tool, id: d.id }, qty: 1 }, me());
+    var node = P.newNode(p, { kind: 'part', name: d.name || d.id, number: d.number || '', parent: parent || '', source: d.tool, ref: { tool: d.tool, id: d.id }, qty: 1,
+      identAt: P.isDrawing(d.tool) && d.summary ? d.summary.identAt || '' : undefined }, me());
     p.nodes[node.id] = node;
     return node;
   }
-  var GROUPS = { ee: 'Electronics', me: 'Mechanical' };   // where "Add all" puts each tool's designs
+  var GROUPS = { ee: 'Electronics', me: 'Mechanical', loom: 'Harnesses' };   // where "Add all" puts each tool's designs
   // Parts that can carry an attached STEP: purchased ones, ME parts (until a mechanical checker
   // stores their pictures) and boards, whose tiles keep Fabcheck's pictures (previewFor).
   var MODEL_SOURCES = { purchased: 1, me: 1, ee: 1 };
@@ -1275,8 +1293,8 @@
     }
     return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true, st.entry) + '</div>' +
       '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div>' +
-      (s ? '<div class="bar"><i style="width:' + pct(s.pct) + '%"></i></div>' : '') +
-      '<div class="map-meta">' + (s ? '<span>' + esc(s.stage || '') + (s.stage ? ' · ' : '') + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : stateChip(st)) + srcChip(n.source) + '</div></button>';
+      (s && !s.harness ? '<div class="bar"><i style="width:' + pct(s.pct) + '%"></i></div>' : '') +
+      '<div class="map-meta">' + (s ? '<span>' + esc(designStat(s)) + '</span>' + (s.harness ? '' : sevs((s.issues || {}).open || {})) : stateChip(st)) + srcChip(n.source) + '</div></button>';
   }
 
   // A board's fab revisions (summary.revisions, tagged in Signoff EE's Revisions tab), oldest first:
@@ -1302,7 +1320,10 @@
         return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
       }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, scroll to zoom">3D</button>' : '') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
       '<p class="map-ins-sub">' + esc([e.number || n.number || n.mpn, e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
-    if (s) {
+    if (s && s.harness) {
+      html += harnessHtml(s);
+      if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
+    } else if (s) {
       var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
       html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
       var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
@@ -1353,7 +1374,7 @@
         if (c.kind === 'assembly') right = '<span>' + plural(rolls[k].parts, 'Part') + (rolls[k].designs ? ' · ' + pct(rolls[k].pct) + '%' : '') + '</span>' + (rolls[k].openTotal ? sevs(rolls[k].open) : '');
         else {
           var st = P.partStatus(c, index), s = st.summary;
-          right = s ? '<span>' + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : st.state === 'purchased' ? '<span>Purchased</span>' : stateChip(st);
+          right = s && s.harness ? '<span>' + esc(designStat(s)) + '</span>' : s ? '<span>' + pct(s.pct) + '%</span>' + sevs((s.issues || {}).open || {}) : st.state === 'purchased' ? '<span>Purchased</span>' : stateChip(st);
         }
         return '<button class="ins-kid" data-act="select-node" data-id="' + esc(k) + '"><span class="ins-kid-art">' + (c.kind === 'assembly' ? ICON_ASM : partArt(c)) + '</span>' +
           '<span class="ins-kid-name">' + esc(c.name || 'Unnamed') + (c.qty > 1 ? ' <span class="map-qty">×' + esc(c.qty) + '</span>' : '') + '</span><span class="ins-kid-r">' + right + '</span></button>';
@@ -1382,7 +1403,7 @@
         var caret = kids ? '<button class="t-caret' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" aria-label="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '">' + ICON.chev + '</button>' : '<span class="t-spacer"></span>';
         var sub = n.kind === 'part' ? [n.number, st && st.entry && st.entry.number && st.entry.number !== n.number ? st.entry.number : '', n.mpn].filter(Boolean).join(' · ') : (n.number || plural(r.parts, 'Part'));
         var progress = n.kind === 'assembly' ? (r.designs ? pbar(r.pct) : '<span class="muted">—</span>')
-          : st.state === 'ok' ? pbar(st.summary.pct) : st.state === 'purchased' ? '<span class="muted">Purchased</span>' : stateChip(st);
+          : st.state === 'ok' ? (st.summary.harness ? '<span class="muted">' + esc(designStat(st.summary)) + '</span>' : pbar(st.summary.pct)) : st.state === 'purchased' ? '<span class="muted">Purchased</span>' : stateChip(st);
         var issues = n.kind === 'assembly' ? (r.designs ? sevs(r.open) : '') : st.state === 'ok' ? sevs((st.summary.issues || {}).open || {}) : '';
         var stage = n.kind === 'part' && st.state === 'ok' ? esc(st.summary.stage || '') : n.kind === 'part' && st.entry ? esc(st.entry.stage || '') : '';
         var mass = n.kind === 'assembly' ? (r.massG ? fmtMass(r.massG) : '') : n.massG != null && n.massG !== '' ? fmtMass(Number(n.massG) * (n.qty || 1)) : '';
@@ -1672,7 +1693,7 @@
         return '<button type="button" class="pick' + (on ? ' on' : '') + (d.archived ? ' archived' : '') + '" data-pick="' + esc(key) + '" aria-pressed="' + on + '">' +
           '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
           '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span>' +
-          (s ? '<span>' + esc(s.stage || d.stage || '') + (s.stage || d.stage ? ' · ' : '') + pct(s.pct) + '%</span>' : '<span>Not summarized yet</span>') + '</div>' +
+          (s ? '<span>' + (s.harness ? esc(designStat(s)) : esc(s.stage || d.stage || '') + (s.stage || d.stage ? ' · ' : '') + pct(s.pct) + '%') + '</span>' : '<span>Not summarized yet</span>') + '</div>' +
           '<div class="pick-tags">' + srcChip(d.tool) + (s && s.project && here.indexOf(d) < 0 ? '<span>' + esc(s.project) + '</span>' : '') +
             (used[key] ? '<span>In use</span>' : '') + (d.archived ? '<span>Archived</span>' : '') + '</div></div></button>';
       }
@@ -1812,6 +1833,14 @@
           // Removed in the sheet → gone; a Part whose kind doesn't take models keeps any it had.
           model: MODEL_SOURCES[source] && !mdl ? null : n.model || null
         });
+        // A harness's name and number go back to Loom when they're edited here: stamped now, they
+        // win over Loom's at its next sync (loom/assets/store.js). Taken unchanged from the harness,
+        // they carry its stamp (pl.js adoptHarnesses).
+        if (P.isDrawing(source) && fields.ref) {
+          var he = index && index.entries[P.refKey(fields.ref)], hs = he && he.summary;
+          if (hs && fields.name === hs.name && fields.number === (hs.number || '')) fields.identAt = hs.identAt || n.identAt || '';
+          else if (fields.name !== (n.name || '') || fields.number !== (n.number || '')) fields.identAt = M.now();
+        }
       }
       if (reading) { toast('Still reading the STEP…'); return; }
       // A newly read STEP is stored once the Part exists (its files are named under its id).
@@ -1863,7 +1892,7 @@
         '<div class="row2" style="margin-top:10px"><div class="field"><label for="s-owner">Account or organization</label><input class="input" id="s-owner" value="' + esc(settings.owner) + '"></div>' +
         '<div class="field"><label for="s-branch">Branch</label><input class="input" id="s-branch" value="' + esc(settings.branch) + '"></div></div>' +
         '<div class="field"><label for="s-data">PL data repo</label><input class="input" id="s-data" value="' + esc(settings.dataRepo) + '"></div>' +
-        '<p class="note">Designs are read from ' + C.tools.map(function (t) { return esc(t.dataRepo) + ' and ' + esc(t.prefix) + '…'; }).join(', ') + ' (set in assets/config.js).</p></details>') +
+        '<p class="note">Designs are read from ' + C.tools.map(function (t) { return esc(t.dataRepo) + (t.prefix ? ' and ' + esc(t.prefix) + '…' : ''); }).join(', ') + ' (set in assets/config.js).</p></details>') +
       '</div><div class="sheet-foot">' + (DEMO || !token ? '' : '<button class="btn" data-sheet="signout" title="Remove the token and every Signoff and Fabcheck copy kept in this browser">Sign out</button>') +
       '<span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (DEMO ? 'Done' : 'Save & sync') + '</button></div>');
     var theme = settings.theme;
@@ -1969,7 +1998,15 @@
         save('access', access);
         if (access.state !== 'fte') return;
         return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: token }).refresh(index)
-          .then(function (ix) { index = ix; errors = errors.concat(ix.errors); });
+          .then(function (ix) {
+            index = ix; errors = errors.concat(ix.errors);
+            // Harness names and numbers edited in Loom since come over; they go up with the next sync.
+            Object.keys(projects).forEach(function (k) {
+              var p = projects[k];
+              if (!P.adoptHarnesses(p, index, me()).length) return;
+              p.meta.updatedAt = M.now(); p.meta.updatedBy = me(); dirty[p.id] = M.now();
+            });
+          });
       })
       .then(function () {
         syncing = false;

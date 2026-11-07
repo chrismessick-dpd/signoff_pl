@@ -8,6 +8,7 @@ product. It is structured as a tree of **assemblies** whose leaves are **Parts**
 - a board reviewed in Signoff EE
 - a part or enclosure reviewed in Signoff ME
 - firmware reviewed in Signoff FW
+- a cable harness drawn in Loom (no checks: it's counted, but stays out of progress)
 - a purchased item
 
 PL shows where the whole product stands:
@@ -243,6 +244,10 @@ The files are in the same repo, under `dir`:
 
 They're read by blob sha, so a reader always gets the version the record names. `pl.js`
 `cleanModel` checks a record before it's shown.
+
+**Harnesses.** A Part linked to a Loom harness (`source: 'loom'`) also has `identAt`: when its name or
+number were last edited in PL. Loom stamps its own on the harness, and whichever is newer wins in
+both tools (`pl.js` `adoptHarnesses`; `loom/assets/store.js` `adoptFromPl`).
 
 **References.** A Part refers to a design by `{tool, id}`, never by repo, because a project
 moves out of a tool's data repo into its own `review-…` repo when a contractor is added.

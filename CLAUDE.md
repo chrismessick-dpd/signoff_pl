@@ -31,7 +31,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | File | What it does |
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
-| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 3 since `summary.revisions`, 2026-11-04). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
+| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 4 since Loom harnesses, 2026-11-07). A tool with an empty `prefix` (Loom) reads only its data repo. The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
 | `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
 | `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
@@ -56,7 +56,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (138 tests as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (148 tests as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
@@ -173,6 +173,28 @@ The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In 
 - **Not tried live yet.** The live write path (`homeStore`, `writeToReview`) has run only in the
   demo, and `patchRecords` against the fake GitHub in EE's tests. Ask Chris to try it on a test
   review first.
+
+## Loom harnesses (2026-11-07, Chris; branch `loom`, with Loom's branch `store`)
+
+Chris: a harness belongs with a PL project (not a board: copies of one board may use different
+cables), and moves around the tree like any Part. Loom keeps every harness in one private repo,
+`loom_data` (`projects/<id>.json`, shaped like a review file; see `loom/CLAUDE.md`), and PL treats Loom
+as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `review: false`.
+- **Getting into a project.** A harness names its client project in Loom, so it waits in that PL
+  project's tray like an EE board; Add all puts harnesses under a *Harnesses* assembly (`GROUPS`). The
+  PL node (`source: 'loom'`, `ref: { tool: 'loom', id }`) is the link of record; Loom only reads PL.
+- **No checks.** `P.isDrawing(source)`: a harness Part is counted as `harnesses` in the roll-up and stays
+  out of progress, designs, issues and stages; the BOM shows no progress for it. Tiles, the tray, the
+  Designs panel, List and the picker show "N wires · M ends" (`designStat`); the inspector shows what
+  it holds and Loom's check counts (`harnessHtml`). `reader.js` keeps `summary.harness` and
+  `summary.identAt`, and reads the number from `meta.number` when there's no `meta.board`.
+- **Name and number go both ways** without either tool writing the other's repo: the Part sheet stamps
+  `node.identAt` when Name or Number change (or copies the harness's stamp when they match it), and
+  after reading designs `P.adoptHarnesses` brings over a harness whose `summary.identAt` is newer,
+  marking the project dirty so the next sync pushes it. Loom does the reverse at its sync.
+- **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
+  Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
+  Add it made *Harnesses*, and progress stayed 49%.
 
 ## Next
 

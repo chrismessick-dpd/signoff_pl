@@ -160,6 +160,36 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var ix6 = await reader.refresh(ix5);
   ok(ix6.errors.some(function (e) { return e.repo === 'own/review-ee-broken'; }) && ix6.entries['ee:p1'], 'an unreadable file is reported and the rest still load');
 
+  // ── Loom harnesses (loom/assets/store.js): Parts linked to a tool whose designs aren't reviews ──
+  var lhub = new FakeHub();
+  function harnessFile(id, name, number, identAt) {
+    var meta = { name: name, number: number, revision: 'A', project: 'Water Monitor', deleted: false, updatedAt: '2026-11-07T10:00:00.000Z', updatedBy: 'ann' };
+    return M.stableStringify({ schema: 1, id: id, meta: meta, harness: { id: id, title: name, wires: [] },
+      summary: { v: 1, tool: 'loom', name: name, number: number, revision: 'A', project: 'Water Monitor', identAt: identAt, archived: false,
+        total: 0, reviewed: 0, pct: 0, checklists: {}, issues: { open: { critical: 0, major: 0, minor: 0 }, fixed: 0, waived: 0 },
+        harness: { ends: 3, splices: 1, wires: 7, cables: 1, sets: 2, wireMm: 2830, errors: 0, warnings: 2, boards: ['p1'] } } });
+  }
+  lhub.makeRepo('own/loom_data', { 'projects/h1.json': harnessFile('h1', 'Sensor harness', 'H-100', '2026-11-07T12:00:00.000Z') }, ['own']);
+  lhub.makeRepo('own/review-loom-nothing', { 'projects/h9.json': harnessFile('h9', 'Stray', 'X', '') }, ['own']);
+  var lix = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: lhub.fetchFor('tok-own') }).refresh(null);
+  var le = lix.entries['loom:h1'];
+  ok(le && le.number === 'H-100' && le.summary.harness.wires === 7 && le.summary.identAt === '2026-11-07T12:00:00.000Z', 'a Loom harness is read with its number (meta.number), contents and identAt');
+  ok(!lix.entries['loom:h9'] && !lhub.calls.some(function (c) { return /review-loom/.test(c); }), 'a tool with no prefix reads only its data repo');
+  eq(lix.errors, [], 'no errors reading harnesses');
+  var hp = P.newProject({ name: 'Water Monitor' }, 'ann'), htop = node(hp, { kind: 'assembly', name: 'Top' });
+  var hb = node(hp, { parent: htop.id, name: 'Main board', source: 'ee', ref: { tool: 'ee', id: 'p1' } });
+  var hn = node(hp, { parent: htop.id, name: 'Old name', number: 'H-099', source: 'loom', ref: { tool: 'loom', id: 'h1' }, identAt: '2026-11-07T11:00:00.000Z' });
+  var hix = { entries: { 'ee:p1': ix4.entries['ee:p1'], 'loom:h1': le }, errors: [] };
+  var hr = P.rollup(hp, hix)[''];
+  ok(hr.harnesses === 1 && hr.designs === 1 && hr.total === ix4.entries['ee:p1'].summary.total, 'a harness Part counts as a harness, not a design: progress is the board’s alone');
+  ok(P.bom(hp, hix).rows.filter(function (r) { return r.id === hn.id; })[0].pct === null, 'the BOM shows no progress for a harness');
+  eq(P.adoptHarnesses(hp, hix, 'ann'), [hn.id], 'a name edited in Loom since comes over');
+  eq([hp.nodes[hn.id].name, hp.nodes[hn.id].number, hp.nodes[hn.id].identAt], ['Sensor harness', 'H-100', '2026-11-07T12:00:00.000Z'], '…with Loom’s stamp');
+  eq(P.adoptHarnesses(hp, hix, 'ann'), [], '…once');
+  hp.nodes[hn.id] = Object.assign({}, hp.nodes[hn.id], { name: 'Renamed in PL', identAt: '2026-11-07T13:00:00.000Z' });
+  eq(P.adoptHarnesses(hp, hix, 'ann'), [], 'a newer PL edit is kept (Loom takes it at its next sync)');
+  ok(hp.nodes[hn.id].name === 'Renamed in PL' && hp.nodes[hb.id].name === 'Main board', '…and review Parts are never renamed');
+
   // Board previews stored by Fabcheck next to a review (EE docs/fabcheck-link.md, "Board previews").
   var phub = new FakeHub();
   var pindex = { v: 1, tool: 'fabcheck', runId: 'r1', at: '2026-11-01T00:00:00Z', hero: 'top', images: [

@@ -104,6 +104,7 @@
 .pa-unknown { fill: none; stroke: var(--hair-2); stroke-width: 1.5; stroke-dasharray: 4 4; }
 .pa-text { font: 600 9px var(--mono); fill: var(--text-3); }
 .pa-fw { font: 600 26px var(--mono); fill: var(--text-3); }
+.pa-wire { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
 
 /* Inspector */
 .map-ins { position: sticky; top: 72px; padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 96px); overflow: auto; }
