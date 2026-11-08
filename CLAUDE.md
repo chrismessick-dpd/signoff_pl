@@ -18,7 +18,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 - **Naming.** PL is the product-level view. Chris dislikes "systems engineering"; frame it as a
   project.
 - **Access.** FTE-only at first: `signoff_pl` (public, Pages) and `signoff_pl_data` (private). Since
-  the `sharing` branch (2026-11-07, Chris: "full project shareability, the same way Signoff EE shares"),
+  2026-11-07 (Chris: "full project shareability, the same way Signoff EE shares"),
   a project can be shared into its own private `review-pl-<slug>` repo, with everything it links; see
   *Sharing* below and `docs/sharing.md`.
 - **Words.** The children are called **Parts**. Since 2026-11-01 EE says **Boards** and ME says
@@ -201,7 +201,7 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.
 
-## Sharing (2026-11-07, branch `sharing`; Loom's branch `sharing` goes with it)
+## Sharing (2026-11-07, merged to `main` and pushed with Loom's `fa25c7d`)
 
 Chris asked whether sharing a PL project shares its Loom harnesses, and for PL to share projects the
 way EE does, on a branch. Before: no, and PL wasn't shareable. Now (`docs/sharing.md` has the design and

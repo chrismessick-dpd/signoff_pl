@@ -1,6 +1,6 @@
 # Sharing a PL project (and its Loom harnesses)
 
-*2026-11-07, branch `sharing` in `signoff_pl` and `loom`. Design and the state of the code.*
+*2026-11-07, merged to `main` in `signoff_pl` and `loom`. Design and the state of the code.*
 
 ## The question
 
