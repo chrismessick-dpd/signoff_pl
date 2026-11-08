@@ -91,6 +91,8 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
   }
   function plural(n, word, many) { return n + ' ' + (n === 1 ? word : (many || word + 's')); }
+  // 'EE, ME, FW, or Loom': a serial list, with the comma before 'or'.
+  function orList(a) { return a.length < 3 ? a.join(' or ') : a.slice(0, -1).join(', ') + ', or ' + a[a.length - 1]; }
   function relTime(iso) {
     if (!iso) return '';
     var s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -1298,7 +1300,8 @@
       '<span class="tm-top-name">' + esc(name) + '</span>' +
       '<span class="tm-sub">' + [plural(r.parts, 'Part'), r.designs && plural(r.designs, 'design'), r.massG && fmtMass(r.massG)].filter(Boolean).join(' · ') + '</span></span>' +
       (r.openTotal ? sevs(r.open) : '<span class="tm-sub">No open issues</span>') + '</button>' +
-      (top ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(top) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button>' : '') + '</div>';
+      (top ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(top) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button>'
+        : '<button class="icon-btn" data-act="add-node" title="Add a Part or assembly" aria-label="Add a Part or assembly">' + ICON.plus + '</button>') + '</div>';
     return trayHtml(p) + '<div class="tm"><div class="tm-trunk" data-drop="' + esc(top) + '">' + trunk + kids(top ? t.children[top] || [] : t.roots) + '</div></div>';
   }
 
@@ -1733,7 +1736,7 @@
     function linkFields() {
       var box = w.querySelector('#f-link');
       if (kind !== 'part') { box.innerHTML = ''; return; }
-      var list = allDesigns(), tools = C.tools.map(function (x) { return x.short; }).join(' or ');
+      var list = allDesigns(), tools = orList(C.tools.map(function (x) { return x.short; }));
       var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['generic', 'Generic Part']].map(function (m) {
         return '<button type="button" class="' + ((generic ? 'generic' : 'design') === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
       }).join('') + '</div></div>';
@@ -1745,7 +1748,7 @@
         html += '<div class="field">' + (list.length > 6 ? '<input class="input" id="f-ref-q" type="search" placeholder="Search designs by name, number or client project" autocomplete="off" aria-label="Search designs">' : '') +
           '<div class="pick-grid" id="f-ref-list">' + pickCards('') + '</div>' +
           (!index ? '<p class="note">Designs haven’t been read yet. ' + (DEMO ? '' : 'Sync to read them from GitHub.') + '</p>'
-            : !list.length ? '<p class="note">No designs found in ' + esc(C.tools.map(function (x) { return x.name; }).join(' or ')) + '. Sync to read them again.</p>' : '') + '</div>';
+            : !list.length ? '<p class="note">No designs found in ' + esc(orList(C.tools.map(function (x) { return x.name; }))) + '. Sync to read them again.</p>' : '') + '</div>';
       }
       box.innerHTML = html;
       loadPictures(box);
