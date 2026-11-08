@@ -6,7 +6,7 @@
     'Everyone on any tool’s people list (the whole company), one card each. Open a person to see each PL project they’re on and tick Parts below. PL can set access in every tool’s repos.');
 
   var body = document.createElement('main'); body.className = 'lab-body'; document.body.insertBefore(body, document.querySelector('.plan'));
-  var open = { 'jordan-lee-ext': true, 'alex-kim-ext': true }, openProj = {}, closed = {}, query = '';
+  var open = { 'jordan-lee-ext': true, 'alex-kim-ext': true }, openProj = {}, closed = {}, closedCo = {}, query = '';
 
   function summary(p) {
     if (p.role === 'fte') return 'Every project, every Part';
@@ -54,15 +54,29 @@
 
   function draw() {
     var q = query.toLowerCase();
-    var people = P.PEOPLE.filter(function (p) { return !q || (p.name + ' ' + p.login).toLowerCase().indexOf(q) >= 0; });
+    var people = P.PEOPLE.filter(function (p) { return !q || (p.name + ' ' + p.login + ' ' + (p.company || '')).toLowerCase().indexOf(q) >= 0; });
     var ftes = people.filter(function (p) { return p.role === 'fte'; }), rest = people.filter(function (p) { return p.role !== 'fte'; });
-    body.innerHTML = '<div class="lab-bar"><input class="pp-search" type="search" placeholder="Find a person" value="' + esc(query) + '">' +
+    body.innerHTML = '<div class="lab-bar"><input class="pp-search" type="search" placeholder="Find a person or company" value="' + esc(query) + '">' +
       '<span class="grow"></span><button type="button" class="btn" disabled title="Add someone by GitHub username">' + P.icon('plus') + 'Add person</button></div>' + P.legend() +
       (ftes.length ? '<section class="card pp-card pp-fte"><div class="pp-head">' + ftes.map(function (p) { return P.avatar(p, 'lg'); }).join('') +
         '<div class="pp-who"><b>FTEs: ' + ftes.map(function (p) { return esc(p.name); }).join(', ') + '</b><span class="muted">From Signoff EE’s roster. They open every project and every repo; change that on EE’s People tab.</span></div>' +
         P.pill({ s: 'fte' }) + '</div></section>' : '') +
       P.byRole(rest).map(function (g) {
-        return '<h3 class="pp-group">' + P.roleTag(g.people[0], true) + '<span>' + esc(g.info.group) + ' · ' + g.people.length + '</span><span class="muted">' + esc(g.info.about) + '</span></h3>' + g.people.map(function (p) {
+        var head = '<h3 class="pp-group">' + P.roleTag(g.people[0], true) + '<span>' + esc(g.info.group) + ' · ' + g.people.length + '</span><span class="muted">' + esc(g.info.about) + '</span></h3>';
+        if (g.role !== 'client') return head + g.people.map(card).join('');
+        return head + P.byCompany(g.people).map(function (c) {
+          var shut = q ? false : closedCo[c.company];
+          return '<div class="pp-co"><button type="button" class="pp-co-head" data-co="' + esc(c.company) + '" aria-expanded="' + !shut + '">' +
+            '<span class="tn-caret' + (shut ? ' closed' : '') + '">' + P.icon('caret') + '</span>' + P.icon('building') +
+            '<b>' + esc(c.company || 'No company') + '</b><span class="muted">' + c.people.length + ' client' + (c.people.length > 1 ? 's' : '') + '</span>' +
+            '<span class="pp-co-avs">' + c.people.map(function (p) { return P.avatar(p); }).join('') + '</span></button>' +
+            (shut ? '' : '<div class="pp-co-body">' + c.people.map(card).join('') + '</div>') + '</div>';
+        }).join('');
+      }).join('');
+    body.querySelectorAll('[data-mixed]').forEach(function (b) { b.indeterminate = true; });
+  }
+
+  function card(p) {
         var projs = P.PROJECTS.filter(function (pr) { return P.members(pr.id).indexOf(p) >= 0 || open[p.login + '+' + pr.id]; });
         var others = P.PROJECTS.filter(function (pr) { return projs.indexOf(pr) < 0; });
         return '<section class="card pp-card"><button type="button" class="pp-head" data-open="' + esc(p.login) + '" aria-expanded="' + !!open[p.login] + '">' +
@@ -72,14 +86,12 @@
           (open[p.login] ? '<div class="pp-body">' + projs.map(function (pr) { return projBlock(p, pr); }).join('') +
             others.map(function (pr) { return '<button type="button" class="btn btn-plain pp-addproj" data-addproj="' + esc(p.login + '+' + pr.id) + '">' + P.icon('plus') + 'Add to ' + esc(pr.name) + '</button>'; }).join('') +
             (projs.length ? '<button type="button" class="btn btn-plain pp-rm" data-rm="' + esc(p.login) + '">' + P.icon('x') + 'Remove from every project…</button>' : '<p class="muted pp-none">Nothing is shared with ' + esc(p.name.split(' ')[0]) + ' in a PL project yet. They’re on ' + esc(P.TOOLS[p.home].name) + '’s people list.</p>') + '</div>' : '') + '</section>';
-      }).join('');
-      }).join('');
-    body.querySelectorAll('[data-mixed]').forEach(function (b) { b.indeterminate = true; });
   }
 
   body.addEventListener('click', function (e) {
     var t;
-    if ((t = e.target.closest('[data-open]'))) { var l = t.getAttribute('data-open'); open[l] = !open[l]; draw(); }
+    if ((t = e.target.closest('[data-co]'))) { var co = t.getAttribute('data-co'); closedCo[co] = !closedCo[co]; draw(); }
+    else if ((t = e.target.closest('[data-open]'))) { var l = t.getAttribute('data-open'); open[l] = !open[l]; draw(); }
     else if ((t = e.target.closest('[data-oproj]'))) { var k = t.getAttribute('data-oproj'); openProj[k] = t.classList.contains('closed'); draw(); }
     else if ((t = e.target.closest('[data-fold]'))) { var f = t.getAttribute('data-fold'); closed[f] = !closed[f]; draw(); }
     else if ((t = e.target.closest('[data-mode]'))) P.changeMode(t.closest('.pp-proj').getAttribute('data-pid'), t.getAttribute('data-login'), t.getAttribute('data-mode'));

@@ -41,6 +41,13 @@ separately. Each role has its own icon and word, and none relies on color:
 | Client | building, "Client", outlined |
 | Contractor | wrench, "Contractor", light fill |
 
+Clients also have a **company** (`users[login].company`), because one company will usually have many
+clients (Chris, 2026-11-07):
+- **Person first:** Clients are split into folding company groups, each showing its people's pictures
+  when folded. The search box also matches company names.
+- **Tree with people:** the add popover lists clients under their company, and chip tooltips and the
+  person popover name the company.
+
 How each tab shows the role:
 - **Person first:** the cards sit under FTE, Client, and Contractor headings.
 - **Tree with people:** each person chip carries the role icon, and the add popover groups people by
@@ -84,8 +91,12 @@ visible from the start.
 - **Air Quality Sensor** is internal.
 - **People:**
   - Two FTEs.
-  - **Morgan Hale**, a **client** (Acme Climate's program manager), has Whole system. Their invite to
-    the harness linked later is still pending.
+  - Clients from **Acme Climate**:
+    - **Morgan Hale**, the program manager, has Whole system. Their invite to the harness linked later
+      is still pending.
+    - **Dana Ortiz**, a quality engineer, has Parts only: the Enclosure.
+    - **Lee Wong**, the firmware lead, has PL + chosen Parts: the firmware.
+  - **Ari Shah**, a client from **Northwind Retail**, has nothing shared yet.
   - **Jordan Lee**, an EE contractor, has Parts only: Main PCBA, plus a pending invite to the Display
     board.
   - **Alex Kim**, an ME contractor, has PL + chosen Parts.

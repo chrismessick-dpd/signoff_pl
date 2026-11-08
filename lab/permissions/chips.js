@@ -19,7 +19,7 @@
     var st = P.cell(pid, p.login, n);
     if (!P.granted(st) && st.s !== 'remove' && st.s !== 'some') return '';
     var cls = 'cp s-' + st.s + (st.inherited ? ' inh' : '');
-    var tip = p.name + ' (' + P.ROLES[p.role].label + '): ' + P.STATE[st.s].long + (st.inherited ? ' (inherited from Whole system)' : '');
+    var tip = p.name + ' (' + P.ROLES[p.role].label + (p.company ? ', ' + p.company : '') + '): ' + P.STATE[st.s].long + (st.inherited ? ' (inherited from Whole system)' : '');
     return '<button type="button" class="' + cls + '" data-chip="' + n.id + '" data-login="' + esc(p.login) + '" title="' + esc(tip) + '">' + P.avatar(p) +
       (MARK[st.s] ? '<span class="cp-mark">' + P.icon(MARK[st.s]) + '</span>' : st.inherited ? '<span class="cp-mark inh">' + P.icon('via') + '</span>' : '') +
       '<span class="cp-name">' + esc(p.name.split(' ')[0]) + (st.s === 'some' ? ' ' + st.n + '/' + st.of : '') + '</span>' +
@@ -73,7 +73,7 @@
       st.inherited ? 'Inherited: ' + p.name.split(' ')[0] + ' has Whole system on ' + P.NODES[pid].name + '. Taking this away switches them to PL + chosen Parts.' :
       st.s === 'remove' ? 'Staged: Apply takes them off ' + (r ? r.future || r.name : 'it') + '.' :
       'Given on this ' + (n.kind === 'asm' ? 'assembly' : 'Part') + ' directly' + (n.kind === 'part' ? ', recorded in ' + P.TOOLS[n.tool].label + '’s users.json.' : '.');
-    var el = pop(anchor, '<div class="pop-row">' + P.avatar(p, 'lg') + '<span class="grow"><b>' + esc(p.name) + '</b><span class="sub">' + esc(p.login) + ' · ' + esc(p.note || '') + '</span></span>' + P.pill(st) + '</div>' +
+    var el = pop(anchor, '<div class="pop-row">' + P.avatar(p, 'lg') + '<span class="grow"><b>' + esc(p.name) + '</b><span class="sub">' + esc(p.login) + ' · ' + esc((p.company ? p.company + ', ' : '') + (p.note || '')) + '</span></span>' + P.pill(st) + '</div>' +
       '<div class="pop-role">' + P.roleTag(p) + '<span class="muted">People lists</span>' + P.rosterTags(p.login) + '</div>' +
       '<div class="pop-foot">' + esc(why) + (r && !r.inPl ? '<br>' + P.repo(n, { future: true }) : '') + '</div>' +
       (n.kind === 'project' ? '<div class="pop-mode">' + P.modeSeg(pid, login, true) + '</div>' : '') +
@@ -90,11 +90,13 @@
   function addPop(anchor, n) {
     var r = P.repoOf(n);
     var el = pop(anchor, '<h4>Who can open ' + esc(n.name) + '?</h4>' + P.byRole(P.PEOPLE.filter(function (p) { return p.role !== 'fte'; })).map(function (g) {
-      return '<div class="pop-group">' + P.roleTag(g.people[0]) + '</div>' + g.people.map(function (p) {
+      var parts = g.role === 'client' ? P.byCompany(g.people) : [{ company: '', people: g.people }];
+      return '<div class="pop-group">' + P.roleTag(g.people[0]) + '</div>' + parts.map(function (c) {
+        return (c.company ? '<div class="pop-co">' + P.icon('building') + esc(c.company) + '</div>' : '') + c.people.map(function (p) {
       var st = P.cell(pid, p.login, n), on = n.kind === 'asm' ? st.s === 'all' : P.granted(st);
       return '<label class="pop-row"><input type="checkbox" data-pick="' + esc(p.login) + '"' + (on ? ' checked' : '') + '>' + P.avatar(p) +
         '<span class="grow">' + esc(p.name) + '<span class="sub">' + esc(p.note || p.role) + (st.inherited ? ' · inherited' : '') + '</span></span>' + P.rosterTags(p.login) + P.pill(st, { compact: true }) + '</label>';
-    }).join(''); }).join('') + '<div class="pop-foot">' + (r && r.fteOnly && !r.inPl ? 'Not shared yet: ticking someone creates ' + esc(r.future) + ' and moves ' + esc(n.name) + ' out of ' + esc(r.name) + '.' :
+    }).join(''); }).join(''); }).join('') + '<div class="pop-foot">' + (r && r.fteOnly && !r.inPl ? 'Not shared yet: ticking someone creates ' + esc(r.future) + ' and moves ' + esc(n.name) + ' out of ' + esc(r.name) + '.' :
       n.kind === 'asm' ? 'Ticks every Part in this assembly.' : 'Everyone on any tool’s people list is here; ticking stages it until Apply.') + '</div>');
     el.addEventListener('change', function (e) {
       var t = e.target.closest('[data-pick]'); if (!t) return;

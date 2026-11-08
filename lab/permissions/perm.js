@@ -50,7 +50,11 @@
     // home: the tool whose People page added them. PL lists everyone on every tool's roster (Chris, 2026-11-07).
     { login: 'sam-rivera', name: 'Sam Rivera', role: 'fte', hue: 186, home: 'ee' },
     { login: 'priya-nair', name: 'Priya Nair', role: 'fte', hue: 262, home: 'ee' },
-    { login: 'morgan-hale-acme', name: 'Morgan Hale', role: 'client', hue: 28, note: 'Acme Climate program manager', home: 'pl' },
+    // Clients carry a company (users[login].company); a company will often have many clients (Chris, 2026-11-07).
+    { login: 'morgan-hale-acme', name: 'Morgan Hale', role: 'client', company: 'Acme Climate', hue: 28, note: 'Program manager', home: 'pl' },
+    { login: 'dana-ortiz-acme', name: 'Dana Ortiz', role: 'client', company: 'Acme Climate', hue: 352, note: 'Quality engineer', home: 'me' },
+    { login: 'lee-wong-acme', name: 'Lee Wong', role: 'client', company: 'Acme Climate', hue: 200, note: 'Firmware lead', home: 'fw' },
+    { login: 'ari-shah-nwr', name: 'Ari Shah', role: 'client', company: 'Northwind Retail', hue: 48, note: 'Buyer', home: 'pl' },
     { login: 'jordan-lee-ext', name: 'Jordan Lee', role: 'contractor', hue: 140, note: 'EE contractor', home: 'ee' },
     { login: 'alex-kim-ext', name: 'Alex Kim', role: 'contractor', hue: 320, note: 'ME contractor', home: 'me' },
     { login: 'casey-wu-ext', name: 'Casey Wu', role: 'contractor', hue: 220, note: 'FW contractor', home: 'fw' },
@@ -64,7 +68,9 @@
       'morgan-hale-acme': { mode: 'system', proj: 'yes', parts: { ldemo2: 'pending' } },
       'jordan-lee-ext': { mode: 'parts', parts: { pdemo7: 'yes', pdemo11: 'pending' } },
       'alex-kim-ext': { mode: 'project', proj: 'yes', parts: { mdemo5: 'yes' } },
-      'casey-wu-ext': { mode: 'project', proj: 'pending', parts: { fdemo3: 'pending' } }
+      'casey-wu-ext': { mode: 'project', proj: 'pending', parts: { fdemo3: 'pending' } },
+      'dana-ortiz-acme': { mode: 'parts', parts: { mdemo5: 'yes' } },
+      'lee-wong-acme': { mode: 'project', proj: 'yes', parts: { fdemo3: 'yes' } }
     },
     'pldemo-aq': {
       'alex-kim-ext': { mode: 'parts', parts: { mdemo22: 'yes' } }
@@ -381,7 +387,13 @@
     contractor: { icon: 'wrench', label: 'Contractor', long: 'Contractor', group: 'Contractors', about: 'Outside help: only what’s shared with them' }
   };
   var ROLE_ORDER = ['fte', 'client', 'contractor'];
-  function role(p) { var r = ROLES[p.role]; return '<span class="role r-' + p.role + '">' + icon(r.icon) + esc(r.long) + '</span>'; }
+  function role(p) { var r = ROLES[p.role]; return '<span class="role r-' + p.role + '">' + icon(r.icon) + esc(r.long + (p.company ? ' · ' + p.company : '')) + '</span>'; }
+  // Clients split by company, companies in name order.
+  function byCompany(list) {
+    var names = [];
+    list.forEach(function (p) { if (names.indexOf(p.company || '') < 0) names.push(p.company || ''); });
+    return names.sort().map(function (c) { return { company: c, people: list.filter(function (p) { return (p.company || '') === c; }) }; });
+  }
   function roleTag(p, short) { var r = ROLES[p.role]; return '<span class="rtag r-' + p.role + '" title="' + esc(r.label + ': ' + r.about) + '">' + icon(r.icon) + (short ? '' : esc(r.label)) + '</span>'; }
   function byRole(list) {
     return ROLE_ORDER.map(function (k) { return { role: k, info: ROLES[k], people: list.filter(function (p) { return p.role === k; }) }; })
@@ -460,7 +472,7 @@
   window.PERM = {
     TOOLS: TOOLS, PROJECTS: PROJECTS, PEOPLE: PEOPLE, NODES: NODES, MODES: MODES, STATE: STATE,
     cell: cell, granted: granted, toggle: toggle, grant: grant, setMode: setMode, removeAll: removeAll, reset: reset,
-    apply: apply, changeMode: changeMode, askRemove: askRemove, rosters: rosters, rosterTags: rosterTags,
+    apply: apply, changeMode: changeMode, byCompany: byCompany, askRemove: askRemove, rosters: rosters, rosterTags: rosterTags,
     mode: mode, baseMode: baseMode, members: members, plan: plan, person: person, isFte: isFte,
     walk: walk, leaves: leaves, toolLeaves: toolLeaves, repoOf: repoOf, parentOf: function (id) { return PARENT[id]; }, projectOf: function (id) { return PROJ_OF[id]; },
     esc: esc, icon: icon, pill: pill, legend: legend, tool: tool, repo: repo, avatar: avatar, role: role, roleTag: roleTag, byRole: byRole, ROLES: ROLES, modeSeg: modeSeg,
