@@ -123,24 +123,17 @@ as every tool does.
    - *Later, maybe:* when a project is shared, a toggle for global access or Part/board-scoped access to
      the project tree, and a grid in PL of contractor vs. Part/board with a check per cell, so access to
      the components can be changed from PL. That needs a PL page that shows Parts and access together.
-3. **Removing people:** see the open question below.
+3. **Remove takes a person off everything:** the project's repo and every linked board, part, firmware
+   target and harness, clearing their assignment in each tool's roster. Someone who needs one board on its
+   own is added to it again in EE.
 4. **One repo per shared thing**, as built. "Client repos" meant private repos made when sharing, not one
    repo per client.
 5. **First live share** on a test product first, then check EE's People page.
 
-## Open question: what Remove takes away
+## What Remove takes away
 
-Today PL's Remove (in the Share sheet) takes the person off the project's repo *and* off every repo the
-project links: each `review-ee-…`, `review-me-…`, `review-fw-…` and `review-loom-…`, clearing their
-assignment in each tool's roster. The product was the reason they had those, so the whole set goes.
-
-The catch: PL can't tell whether someone was put on a board *through* this product or added to that board
-directly in EE's People page. Removing them from the product takes the board away too. Two ways to go:
-
-- **Keep it as built.** Remove means "off this product and everything in it". If someone needs one board
-  on its own, add them to it again in EE. Simple, and nothing stays shared by accident.
-- **PL only touches its own repo.** Remove takes them off `review-pl-…` and PL's roster; their board and
-  harness access stays until it is removed in EE's, ME's or Loom's own People page. Nothing is taken
-  away that PL didn't give, but a contractor keeps reading boards after losing the product.
-
-The code does the first. Say if you want the second.
+PL's Remove (in the Share sheet) takes the person off the project's repo *and* off every repo the project
+links: each `review-ee-…`, `review-me-…`, `review-fw-…` and `review-loom-…`, clearing their assignment in
+each tool's roster. The product was the reason they had those, so the whole set goes (Chris, 2026-11-07).
+PL can't tell whether someone was put on a board through this product or added to it directly in EE's
+People page, so a person who should keep one board on its own is added to it again in EE.
