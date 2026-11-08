@@ -44,8 +44,8 @@ separately. Each role has its own icon and word, and none relies on color:
 
 Clients also have a **company** (`users[login].company`), because one company will usually have many
 clients (Chris, 2026-11-07):
-- **Person first:** each card reads name, then role · company · projects (for example "Client · Acme
-  Climate · Smart Thermostat"), then **Access**: "Full project" for Whole system on every project
+- **Person first:** each card reads name, then company · projects (for example "Acme Climate · Smart
+  Thermostat"; the role is the group heading), then **Access**: "Full project" for Whole system on every project
   they're on, otherwise a badge per tool they can open something in. Clients are split into folding
   company groups, each showing its people's pictures
   when folded. The search box also matches company names.

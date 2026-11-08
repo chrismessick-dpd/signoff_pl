@@ -76,11 +76,12 @@
     body.querySelectorAll('[data-mixed]').forEach(function (b) { b.indeterminate = true; });
   }
 
-  // Middle row: role · company · the PL projects they're on (Chris, 2026-11-07).
+  // Middle row: company · the PL projects they're on (Chris, 2026-11-07).
   function whoLine(p) {
     var on = P.PROJECTS.filter(function (pr) { return P.members(pr.id).indexOf(p) >= 0; }).map(function (pr) { return pr.name; });
-    var bits = [P.ROLES[p.role].label].concat(p.company ? [p.company] : [], on);
-    return '<span class="pp-line">' + P.icon(P.ROLES[p.role].icon) + esc(bits.join(' · ')) + '</span>';
+    // The role is already the group heading (Clients, Contractors), so the row starts with the company.
+    var bits = (p.company ? [p.company] : []).concat(on);
+    return '<span class="pp-line" title="' + esc(P.ROLES[p.role].label) + '">' + P.icon(P.ROLES[p.role].icon) + esc(bits.join(' · ') || 'No PL projects yet') + '</span>';
   }
   // Bottom row: Access. "Full project" when they have Whole system on every project they're on;
   // otherwise a badge per tool they can open something in.
