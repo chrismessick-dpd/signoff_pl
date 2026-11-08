@@ -27,21 +27,17 @@
         { id: 'pdemo7', name: 'Main PCBA', tool: 'ee', pn: 'ACM-2001-300', shared: true },
         { id: 'pdemo11', name: 'Display & Sensor Board', tool: 'ee', pn: 'ACM-2002-300', shared: true },
         { id: 'fdemo3', name: 'Thermostat Firmware', tool: 'fw', pn: 'ACM-2090-001', shared: true },
-        { id: 'ldemo2', name: 'Display Ribbon Harness', tool: 'loom', pn: 'ACM-2050-100', shared: true, note: 'Linked after the project was shared' },
-        { id: 'buy-tb', name: 'Terminal block, 5-pos', tool: 'buy', pn: 'Purchased' }
+        { id: 'ldemo2', name: 'Display Ribbon Harness', tool: 'loom', pn: 'ACM-2050-100', shared: true, note: 'Linked after the project was shared' }
       ] },
       { id: 'asm-housing', name: 'Housing', kind: 'asm', kids: [
         { id: 'mdemo5', name: 'Enclosure', tool: 'me', pn: 'ACM-2010-100', shared: true },
-        { id: 'mdemo13', name: 'Wall Bracket', tool: 'me', pn: 'ACM-2011-100', shared: false, note: 'Linked after the project was shared' },
-        { id: 'buy-pipe', name: 'Light pipe, 3 mm', tool: 'buy', pn: 'Purchased' },
-        { id: 'buy-m3', name: 'Screw, M3 × 8 mm (×4)', tool: 'buy', pn: 'Purchased' }
+        { id: 'mdemo13', name: 'Wall Bracket', tool: 'me', pn: 'ACM-2011-100', shared: false, note: 'Linked after the project was shared' }
       ] }
     ] },
     { id: 'pldemo-aq', name: 'Air Quality Sensor', client: 'Acme Climate', kind: 'project', tool: 'pl', shared: false, kids: [
       { id: 'asm-aq', name: 'Sensor module', kind: 'asm', kids: [
         { id: 'pdemo21', name: 'Sensor PCBA', tool: 'ee', pn: 'ACM-3001-300', shared: false },
-        { id: 'mdemo22', name: 'AQ Housing', tool: 'me', pn: 'ACM-3010-100', shared: true },
-        { id: 'buy-fan', name: 'Fan, 30 mm, 5 V', tool: 'buy', pn: 'Purchased' }
+        { id: 'mdemo22', name: 'AQ Housing', tool: 'me', pn: 'ACM-3010-100', shared: true }
       ] }
     ] }
   ];
@@ -354,8 +350,7 @@
   // The legend: one compact strip of labeled groups. Each sample's full meaning is in its tooltip.
   var LEGEND = [
     ['Access', [['yes'], ['yes', true, 'Inherited'], ['pending']]],
-    ['On Apply', [['new'], ['add'], ['remove']]],
-    ['Purchased', [['with-pl'], ['na']]]
+    ['On Apply', [['new'], ['add'], ['remove']]]
   ];
   function legend(opts) {
     opts = opts || {};

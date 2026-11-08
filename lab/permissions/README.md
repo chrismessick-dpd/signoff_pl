@@ -26,7 +26,8 @@ Each person has one of three modes per PL project:
 
 FTEs come from Signoff EE's roster, see everything, and are never editable here. A Part lives in its
 tool's FTE-only data repo until it's shared, then in its own `review-<tool>-<slug>` repo. Purchased
-Parts have no Signoff tool. They live in the PL project's repo and come with the PL project.
+Parts have no Signoff tool and nothing to share, so this page leaves them out (Chris, 2026-11-07). They
+come with the PL project for whoever has it.
 
 ### Roles
 
@@ -66,14 +67,12 @@ None of the states differ by color alone. Each one has an icon, a word, and a pa
 | Not shared yet | dashed box, "New repo", dashed border (Apply would create a private repo) |
 | Invite to an existing repo | plus, "Invite" |
 | Remove | minus, struck-through "Remove", `--issue-hatch` stripes |
-| Purchased | box, "With PL", or a dash, "No tool" |
 
 ### Legend
 
-The legend is one compact strip of four labeled groups:
+The legend is one compact strip of three labeled groups:
 - **Access:** given, inherited, and invited. On Tree with people these are drawn as chip samples.
 - **On Apply:** new repo, invite, and remove.
-- **Purchased:** with PL and no tool.
 - **Roles:** FTE, Client, and Contractor.
 
 Hovering over a sample shows its full meaning.
@@ -86,8 +85,8 @@ visible from the start.
 ### The data
 
 - **Smart Thermostat** (Acme Climate) is shared. It has Electronics (Main PCBA, Display & Sensor Board,
-  Thermostat Firmware, Display Ribbon Harness, and a purchased terminal block) and Housing (Enclosure,
-  Wall Bracket not shared yet, and two purchased parts).
+  Thermostat Firmware, and Display Ribbon Harness) and Housing (Enclosure, and Wall Bracket, which isn't
+  shared yet).
 - **Air Quality Sensor** is internal.
 - **People:**
   - Two FTEs.
