@@ -126,6 +126,8 @@ with its mode switch, and then the tree with checkboxes.
 This is PL's tree, with avatar chips per node:
 - A solid chip means access was given at that node.
 - A dashed chip means it's inherited from Whole system.
+- On an assembly, a person with only some of its Parts reads "Lee · 1 of 4 Parts".
+- FTEs aren't listed on nodes: they see everything.
 - A corner badge marks a pending invite, a new repo, an invite, or a removal.
 - Each chip also carries the person's role icon.
 

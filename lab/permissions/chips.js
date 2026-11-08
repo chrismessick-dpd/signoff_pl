@@ -3,7 +3,7 @@
   'use strict';
   var P = window.PERM, esc = P.esc;
   P.chrome('chips.html', 'Tree with people',
-    'The product tree as PL draws it, with the people who can open each node beside it. Solid chips were given that node; outlined chips inherit it from Whole system. Click a chip or + to change it.');
+    'The product tree as PL draws it, with the people who can open each node beside it. Solid chips were given that node; outlined chips inherit it from Whole system. Click a chip or + to change it. FTEs see everything and aren’t listed.');
 
   var body = document.createElement('main'); body.className = 'lab-body'; document.body.insertBefore(body, document.querySelector('.plan'));
   var pid = 'pldemo', closed = {};
@@ -22,7 +22,7 @@
     var tip = p.name + ' (' + P.ROLES[p.role].label + (p.company ? ', ' + p.company : '') + '): ' + P.STATE[st.s].long + (st.inherited ? ' (inherited from Whole system)' : '');
     return '<button type="button" class="' + cls + '" data-chip="' + n.id + '" data-login="' + esc(p.login) + '" title="' + esc(tip) + '">' + P.avatar(p) +
       (MARK[st.s] ? '<span class="cp-mark">' + P.icon(MARK[st.s]) + '</span>' : st.inherited ? '<span class="cp-mark inh">' + P.icon('via') + '</span>' : '') +
-      '<span class="cp-name">' + esc(p.name.split(' ')[0]) + (st.s === 'some' ? ' ' + st.n + '/' + st.of : '') + '</span>' +
+      '<span class="cp-name">' + esc(p.name.split(' ')[0]) + (st.s === 'some' ? '<span class="cp-some"> · ' + st.n + ' of ' + st.of + ' Parts</span>' : '') + '</span>' +
       '<span class="cp-role" title="' + esc(P.ROLES[p.role].label) + '">' + P.icon(P.ROLES[p.role].icon) + '</span></button>';
   }
   function chipsFor(n) {
@@ -31,8 +31,7 @@
       return '<span class="cp-note">' + P.icon('box') + 'No Signoff tool · comes with the PL project' + (with_.length ? ' (' + with_.map(function (p) { return esc(p.name.split(' ')[0]); }).join(', ') + ')' : '') + '</span>';
     }
     var ppl = P.PEOPLE.filter(function (p) { return p.role !== 'fte'; });
-    return '<span class="cp fte" title="FTEs see everything (Signoff EE roster)">' + P.icon('lock') + 'FTEs</span>' +
-      ppl.map(function (p) { return chip(n, p); }).join('') +
+    return ppl.map(function (p) { return chip(n, p); }).join('') +
       '<button type="button" class="cp-add" data-add="' + n.id + '" aria-label="Add someone to ' + esc(n.name) + '">' + P.icon('plus') + '</button>';
   }
 
