@@ -113,21 +113,34 @@ invites people, as in EE. Any other FTE's token can share a review only where th
 otherwise PL says so and stops. The token never leaves the browser; PL reads it from `signoff.token`
 as every tool does.
 
-## Open questions for Chris
+## Decisions (Chris, 2026-11-07)
 
-1. **One repo per harness.** Sharing a product with five harnesses makes five `review-loom-*` repos next
-   to the `review-pl-*` and the `review-ee-*` ones. If that's too many, the alternative is harnesses
-   inside the PL project's repo (`loom/projects/<id>.json`), which means Loom reads PL repos and PL's
-   reader learns a second layout. The code does per-harness.
-2. **Whole product or part of it.** A shared PL project shows the person the whole tree, including
-   Parts whose reviews they're not on (as names and numbers, with "Not found" where the summary can't be
-   read). Is that acceptable, or should a shared person see only the Parts they were given?
-3. **Removing people.** Should PL's Remove also take the person off reviews they reached only through
-   this product (the code does), or leave the review shares to EE's and ME's People pages?
-4. **One repo per shared thing, or one per client.** Chris's words were "shared as new private client
-   repos". The code follows EE: one private repo per shared PL project, review or harness, and a client
-   with two products gets two `review-pl-*` repos (plus their reviews' and harnesses' repos). The other
-   reading is one private repo per client holding everything shared with them, which would mean a new
-   layout every tool reads and writes. Say which you meant.
-5. **First live share.** It creates real repositories with your token. Try it on a test product first
-   (a PL project linking one test board and one test harness) and check EE's People page afterwards.
+1. **One repo per harness**, the same structure as EE: a private FTE repo until shared, then one private
+   repo per shared thing. Each tool keeps its own set of private and shared repos, so a tool can work on
+   its own when it doesn't use another tool's data. PL never moves another tool's data into a PL repo:
+   an EE board moves into EE's `review-ee-…`, a harness into Loom's `review-loom-…`.
+2. **Sharing a PL project shares everything** it links. No per-Part access for now.
+   - *Later, maybe:* when a project is shared, a toggle for global access or Part/board-scoped access to
+     the project tree, and a grid in PL of contractor vs. Part/board with a check per cell, so access to
+     the components can be changed from PL. That needs a PL page that shows Parts and access together.
+3. **Removing people:** see the open question below.
+4. **One repo per shared thing**, as built. "Client repos" meant private repos made when sharing, not one
+   repo per client.
+5. **First live share** on a test product first, then check EE's People page.
+
+## Open question: what Remove takes away
+
+Today PL's Remove (in the Share sheet) takes the person off the project's repo *and* off every repo the
+project links: each `review-ee-…`, `review-me-…`, `review-fw-…` and `review-loom-…`, clearing their
+assignment in each tool's roster. The product was the reason they had those, so the whole set goes.
+
+The catch: PL can't tell whether someone was put on a board *through* this product or added to that board
+directly in EE's People page. Removing them from the product takes the board away too. Two ways to go:
+
+- **Keep it as built.** Remove means "off this product and everything in it". If someone needs one board
+  on its own, add them to it again in EE. Simple, and nothing stays shared by accident.
+- **PL only touches its own repo.** Remove takes them off `review-pl-…` and PL's roster; their board and
+  harness access stays until it is removed in EE's, ME's or Loom's own People page. Nothing is taken
+  away that PL didn't give, but a contractor keeps reading boards after losing the product.
+
+The code does the first. Say if you want the second.
