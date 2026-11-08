@@ -2019,13 +2019,7 @@
         if (rv) {
           var who = rv.dataset.revoke;
           var fromRepos = plan.items.filter(function (it) { return it.repo; }).map(function (it) { return it.repo.split('/')[1]; });
-          if (!confirm('Remove @' + who + ' from ' + p.meta.name + '?
-
-This takes away their access to every repository the project uses:
-' + fromRepos.join('
-') + '
-
-Their copies disappear at their next sync.')) return;
+          if (!confirm('Remove @' + who + ' from ' + p.meta.name + '?\n\nThis takes away their access to every repository the project uses:\n' + fromRepos.join('\n') + '\n\nTheir copies disappear at their next sync.')) return;
           var ui2 = progressSheet('Removing ' + who);
           sh.revokeProject(p, who, designName, ui2.log).then(function (res) {
             res.failed.forEach(function (f) { ui2.log(f.login + ' on ' + f.repo + ': ' + f.message, 'err'); });
