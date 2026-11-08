@@ -378,7 +378,7 @@
     function askRemove(pids, login) {
       var p = acc.person(login), keep = [], repos = [];
       pids.forEach(function (pid) {
-        acc.keysOf(pid).forEach(function (k) { if (acc.holds('draft', login, k)) { keep.push(acc.items[k].name); repos.push((acc.items[k].repo || acc.items[k].future).split('/')[1]); } });
+        acc.kept(pid, login).forEach(function (k) { keep.push(acc.items[k].name); repos.push((acc.items[k].repo || acc.items[k].future).split('/')[1]); });
       });
       var onAny = pids.some(function (pid) { return acc.mode(pid, login) !== 'parts'; });
       var where = pids.length > 1 ? 'every PL project' : acc.project(pids[0]).name;

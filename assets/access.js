@@ -153,11 +153,20 @@
   // Does `login` hold `key` in a store? In the draft, Whole system on any project linking it counts.
   Access.prototype.holds = function (which, login, key) {
     var self = this, store = which === 'base' ? this.base : this.draft, e = peek(store, login);
+    if (which !== 'base' && this.unreadable(key)) return this.holds('base', login, key);
     if (key.indexOf('pl:') === 0) return !!e.pl[key.slice(3)];
     if (e.items[key]) return true;
     if (which === 'base') return false;
     return this.projects.some(function (p) { return e.pl[p.id] && e.scopes[p.id] !== 'project' && self.keysOf(p.id).indexOf(key) >= 0; });
   };
+  // The Parts of a project someone keeps when they leave Whole system or the PL project: what the
+  // rosters say they hold, plus what's ticked for them in the page.
+  Access.prototype.kept = function (projectId, login) {
+    var self = this, e = peek(this.draft, login);
+    return this.keysOf(projectId).filter(function (k) { return self.holds('base', login, k) || e.items[k]; });
+  };
+  // A tool whose people list couldn't be read: its Parts can't be changed from here (nothing is staged).
+  Access.prototype.unreadable = function (key) { var it = this.items[key]; return !!it && !this.rosters[it.tool]; };
   Access.prototype.pending = function (login, key) {
     var it = this.items[key];
     return !!(it && it.repo && (this.invites[it.repo] || []).indexOf(login) >= 0);
@@ -199,8 +208,9 @@
     if (this.isFte(login)) return;
     var e = entry(this.draft, login), was = this.mode(projectId, login), self = this;
     if (was === 'system' && mode !== 'system') {
-      // Leaving Whole system keeps what they can open now, ticked: nothing goes silently.
-      this.keysOf(projectId).forEach(function (k) { e.items[k] = 1; });
+      // Leaving Whole system keeps what they really hold, ticked: nothing goes silently, and a Part
+      // linked since sharing that they never had isn't granted by the switch.
+      this.kept(projectId, login).forEach(function (k) { e.items[k] = 1; });
     }
     if (mode === 'parts') { delete e.pl[projectId]; delete e.scopes[projectId]; }
     else {
@@ -226,7 +236,7 @@
   Access.prototype.removeFrom = function (projectId, login, withParts) {
     var e = entry(this.draft, login);
     if (withParts) this.keysOf(projectId).forEach(function (k) { delete e.items[k]; });
-    else if (this.mode(projectId, login) === 'system') this.keysOf(projectId).forEach(function (k) { e.items[k] = 1; });
+    else this.kept(projectId, login).forEach(function (k) { e.items[k] = 1; });
     delete e.pl[projectId]; delete e.scopes[projectId];
   };
   Access.prototype.setCompany = function (login, company) { entry(this.draft, login).company = String(company || '').trim(); };

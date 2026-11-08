@@ -60,7 +60,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (197 tests as of 2026-11-08, after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (200 tests as of 2026-11-08, after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
