@@ -110,6 +110,7 @@
 
   var ICON = {
     chev: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.2L7 8.8l3.5-3.6"/></svg>',
+    pencil: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.8l2.7 2.7L6 12.7 2.6 13.4l.7-3.4z"/><path d="M9.2 4.1l2.7 2.7"/></svg>',
     plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
     up: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>',
     down: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>',
@@ -174,7 +175,7 @@
   }
 
   // ── Current project ──────────────────────────────────────
-  function current() { return allowed() ? projects[ui.slug] || null : null; }
+  function current() { var p = allowed() ? projects[ui.slug] : null; return p && !p.meta.deleted ? p : null; }
   function touch(p) {
     p.meta.updatedAt = M.now(); p.meta.updatedBy = me();
     dirty[p.id] = M.now();
@@ -190,7 +191,7 @@
   // ── Sidebar ──────────────────────────────────────────────
   function renderSidebar() {
     var q = ($('#project-search').value || '').toLowerCase();
-    var list = (allowed() ? Object.keys(projects) : []).map(function (k) { return projects[k]; })
+    var list = (allowed() ? Object.keys(projects) : []).map(function (k) { return projects[k]; }).filter(function (p) { return !p.meta.deleted; })
       .filter(function (p) { return !q || [p.meta.name, p.meta.client, p.meta.number].join(' ').toLowerCase().indexOf(q) >= 0; })
       .sort(function (a, b) { return (b.meta.updatedAt || '').localeCompare(a.meta.updatedAt || ''); });
     var html = list.filter(function (p) { return !p.meta.archived; }).map(function (p) {
@@ -322,7 +323,8 @@
     var m = p.meta;
     var sub = [m.client, m.number].filter(Boolean).map(esc).join('<span class="sep">·</span>');
     return '<div class="eyebrow">' + esc(eyebrow) + '</div><h1 class="page-title">' + esc(m.name) + '</h1>' +
-      '<div class="page-sub">' + (sub ? '<span>' + sub + '</span>' : '') + (m.phase ? '<span class="chip accent">' + esc(m.phase) + '</span>' : '') + '</div>';
+      '<div class="page-sub">' + (sub ? '<span>' + sub + '</span>' : '') + (m.phase ? '<span class="chip accent">' + esc(m.phase) + '</span>' : '') +
+      '<button class="btn page-edit" data-act="edit-project" title="Edit the project’s name, client, phase and description">' + ICON.pencil + 'Edit</button></div>';
   }
   function stat(n, label, cls, detail) {
     return '<div class="card stat ' + esc(cls || '') + '"><div class="stat-num">' + esc(n) + '</div><div class="stat-label">' + esc(label) + '</div>' + (detail ? '<div class="stat-detail">' + detail + '</div>' : '') + '</div>';
@@ -1289,8 +1291,9 @@
         '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
         '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' +
         '<span class="tm-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') + '</button>' +
+        (list.length ? '<button class="icon-btn tm-fold' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" title="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '" aria-expanded="' + !ui.closed[id] + '" aria-label="' + (ui.closed[id] ? 'Expand ' : 'Collapse ') + esc(n.name) + '">' + ICON.chev + '</button>' : '') +
         '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(n.name) + '">' + ICON.plus + '</button></div>' +
-        (list.length ? kids(list) : '<div class="tm-kids"><div class="tm-item tm-leaves"><div class="map-empty">Empty: drag a Part here, or use +</div></div></div>') + '</div>';
+        (ui.closed[id] && list.length ? '' : list.length ? kids(list) : '<div class="tm-kids"><div class="tm-item tm-leaves"><div class="map-empty">Empty: drag a Part here, or use +</div></div></div>') + '</div>';
     }
     var id = top || PRODUCT, r = rolls[top] || rolls[''], n = top ? t.nodes[top] : null;
     var name = n ? n.name || 'Unnamed' : p.meta.name, num = n ? n.number : p.meta.number;
@@ -1636,6 +1639,16 @@
     if (first) setTimeout(function () { first.focus(); }, 30);
     return wrap;
   }
+  // Deleting marks the project deleted; it syncs like any edit, so it goes for everyone, but the
+  // file stays in the data repository with its history. Linked reviews and harnesses aren't touched.
+  function deleteProject(p) {
+    if (!confirm('Delete ' + (p.meta.name || 'this project') + '? It goes from Signoff PL for everyone at the next sync. ' +
+      'Its linked design reviews and harnesses aren’t touched, and the file stays in the data repository, so it can be recovered.')) return false;
+    p.meta.deleted = true; p.meta.archived = true;
+    if (ui.slug === p.slug) { ui.slug = firstSlug(); ui.sel = ''; saveUi(); }
+    touch(p); toast('Deleted ' + (p.meta.name || 'the project'));
+    return true;
+  }
   function closeSheet() { var s = $('#sheet'); if (s) s.remove(); }
   function val(w, sel) { var el = w.querySelector(sel); return el ? el.value.trim() : ''; }
 
@@ -1651,12 +1664,13 @@
         '<p class="note">The boards and parts tagged with this project are offered on the System page. Leave it empty to use the product name.</p></div>' +
       '<div class="field"><label for="f-phase">Build phase</label><select class="input" id="f-phase">' + (C.phases || []).map(function (s) { return '<option' + (s === m.phase ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
       '<div class="field"><label for="f-desc">Description</label><textarea class="input" id="f-desc" placeholder="What the product is and where the project stands">' + esc(m.description) + '</textarea></div>' +
-      '</div><div class="sheet-foot">' + (p ? '<button class="btn btn-danger" data-sheet="archive">' + (m.archived ? 'Unarchive' : 'Archive') + '</button><span class="spacer"></span>' : '<span class="spacer"></span>') +
+      '</div><div class="sheet-foot">' + (p ? '<button class="btn btn-danger" data-sheet="delete">Delete</button><button class="btn" data-sheet="archive">' + (m.archived ? 'Unarchive' : 'Archive') + '</button><span class="spacer"></span>' : '<span class="spacer"></span>') +
       '<button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (p ? 'Save' : 'Create project') + '</button></div>');
     w.addEventListener('click', function (e) {
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') return closeSheet();
       if (b.dataset.sheet === 'archive') { p.meta.archived = !p.meta.archived; closeSheet(); touch(p); return; }
+      if (b.dataset.sheet === 'delete') { if (deleteProject(p)) closeSheet(); return; }
       var name = val(w, '#f-name');
       if (!name) { w.querySelector('#f-name').focus(); return; }
       var fields = { name: name, client: val(w, '#f-client'), clientProject: val(w, '#f-cproj'), number: val(w, '#f-number'), phase: val(w, '#f-phase'), description: val(w, '#f-desc') };
@@ -2141,7 +2155,7 @@
         toast('Sync failed: ' + err.message);
       });
   }
-  function firstSlug() { return Object.keys(projects).filter(function (k) { return !projects[k].meta.archived; })[0] || ''; }
+  function firstSlug() { return Object.keys(projects).filter(function (k) { return !projects[k].meta.archived && !projects[k].meta.deleted; })[0] || ''; }
 
   // ── Menus, toasts, theme ─────────────────────────────────
   function menu(anchor, entries) {
@@ -2257,7 +2271,7 @@
       case 'move-up': e.stopPropagation(); move(id, -1); break;
       case 'move-down': e.stopPropagation(); move(id, 1); break;
       case 'project-menu':
-        menu(el, [['edit', 'Project details…']].concat(isFte() ? [['share', 'Share…']] : [], [['export', 'Export project (JSON)']], DEMO ? [['reset', 'Reset demo', true]] : [])).then(function (c) {
+        menu(el, [['edit', 'Project details…']].concat(isFte() ? [['share', 'Share…']] : [], [['export', 'Export project (JSON)']], DEMO ? [['reset', 'Reset demo', true]] : [], ['-', ['archive', current().meta.archived ? 'Unarchive project' : 'Archive project'], ['delete', 'Delete project…', true]])).then(function (c) {
           var p = current();
           if (c === 'edit') projectSheet(p);
           if (c === 'share') shareSheet(p);
@@ -2267,6 +2281,8 @@
             a.download = p.slug + '.pl.json'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
           }
           if (c === 'reset') resetDemo();
+          if (c === 'archive') { p.meta.archived = !p.meta.archived; touch(p); }
+          if (c === 'delete') deleteProject(p);
         });
         break;
     }

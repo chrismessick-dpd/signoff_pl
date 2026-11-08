@@ -291,6 +291,9 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .tm-head { display: flex; align-items: center; gap: 6px; }
 .tm-head > .icon-btn { width: 28px; height: 28px; flex: none; opacity: 0.55; }
 .tm-head:hover > .icon-btn, .tm-head > .icon-btn:focus-visible { opacity: 1; }
+.tm-fold svg { width: 14px; height: 14px; transition: transform 0.15s; }
+.tm-fold.closed { opacity: 1; color: var(--accent); }
+.tm-fold.closed svg { transform: rotate(-90deg); }
 .tm-top { display: flex; align-items: center; gap: 14px; flex: 0 1 auto; min-width: 0; text-align: left; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--hair); border-radius: 14px; padding: 10px 16px 10px 10px; cursor: pointer;
   transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease), border-color 0.15s var(--ease); }
 .tm-top .ring-label b { font-size: 14px; }
@@ -411,3 +414,7 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .sys-talk-row:hover { background: var(--bg-sunk); }
 .sys-talk-on { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .sys-talk-check { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+
+/* Edit beside the phase chip in a project's header */
+.page-edit { padding: 3px 10px; font-size: 13px; gap: 5px; }
+.page-edit svg { width: 13px; height: 13px; }
