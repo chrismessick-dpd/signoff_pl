@@ -4,7 +4,9 @@
 
    storage.ns:  localStorage namespace for this tool. The GitHub token (signoff.token) and the
                 theme (signoff.v1.settings -> theme) are shared by every Signoff tool.
-   repos:       where PL keeps its own projects (FTEs only; there are no shared PL repos).
+   repos:       where PL keeps its own projects: dataRepo (FTEs only) and prefix, the start of the
+                name of each shared project's private repo (review-pl-<slug>). peopleRepo is Signoff
+                EE's data repo, whose users.json is the home of People & access (docs/sharing.md).
    tools:       the Signoff tools a Part can link to. PL reads each project file's `summary`
                 from the tool's data repo and from every repo starting with its prefix (none when
                 the prefix is empty). `review: false` marks a tool whose designs aren't reviews
@@ -27,7 +29,9 @@ window.SIGNOFF_CONFIG = {
   "repos": {
     "owner": "chrismessick-dpd",
     "toolRepo": "signoff_pl",
-    "dataRepo": "signoff_pl_data"
+    "dataRepo": "signoff_pl_data",
+    "prefix": "review-pl-",
+    "peopleRepo": "ee_design_review_data"
   },
   "ids": { "project": "pl", "node": "n" },
   "phases": ["EVT", "DVT", "PVT"],
@@ -39,7 +43,7 @@ window.SIGNOFF_CONFIG = {
     { "id": "fw", "name": "Signoff FW", "short": "FW", "desc": "Firmware design review",
       "dataRepo": "fw_design_review_data", "prefix": "review-fw-", "app": "../fw_design_review/index.html" },
     { "id": "loom", "name": "Loom", "short": "Loom", "desc": "Harness drawing",
-      "dataRepo": "loom_data", "prefix": "", "app": "../loom/index.html", "review": false }
+      "dataRepo": "loom_data", "prefix": "review-loom-", "app": "../loom/index.html", "review": false }
   ],
   "demo": {
     "project": {

@@ -292,17 +292,19 @@
   }
 
   // ── Access ───────────────────────────────────────────────
-  // PL is for FTEs: anyone whose token opens the PL data repo. The browser keeps a working copy
-  // of the projects, so it's shown only while the token in use is the one a sync last confirmed
-  // as an FTE's, against the data repo in Settings.
-  // access: { login, tag: tokenTag(token), repo: 'owner/name', state: 'fte' | 'none' | '' (not checked) }.
+  // An FTE is anyone whose token opens the PL data repo; a contractor's token opens only the
+  // review-pl-* repos of the projects shared with them (docs/sharing.md). The browser keeps a
+  // working copy of the projects, so it's shown only while the token in use is the one a sync last
+  // confirmed, against the data repo in Settings.
+  // access: { login, tag: tokenTag(token), repo: 'owner/name', state: 'fte' | 'contractor' | 'none' | '' (not checked) }.
 
   // tokenTag is the engine's token fingerprint (model.js), so a token changed in another Signoff
   // tool is noticed before the next sync.
   var tokenTag = M.tokenTag;
   function canSee(access, token, repo) {
-    return !!token && !!access && access.state === 'fte' && access.tag === tokenTag(token) && access.repo === repo;
+    return !!token && !!access && (access.state === 'fte' || access.state === 'contractor') && access.tag === tokenTag(token) && access.repo === repo;
   }
+  function isFte(access, token, repo) { return canSee(access, token, repo) && access.state === 'fte'; }
   // The data repo said no (404): drop the projects it already holds, and keep unsynced ones
   // (hidden) so an FTE's next sync from this browser still pushes them.
   function lockOut(projects, dirty) {
@@ -432,6 +434,6 @@
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
-    tokenTag: tokenTag, canSee: canSee, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanBoard: cleanBoard
+    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanBoard: cleanBoard
   };
 })(window.Signoff = window.Signoff || {});

@@ -353,6 +353,10 @@
       return data.snapshot().then(function (snap) {
         var u = snap.entries.filter(function (e) { return e.path === 'users.json'; })[0];
         return u ? data.blob(u.sha).then(function (t) { return M.sharedRepo(JSON.parse(t), entry.id); }) : '';
+      }, function (err) {
+        // No data repo for this token (a contractor): the review is where the reader found it.
+        if ((err.status === 404 || err.status === 403) && entry.repo) return entry.repo;
+        throw err;
       }).then(function (shared) {
         var full = shared || s.owner + '/' + tool.dataRepo;
         return { store: new S.GitHubStore({ owner: full.split('/')[0], repo: full.split('/')[1], branch: s.branch, dataPath: '', token: token }), full: full, path: 'projects/' + entry.id + '.json', tool: tool };

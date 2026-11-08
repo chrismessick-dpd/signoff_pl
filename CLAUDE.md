@@ -17,8 +17,10 @@ This repo is public: no client data, tokens or commit messages naming clients.
 
 - **Naming.** PL is the product-level view. Chris dislikes "systems engineering"; frame it as a
   project.
-- **Access.** FTE-only. There are two repos, `signoff_pl` (public, Pages) and `signoff_pl_data`
-  (private), and no `review-pl-*` repos.
+- **Access.** FTE-only at first: `signoff_pl` (public, Pages) and `signoff_pl_data` (private). Since
+  the `sharing` branch (2026-11-07, Chris: "full project shareability, the same way Signoff EE shares"),
+  a project can be shared into its own private `review-pl-<slug>` repo, with everything it links; see
+  *Sharing* below and `docs/sharing.md`.
 - **Words.** The children are called **Parts**. Since 2026-11-01 EE says **Boards** and ME says
   **Parts** on screen, and "project" means the client project (`meta.project`, also in each
   summary as `project`).
@@ -31,7 +33,8 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | File | What it does |
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
-| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 4 since Loom harnesses, 2026-11-07). A tool with an empty `prefix` (Loom) reads only its data repo. The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
+| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 4 since Loom harnesses, 2026-11-07). A tool with an empty `prefix` reads only its data repo (Loom's is `review-loom-` since sharing). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
+| `assets/share.js` | Sharing (`S.PLSharer`): the per-tool share routine (`shareOne`), `plan`, `shareProject`, `revokeProject`, and `syncAll`, PL's sync across the data repo and the shared repos. See *Sharing* below. |
 | `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
 | `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
@@ -197,6 +200,30 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
 - **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.
+
+## Sharing (2026-11-07, branch `sharing`; Loom's branch `sharing` goes with it)
+
+Chris asked whether sharing a PL project shares its Loom harnesses, and for PL to share projects the
+way EE does, on a branch. Before: no, and PL wasn't shareable. Now (`docs/sharing.md` has the design and
+the open questions):
+- **⋯ → Share…** (`shareSheet`, FTEs only, project synced) lists who has the project, what goes with it
+  (the project, each linked review, each harness, each with the repo it's in or "gets its own private
+  repository"), and adds a person by GitHub username (names Signoff EE knows are offered). Remove takes
+  them off everything.
+- **`share.js`** does the work per tool with that tool's data repo and prefix: create or adopt the repo,
+  copy the file byte for byte, move the files stored next to it (`fabcheck/<id>/` for EE, `models/<id>/`
+  for PL), patch the roster (`shared[id]`, `users[login]` as a contractor; proof that nothing else in
+  the file changes, `force: false`, read back) and delete the data repo's copy in the same commit, then
+  invite EE's FTEs (`config.repos.peopleRepo`, the home of People) and the person. Safe to repeat.
+- **Sync** is `syncAll`: the data repo with PL's roster (`roster`, `homes`, `repoCache` in storage;
+  the old `cache` key migrates), then the shared repos from the shared map (FTE) or listed by
+  `review-pl-` (contractor, `access.state === 'contractor'`; `P.canSee` allows it, `P.isFte` doesn't).
+  A token that reaches nothing still locks PL. Model files live in a project's home repo
+  (`homeOf(p)`); the Requirements write falls back to the reader's repo when the data repo is closed.
+- **Tests:** 176 (sharing a product with an internal EE board with Fabcheck files, a shared ME part,
+  a Loom harness and models; rosters; invitations; idempotence; the contractor's sync, reader and
+  edit; revoke; the roster proof). Loom: 19.
+- **Not tried live.** The first live share creates real repos; Chris should try a test product first.
 
 ## Next
 

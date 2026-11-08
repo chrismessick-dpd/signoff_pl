@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -171,10 +171,12 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   }
   lhub.makeRepo('own/loom_data', { 'projects/h1.json': harnessFile('h1', 'Sensor harness', 'H-100', '2026-11-07T12:00:00.000Z') }, ['own']);
   lhub.makeRepo('own/review-loom-nothing', { 'projects/h9.json': harnessFile('h9', 'Stray', 'X', '') }, ['own']);
+  lhub.makeRepo('own/review-loom-shared', { 'projects/h2.json': harnessFile('h2', 'Shared harness', 'H-200', '') }, ['own']);
+  lhub.push('own/loom_data', Object.assign(lhub.files('own/loom_data'), { 'users.json': M.stableStringify({ schema: 1, users: {}, shared: { h2: { id: 'h2', repo: 'own/review-loom-shared', name: 'Shared harness' } } }) }));
   var lix = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: lhub.fetchFor('tok-own') }).refresh(null);
   var le = lix.entries['loom:h1'];
   ok(le && le.number === 'H-100' && le.summary.harness.wires === 7 && le.summary.identAt === '2026-11-07T12:00:00.000Z', 'a Loom harness is read with its number (meta.number), contents and identAt');
-  ok(!lix.entries['loom:h9'] && !lhub.calls.some(function (c) { return /review-loom/.test(c); }), 'a tool with no prefix reads only its data repo');
+  ok(lix.entries['loom:h2'] && lix.entries['loom:h2'].repo === 'own/review-loom-shared' && !lix.entries['loom:h9'], 'shared harness repos are read, and only for the harnesses Loom’s shared map puts there');
   eq(lix.errors, [], 'no errors reading harnesses');
   var hp = P.newProject({ name: 'Water Monitor' }, 'ann'), htop = node(hp, { kind: 'assembly', name: 'Top' });
   var hb = node(hp, { parent: htop.id, name: 'Main board', source: 'ee', ref: { tool: 'ee', id: 'p1' } });
@@ -358,6 +360,91 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var nested = P.newProject({ name: 'Kit' }, 'ann'), kit = node(nested, { kind: 'assembly', name: 'Kit', qty: 3 });
   node(nested, { parent: kit.id, name: 'Bolt', number: 'B-1', source: 'purchased', qty: 4, massG: 2 });
   eq(P.bom(nested, null, 'indented').rows[1].extQty, 12, 'an assembly’s quantity multiplies the Parts in it');
+
+  // ── Sharing a PL project (share.js, docs/sharing.md) ──
+  // Owner 'own' leads a product linking an internal EE board (with Fabcheck files), an ME part that is
+  // shared already, a Loom harness and a purchased part. EE's roster knows FTE bob.
+  var shub = new FakeHub();
+  var eeRoster = { schema: 1, users: { bob: { login: 'bob', name: 'Bob', role: 'fte', projects: [], updatedAt: at('01:00:00'), updatedBy: 'own' } }, shared: {} };
+  var meRoster = { schema: 1, users: { dan: { login: 'dan', name: 'Dan', role: 'contractor', projects: ['m1'], updatedAt: at('01:00:00'), updatedBy: 'own' } },
+    shared: { m1: { id: 'm1', repo: 'own/review-me-housing', name: 'Housing', updatedAt: at('01:00:00'), updatedBy: 'own' } } };
+  var boardText = file('p1', 'Main board', summary(100, 50, { critical: 0, major: 0, minor: 0 }));
+  shub.makeRepo('own/ee_design_review_data', { 'projects/p1.json': boardText, 'users.json': M.stableStringify(eeRoster), 'fabcheck/p1/runs/r1.json': '{"id":"r1"}', 'fabcheck/p1/preview/top.webp': 'TOP' }, ['own', 'bob']);
+  shub.makeRepo('own/me_design_review_data', { 'users.json': M.stableStringify(meRoster) }, ['own', 'bob']);
+  shub.makeRepo('own/review-me-housing', { 'projects/m1.json': file('m1', 'Housing', null) }, ['own', 'bob', 'dan']);
+  shub.makeRepo('own/loom_data', { 'projects/h1.json': harnessFile('h1', 'Sensor harness', 'H-100', '') }, ['own', 'bob']);
+  shub.makeRepo('own/signoff_pl_data', { 'README.md': '#' }, ['own', 'bob']);
+  var sp = P.newProject({ name: 'Water Monitor', number: 'WM-1' }, 'own'), stop = node(sp, { kind: 'assembly', name: 'Top' });
+  node(sp, { parent: stop.id, name: 'Main board', source: 'ee', ref: { tool: 'ee', id: 'p1' } });
+  node(sp, { parent: stop.id, name: 'Housing', source: 'me', ref: { tool: 'me', id: 'm1' } });
+  node(sp, { parent: stop.id, name: 'Sensor harness', source: 'loom', ref: { tool: 'loom', id: 'h1' } });
+  node(sp, { parent: stop.id, name: 'Battery', source: 'purchased' });
+  var modelNode = node(sp, { parent: stop.id, name: 'PSU', source: 'purchased', model: { file: 'psu.step', dir: 'models/' + sp.id + '/x/', mesh: { sha: '0'.repeat(40), size: 1 }, views: [] } });
+  // Files put by putFiles sit in the fake as bytes, as GitHub stores blobs; read them as text.
+  function ft(full, path) { var v = shub.files(full)[path]; return v == null ? v : typeof v === 'string' ? v : new TextDecoder().decode(v); }
+  function sharerFor(login) {
+    return new Signoff.PLSharer({ owner: 'own', token: 'tok-' + login, fetch: shub.fetchFor('tok-' + login), tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, peopleRepo: 'ee_design_review_data' });
+  }
+  var ownSt = { login: 'own', projects: (function () { var o = {}; o[sp.id] = sp; return o; })(), roster: M.emptyRoster(), homes: {}, caches: {}, dataAccess: '' };
+  var r0 = await sharerFor('own').syncAll(ownSt, { merge: P.merge });
+  ok(r0.state.dataAccess === 'ok' && shub.files('own/signoff_pl_data')['projects/' + sp.id + '.json'], 'syncAll pushes an internal project to the data repo as before');
+  shub.push('own/signoff_pl_data', Object.assign(shub.files('own/signoff_pl_data'), { ['models/' + sp.id + '/x/mesh.plm.gz']: 'MESH' }));
+  var plText = shub.files('own/signoff_pl_data')['projects/' + sp.id + '.json'];
+  var names = { 'ee:p1': 'Main board', 'me:m1': 'Housing', 'loom:h1': 'Sensor harness' };
+  var nameOf = function (t, id) { return names[t + ':' + id] || ''; };
+  var plan = await sharerFor('own').plan(sp, nameOf);
+  eq(plan.items.map(function (i) { return i.tool + ':' + i.id + ':' + (i.repo || '-'); }), ['pl:' + sp.id + ':-', 'ee:p1:-', 'me:m1:own/review-me-housing', 'loom:h1:-'], 'the plan lists the project, then each linked design once, with the repo it is shared in already');
+  eq([plan.fte, plan.items[2].people], [['bob'], ['dan']], '…the FTEs from Signoff EE’s roster and who is on each');
+  var log = [];
+  var shared = await sharerFor('own').shareProject(sp, ['cat'], nameOf, function (t) { log.push(t); });
+  var plRepo2 = 'own/review-pl-water-monitor';
+  eq(shared.results.map(function (r) { return r.repo; }), [plRepo2, 'own/review-ee-main-board', 'own/review-me-housing', 'own/review-loom-sensor-harness'], 'sharing makes a private repo per thing, reusing the ME part’s');
+  eq(ft(plRepo2, 'projects/' + sp.id + '.json'), plText, 'the PL project is copied byte for byte');
+  eq(ft('own/review-ee-main-board', 'projects/p1.json'), boardText, 'the board too');
+  ok(!shub.files('own/signoff_pl_data')['projects/' + sp.id + '.json'] && !shub.files('own/ee_design_review_data')['projects/p1.json'] && !shub.files('own/loom_data')['projects/h1.json'], 'the data repos’ copies are deleted');
+  ok(ft('own/review-ee-main-board', 'fabcheck/p1/runs/r1.json') === '{"id":"r1"}' && ft('own/review-ee-main-board', 'fabcheck/p1/preview/top.webp') === 'TOP' && !shub.files('own/ee_design_review_data')['fabcheck/p1/preview/top.webp'], 'Fabcheck files move with the board');
+  ok(ft(plRepo2, 'models/' + sp.id + '/x/mesh.plm.gz') === 'MESH' && !shub.files('own/signoff_pl_data')['models/' + sp.id + '/x/mesh.plm.gz'], 'model files move with the project');
+  var eeR = JSON.parse(shub.files('own/ee_design_review_data')['users.json']), plR = JSON.parse(shub.files('own/signoff_pl_data')['users.json']), loomR = JSON.parse(shub.files('own/loom_data')['users.json']), meR = JSON.parse(shub.files('own/me_design_review_data')['users.json']);
+  ok(eeR.shared.p1.repo === 'own/review-ee-main-board' && eeR.users.cat.role === 'contractor' && eeR.users.cat.projects.join() === 'p1' && eeR.users.bob.role === 'fte', 'EE’s roster records the move and the contractor, as its own People page would');
+  ok(plR.shared[sp.id].repo === plRepo2 && plR.users.cat.projects.join() === sp.id && loomR.shared.h1.repo === 'own/review-loom-sensor-harness' && loomR.users.cat.projects.join() === 'h1', 'PL’s and Loom’s rosters get the same records');
+  ok(meR.users.dan.projects.join() === 'm1' && meR.users.cat.projects.join() === 'm1' && meR.shared.m1.repo === 'own/review-me-housing', 'ME’s roster keeps Dan and adds Cat on the shared part');
+  eq(shub.files('own/me_design_review_data')['users.json'].length > 0 && M.stableStringify(meR), shub.files('own/me_design_review_data')['users.json'], 'rosters are written as Signoff writes them');
+  function invited(full) { return shub.repos[full].invitations.map(function (i) { return i.login; }).sort(); }
+  eq([invited(plRepo2), invited('own/review-ee-main-board'), invited('own/review-loom-sensor-harness'), invited('own/review-me-housing')], [['bob', 'cat'], ['bob', 'cat'], ['bob', 'cat'], ['cat']], 'the FTEs and the person are invited to every new repo; the person alone to the one that exists');
+  eq(shared.failedInvites, [], 'no invitation failed');
+  var again = await sharerFor('own').shareProject(sp, ['cat'], nameOf);
+  ok(again.results.every(function (r) { return !r.error && !r.created; }) && !shub.repos['own/review-pl-water-monitor-2'], 'sharing again changes nothing and makes no second repo');
+
+  // The owner syncs: the project now lives in its repo and isn't pushed back to the data repo.
+  var r1 = await sharerFor('own').syncAll(r0.state, { merge: P.merge });
+  ok(r1.state.homes[sp.id] === plRepo2 && !shub.files('own/signoff_pl_data')['projects/' + sp.id + '.json'] && r1.state.projects[sp.id], 'an FTE’s sync follows the project to its shared repo');
+  eq(r1.errors, [], 'no sync errors');
+  // Cat accepts her invitations and syncs as a contractor: the project, and the designs she can reach.
+  var catAcc = new Signoff.GitHubAccount('tok-cat', shub.fetchFor('tok-cat'));
+  var inv = await catAcc.invitations();
+  for (var ii = 0; ii < inv.length; ii++) await catAcc.acceptInvitation(inv[ii].id);
+  var catSt = await sharerFor('cat').syncAll({ login: '', projects: {}, roster: M.emptyRoster(), homes: {}, caches: {}, dataAccess: '' }, { merge: P.merge });
+  ok(catSt.state.dataAccess === 'none' && Object.keys(catSt.state.projects).join() === sp.id && catSt.state.homes[sp.id] === plRepo2, 'a contractor gets the shared project without the data repo');
+  var catIx = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-cat', fetch: shub.fetchFor('tok-cat') }).refresh(null);
+  eq(Object.keys(catIx.entries).sort(), ['ee:p1', 'loom:h1', 'me:m1'], '…and reads the board, the part and the harness from their shared repos');
+  eq(catIx.errors, [], '…with no errors for the data repos she can’t open');
+  // Her edit reaches the owner.
+  var catDoc = JSON.parse(JSON.stringify(catSt.state.projects[sp.id]));
+  catDoc.nodes[modelNode.id] = Object.assign({}, catDoc.nodes[modelNode.id], { name: 'PSU (Cat)', updatedAt: at('14:00:00') });
+  var catSt2 = await sharerFor('cat').syncAll(Object.assign({}, catSt.state, { projects: (function () { var o = {}; o[sp.id] = catDoc; return o; })() }), { merge: P.merge, keepLocal: function () { return true; } });
+  ok(catSt2.pushed === 1, 'the contractor’s edit is pushed to the shared repo');
+  var r2 = await sharerFor('own').syncAll(r1.state, { merge: P.merge });
+  eq(r2.state.projects[sp.id].nodes[modelNode.id].name, 'PSU (Cat)', 'the owner’s next sync brings it');
+  // Removing Cat takes her off every repo and out of the rosters.
+  var rv = await sharerFor('own').revokeProject(sp, 'cat', nameOf);
+  eq(rv.failed, [], 'revoking reports no problems');
+  ok(['own/review-pl-water-monitor', 'own/review-ee-main-board', 'own/review-loom-sensor-harness', 'own/review-me-housing'].every(function (f) { return shub.repos[f].collaborators.indexOf('cat') < 0; }), 'she is off the project’s repo and every linked one');
+  ok(JSON.parse(shub.files('own/ee_design_review_data')['users.json']).users.cat.projects.length === 0 && JSON.parse(shub.files('own/me_design_review_data')['users.json']).users.dan.projects.join() === 'm1', 'the rosters drop her assignments and keep Dan’s');
+  var catSt3 = await sharerFor('cat').syncAll(catSt2.state, { merge: P.merge });
+  ok(!catSt3.state.projects[sp.id] && catSt3.dropped.join() === sp.id, 'her copy is dropped at her next sync');
+  // A roster write never changes anything but its records.
+  var proofErr = await sharerFor('own').patchRoster('own/ee_design_review_data', { users: [], shared: [] }, function (r) { r.users.bob.role = 'contractor'; return true; }).then(function () { return null; }, function (e) { return e; });
+  ok(proofErr && /more than the records/.test(proofErr.message), 'a roster write that touches an unlisted record is refused');
 
   // ── 3D models ──
   var M3 = Signoff.model3d, SHA1 = 'a'.repeat(40), SHA2 = 'b'.repeat(40);

@@ -35,14 +35,18 @@ same origin, so signing in once covers them all. The token must reach:
 - Signoff EE's and ME's data repos
 - every `review-ee-…` and `review-me-…` repo
 
-**Who sees what.** An FTE is anyone whose token can open the PL data repo. PL shows projects only
-while a sync has confirmed that for the token in use:
+**Who sees what.** An FTE is anyone whose token can open the PL data repo; a contractor's token
+opens only the `review-pl-…` repos of the projects shared with them. PL shows projects only while a
+sync has confirmed that for the token in use:
 - PL remembers the login and a fingerprint of the token (`access` in its storage). A token
   changed in any Signoff tool, or a different data repo in Settings, hides the projects until
   the next sync confirms it.
-- If the data repo returns 404, PL locks: it says who's signed in and how to get FTE access. It
-  drops the projects the repo already holds and keeps unsynced ones, hidden, so an FTE's next
+- If the data repo returns 404, PL lists the owner's `review-pl-…` repos the token can open and
+  syncs those (a contractor). With none, PL locks: it says who's signed in and how to get access.
+  It drops the projects the repos already hold and keeps unsynced ones, hidden, so an FTE's next
   sync from that browser pushes them. Designs aren't read.
+- A contractor sees no People link and can't make a new project; everything else works on the
+  projects they have, and the designs their token reaches.
 - Signed out, PL shows nothing either.
 
 **Sync** (or Ctrl+S) does three things:
@@ -266,9 +270,15 @@ and deletions are tombstones. The merge is PL's own (`pl.js` `merge`), passed to
 | Repository | Holds | Who's on it |
 | --- | --- | --- |
 | `signoff_pl` (tool) | This tool | FTEs |
-| `signoff_pl_data` (data) | PL projects (`projects/<id>.json`) | FTEs |
+| `signoff_pl_data` (data) | Internal PL projects (`projects/<id>.json`), their model files and `users.json` | FTEs |
+| `review-pl-<slug>` (one per shared project) | That one project and its model files | FTEs and the people it's shared with |
 
-There are no shared `review-pl-…` repos.
+**Sharing a project** (⋯ → Share…, FTEs only) gives someone outside the team the product and
+everything it links: the project moves into its own private `review-pl-…` repo, each linked EE, ME
+and FW review into its tool's `review-…` repo (or stays in the one it's shared in already), and each
+Loom harness into `review-loom-…`. The person is invited to all of them and recorded as a contractor
+in each tool's `users.json`, so Signoff EE's People page shows them on the boards. Remove takes them
+off again. The design and the open questions are in [docs/sharing.md](docs/sharing.md).
 
 ## Layout
 

@@ -43,7 +43,11 @@
 
   var projects = load('projects', {});    // slug -> PL project document (working copy)
   var dirty = load('dirty', {});          // project id -> time of last unsynced edit
-  var cache = load('cache', {});          // blob shas in the PL data repo as of the last sync
+  // Blob shas per repository as of the last sync ('owner/repo' -> { path: { sha } }); a browser from
+  // before sharing kept the data repo's alone under `cache`.
+  var caches = load('repoCache', null) || (function () { var c = load('cache', null), o = {}; if (c) o[settings.owner + '/' + settings.dataRepo] = c; return o; })();
+  var homes = load('homes', {});          // project id -> 'owner/repo' it last synced with (share.js)
+  var roster = load('roster', null) || M.emptyRoster();   // PL's users.json: contractors and the shared map
   var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
@@ -72,6 +76,13 @@
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
   function allowed() { return DEMO || P.canSee(access, getToken(), dataRepo()); }
+  function isFte() { return !DEMO && P.isFte(access, getToken(), dataRepo()); }
+  // Where a project's files live: its shared repo, else the data repo (docs/sharing.md).
+  function homeOf(p) { return (p && (M.sharedRepo(roster, p.id) || homes[p.id])) || settings.owner + '/' + settings.dataRepo; }
+  function sharer(token) {
+    return new S.PLSharer({ owner: settings.owner, branch: settings.branch, token: token || getToken(), tools: C.tools, login: access.login,
+      pl: { dataRepo: settings.dataRepo, prefix: C.repos.prefix || 'review-pl-' }, peopleRepo: C.repos.peopleRepo });
+  }
   function denied() { var t = getToken(); return !!t && access.state === 'none' && access.tag === P.tokenTag(t) && access.repo === dataRepo(); }
 
   // ── Small helpers ────────────────────────────────────────
@@ -193,9 +204,10 @@
         archived.map(function (p) { return '<button class="proj" data-act="open-project" data-slug="' + esc(p.slug) + '"><span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span></span></button>'; }).join('') + '</div>';
     }
     $('#project-list').innerHTML = html;
-    $('.side-head [data-act="new-project"]').hidden = !allowed();
+    // A contractor has no data repo to put a new project in, and People & access is for FTEs.
+    $('.side-head [data-act="new-project"]').hidden = !(DEMO || isFte());
     // People & access lives in Signoff EE, whose list decides who's an FTE across the suite.
-    $('#people-link').hidden = DEMO || !allowed();
+    $('#people-link').hidden = !isFte();
     if (DEMO) {
       document.querySelectorAll('#side-tools a.side-link').forEach(function (a) {
         var href = a.getAttribute('href');
@@ -211,7 +223,7 @@
     if (DEMO) { dot.dataset.tone = 'idle'; title.textContent = 'Demo mode'; sub.textContent = 'Changes stay in this browser'; return; }
     if (state === 'busy' || syncing) { dot.dataset.tone = 'busy'; title.textContent = 'Syncing…'; sub.textContent = settings.owner; return; }
     if (!getToken()) { dot.dataset.tone = 'idle'; title.textContent = 'Signed out'; sub.textContent = 'Add your GitHub token'; return; }
-    if (denied()) { dot.dataset.tone = 'warn'; title.textContent = 'No access'; sub.textContent = '@' + access.login + ' isn’t an FTE'; return; }
+    if (denied()) { dot.dataset.tone = 'warn'; title.textContent = 'No access'; sub.textContent = '@' + access.login + ' has no projects'; return; }
     if (!allowed()) { dot.dataset.tone = 'idle'; title.textContent = 'Not checked yet'; sub.textContent = 'Click to sync'; return; }
     if (n) { dot.dataset.tone = 'warn'; title.textContent = plural(n, 'unsynced change'); sub.textContent = 'Click to sync'; return; }
     var errs = lastSync && lastSync.errors && lastSync.errors.length;
@@ -293,8 +305,8 @@
   // Shown instead of the projects until a sync confirms an FTE's token (see allowed()).
   function lockedPage() {
     var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
-    var head = !getToken() ? ['Sign in to Signoff PL', 'Signoff PL is for Dovetail FTEs. Add your GitHub token in Settings; PL shows the projects once it confirms the token can open ' + repo + '.']
-      : denied() ? ['Signoff PL is for Dovetail FTEs', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + '. An FTE adds you from People in Signoff EE. Accept GitHub’s invitation, then sync again.']
+    var head = !getToken() ? ['Sign in to Signoff PL', 'Add your GitHub token in Settings. PL shows the projects once it confirms the token can open ' + repo + ' (Dovetail FTEs) or a project shared with you.']
+      : denied() ? ['No projects for this account', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + ' and is on no shared PL project. An FTE adds you from People in Signoff EE, or shares a project with you from Signoff PL. Accept GitHub’s invitation, then sync again.']
       : syncing ? ['Syncing with GitHub', 'Checking that your token can open ' + repo + '. The projects show here as soon as the sync finishes.']
       : ['Not checked yet', 'PL shows the projects once a sync confirms your token can open ' + repo + '.'];
     return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
@@ -517,8 +529,12 @@
   // Upload the waiting files that a live Part still refers to, in one commit, before the project
   // files that refer to them are pushed. Files no Part refers to any more are dropped.
   function uploadModels(token) {
-    var want = {};
-    Object.keys(projects).forEach(function (k) { Object.assign(want, P.modelFiles(projects[k])); });
+    var want = {}, projectOfModel = {};
+    Object.keys(projects).forEach(function (k) {
+      var files = P.modelFiles(projects[k]);
+      Object.assign(want, files);
+      Object.keys(files).forEach(function (sha) { projectOfModel[files[sha]] = projects[k]; });
+    });
     return upKeys().then(function (keys) {
       var go = keys.filter(function (k) { return want[k]; });
       keys.filter(function (k) { return !want[k]; }).forEach(upDel);
@@ -526,10 +542,17 @@
       return Promise.all(go.map(function (k) { return upGet(k).then(function (u) { return u && u.blob.arrayBuffer().then(function (b) { return { path: want[k], bytes: new Uint8Array(b), sha: k }; }); }); }))
         .then(function (files) {
           files = files.filter(Boolean);
-          var store = new S.GitHubStore({ owner: settings.owner, repo: settings.dataRepo, branch: settings.branch, dataPath: '', token: token });
-          return store.putFiles(files, { message: 'PL models: ' + plural(files.length, 'file') + ' (' + me() + ')' }).then(function () {
-            return Promise.all(files.map(function (f) { return upDel(f.sha); })).then(function () { return files.length; });
-          });
+          // Into each project's own repository (a shared project keeps its models with it).
+          var byRepo = {};
+          files.forEach(function (f) { var r = homeOf(projectOfModel[f.path]); (byRepo[r] = byRepo[r] || []).push(f); });
+          return Object.keys(byRepo).reduce(function (chain, r) {
+            return chain.then(function () {
+              var store = new S.GitHubStore({ owner: r.split('/')[0], repo: r.split('/')[1], branch: settings.branch, dataPath: '', token: token });
+              return store.putFiles(byRepo[r], { message: 'PL models: ' + plural(byRepo[r].length, 'file') + ' (' + me() + ')' }).then(function () {
+                return Promise.all(byRepo[r].map(function (f) { return upDel(f.sha); }));
+              });
+            });
+          }, Promise.resolve()).then(function () { return files.length; });
         });
     });
   }
@@ -539,7 +562,7 @@
   function modelPreview(n) {
     var m = modelOf(n);
     if (!m || !m.views.length) return null;
-    return { repo: settings.owner + '/' + settings.dataRepo, hero: 'iso', model: true,
+    return { repo: homeOf(current()), hero: 'iso', model: true,
       images: m.views.map(function (v) { return { key: v.key, type: 'image/png', w: v.w, h: v.h, sha: v.sha }; }) };
   }
   // The picture set a Part shows: its attached model's, else its design's stored preview.
@@ -559,7 +582,7 @@
   var meshes = {};
   function loadMesh(sha) {
     if (!meshes[sha]) {
-      meshes[sha] = fileBlob(settings.owner + '/' + settings.dataRepo, { sha: sha, type: 'application/octet-stream' })
+      meshes[sha] = fileBlob(homeOf(current()), { sha: sha, type: 'application/octet-stream' })
         .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
         .then(function (buf) { return S.model3d.decode(new Uint8Array(buf)); });
       meshes[sha].catch(function () { delete meshes[sha]; });
@@ -576,7 +599,7 @@
   function downloadStep(id) {
     var m = modelOf(current().nodes[id]);
     if (!m || !m.step) return;
-    fileBlob(settings.owner + '/' + settings.dataRepo, { sha: m.step.sha, type: 'application/gzip' })
+    fileBlob(homeOf(current()), { sha: m.step.sha, type: 'application/gzip' })
       .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
       .then(function (buf) { return S.model3d.gzip(new Uint8Array(buf), 'gunzip'); })
       .then(function (bytes) {
@@ -1946,11 +1969,94 @@
     });
   }
 
+  // ── Share (docs/sharing.md) ──────────────────────────────
+  // Who a project is shared with, and what sharing it touches: the project, each linked review and
+  // each linked harness, each moved into its own private repo by share.js and the person invited.
+  function progressSheet(title) {
+    var w = sheet('<div class="sheet-head"><h2>' + esc(title) + '</h2></div><div class="sheet-body"><div class="log" id="op-log"></div></div>' +
+      '<div class="sheet-foot"><span class="spacer"></span><button class="btn btn-primary" data-sheet="done" disabled>Done</button></div>');
+    w.querySelector('[data-sheet="done"]').addEventListener('click', closeSheet);
+    return {
+      log: function (text, cls) { var l = w.querySelector('#op-log'); if (!l) return; l.innerHTML += '<div class="' + (cls || '') + '">' + esc(text) + '</div>'; l.scrollTop = 1e6; },
+      done: function () { var d = w.querySelector('[data-sheet="done"]'); if (d) d.disabled = false; }
+    };
+  }
+  function designName(tool, id) { var e = index && index.entries && index.entries[tool + ':' + id]; return e ? e.name : ''; }
+  function shareSheet(p) {
+    if (!p || !isFte() || !getToken()) return;
+    if (dirty[p.id]) { toast('Sync first, so the shared copy starts from what’s on GitHub.'); return; }
+    var sh = sharer(), w = sheet('<div class="sheet-head"><h2>Share ' + esc(p.meta.name) + '</h2><p>Reading who has it…</p></div>' +
+      '<div class="sheet-body"><p class="note">Checking the repositories.</p></div><div class="sheet-foot"><span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button></div>');
+    w.addEventListener('click', function (e) { var b = e.target.closest('[data-sheet="cancel"]'); if (b) closeSheet(); });
+    sh.plan(p, designName).then(function (plan) {
+      if (!document.body.contains(w)) return;
+      var onProject = plan.items[0].people;
+      var known = plan.people.filter(function (u) { return u.role === 'contractor' && onProject.indexOf(u.login) < 0; });
+      function row(it) {
+        var tool = it.tool === 'pl' ? { short: 'PL' } : P.toolById(it.tool) || { short: it.tool };
+        return '<tr><td><span class="chip">' + esc(tool.short) + '</span> ' + esc(it.name) + '</td><td class="muted">' + (it.repo ? 'Shared as <b>' + esc(it.repo.split('/')[1]) + '</b>' : 'Gets its own private repository') + '</td></tr>';
+      }
+      w.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-head"><h2>Share ' + esc(p.meta.name) + '</h2>' +
+        '<p>Sharing gives someone the product, every review its Parts link to and every harness, each in its own private repository. Internal data stays in the FTE-only repositories.</p></div>' +
+        '<div class="sheet-body">' +
+        '<div class="field"><span class="field-label">Shared with</span>' + (onProject.length ? '<div>' + onProject.map(function (l) {
+          var u = plan.people.filter(function (x) { return x.login === l; })[0];
+          return '<span class="chip">' + esc(u && u.name ? u.name + ' (@' + l + ')' : '@' + l) + ' <button type="button" class="btn btn-plain" style="padding:0 4px;font-size:12px" data-revoke="' + esc(l) + '" title="Remove access">Remove</button></span>';
+        }).join(' ') + '</div>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
+        '<div class="field"><span class="field-label">Add a person</span><div class="row2">' +
+          '<div class="field"><label for="sh-name">Name</label><input class="input" id="sh-name" placeholder="First Last"></div>' +
+          '<div class="field"><label for="sh-login">GitHub username</label><input class="input" id="sh-login" placeholder="username" autocomplete="off" list="sh-known"></div></div>' +
+          '<datalist id="sh-known">' + known.map(function (u) { return '<option value="' + esc(u.login) + '">' + esc(u.name || u.login) + '</option>'; }).join('') + '</datalist>' +
+          (known.length ? '<p class="note">Signoff EE already knows ' + known.map(function (u) { return '<button type="button" class="btn btn-plain" style="padding:0 6px;font-size:12px" data-pick="' + esc(u.login) + '" data-name="' + esc(u.name || '') + '">' + esc(u.name || u.login) + '</button>'; }).join(' ') + '.</p>' : '') +
+          '<p class="note">They need a free GitHub account. FTEs (from Signoff EE’s People) are on every repository already.</p></div>' +
+        '<div class="field"><span class="field-label">What goes with it</span><div class="card table-scroll" style="overflow:hidden"><table class="table"><tbody>' + plan.items.map(row).join('') + '</tbody></table></div>' +
+        (plan.errors.length ? '<p class="note">' + esc(plan.errors.map(function (e) { return e.message; }).join(' ')) + ' Those repositories can’t be shared from here.</p>' : '') + '</div>' +
+        '</div><div class="sheet-foot"><span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">Share</button></div></div>';
+      w.addEventListener('click', function (e) {
+        var pk = e.target.closest('[data-pick]');
+        if (pk) { w.querySelector('#sh-login').value = pk.dataset.pick; w.querySelector('#sh-name').value = pk.dataset.name; return; }
+        var rv = e.target.closest('[data-revoke]');
+        if (rv) {
+          var who = rv.dataset.revoke;
+          if (!confirm('Remove @' + who + ' from ' + p.meta.name + ' and everything it links? Their copies disappear at their next sync.')) return;
+          var ui2 = progressSheet('Removing ' + who);
+          sh.revokeProject(p, who, designName, ui2.log).then(function (res) {
+            res.failed.forEach(function (f) { ui2.log(f.login + ' on ' + f.repo + ': ' + f.message, 'err'); });
+            ui2.log(res.failed.length ? 'Finished with problems.' : 'Done. Syncing…', res.failed.length ? 'err' : 'ok');
+          }, function (err) { ui2.log('Stopped: ' + err.message, 'err'); }).then(function () { ui2.done(); sync(); });
+          return;
+        }
+        var b = e.target.closest('[data-sheet]');
+        if (!b) return;
+        if (b.dataset.sheet === 'cancel') return closeSheet();
+        var l = w.querySelector('#sh-login').value.trim().replace(/^@/, '').toLowerCase();
+        if (!/^[a-z0-9](?:[a-z0-9-]{0,38})$/.test(l)) { w.querySelector('#sh-login').focus(); toast('Enter their GitHub username'); return; }
+        var fresh = plan.items.filter(function (it) { return !it.repo; }).length;
+        if (!confirm('Share ' + p.meta.name + ' with @' + l + '?' + (fresh ? '\n\n' + plural(fresh, 'new private repository', 'new private repositories') + ' will be created.' : '') + '\n\nGitHub emails the invitation.')) return;
+        var ui3 = progressSheet('Sharing ' + p.meta.name + ' with ' + l);
+        sh.names[l] = w.querySelector('#sh-name').value.trim();
+        sh.shareProject(p, [l], designName, ui3.log).then(function (res) {
+          res.failedInvites.forEach(function (f) {
+            ui3.log(f.login + ' on ' + f.repo + ': ' + (f.status === 403 || f.status === 404 ? 'only the owner (or an org admin) can change access, and the token needs Administration: write' : f.message), 'err');
+          });
+          var bad = res.results.filter(function (r) { return r.error; }).length + res.failedInvites.length;
+          ui3.log(bad ? 'Finished with problems.' : 'Done. Syncing…', bad ? 'err' : 'ok');
+        }, function (err) {
+          ui3.log('Stopped: ' + err.message + (err.status === 403 || err.status === 404 ? ' — creating repositories needs the owner’s token with Administration: write on All repositories.' : ''), 'err');
+        }).then(function () { ui3.done(); sync(); });
+      });
+    }, function (err) {
+      if (!document.body.contains(w)) return;
+      w.querySelector('.sheet-body').innerHTML = '<p class="note">Couldn’t read the repositories: ' + esc(err.message) + '</p>';
+    });
+  }
+
   // ── Sync ─────────────────────────────────────────────────
   // 1. Who's signed in: a new token or login hides the projects until this sync confirms it.
-  // 2. PL projects: the data repo, merged with PL's merge. A 404 means the token can't open it,
-  //    so this isn't an FTE: PL locks and drops the projects the repo holds (P.lockOut).
-  // 3. Designs: read again from EE and ME, for FTEs only.
+  // 2. PL projects: the data repo and the shared repos (share.js syncAll), merged with PL's merge.
+  //    A token that opens the data repo is an FTE's; one that reaches only review-pl-* repos is a
+  //    contractor's; one that reaches nothing locks PL, which drops the projects it holds (P.lockOut).
+  // 3. Designs: read again from EE, ME, FW and Loom.
   function sync() {
     if (DEMO) { toast('Demo mode keeps everything in this browser'); return; }
     if (syncing) return;
@@ -1958,8 +2064,8 @@
     syncing = true; renderSyncState('busy');
     if (!current()) renderPage();   // an empty or locked page says the sync is running
     var token = getToken(), tag = P.tokenTag(token), signedIn = false, started = {}, errors = [], pushed = 0;
-    var store = new S.GitHubStore({ owner: settings.owner, repo: settings.dataRepo, branch: settings.branch, dataPath: '', token: token, merge: P.merge });
-    store.user()
+    var sh = sharer(token);
+    sh.account.user()
       .then(function (u) {
         var login = String(u.login || '').toLowerCase();
         signedIn = true;
@@ -1972,31 +2078,38 @@
         return uploadModels(token).catch(function (err) {
           if (err.status !== 404) errors.push({ repo: settings.dataRepo, message: 'Models not uploaded yet: ' + err.message });
         }).then(function () {
-          return store.sync(byId, null, cache, { message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' });
+          return sh.syncAll({ login: login, projects: byId, roster: roster, homes: homes, caches: caches, dataAccess: access.state === 'fte' ? 'ok' : '' },
+            { merge: P.merge, keepLocal: function (id) { return !!dirty[id]; }, message: 'PL update' + (names.length ? ': ' + names.join(', ') : '') + ' (' + me() + ')' });
         });
       })
       .then(function (res) {
-        access.state = 'fte';
-        pushed = res.pushed; cache = res.cache;
+        var st = res.state;
+        errors = errors.concat(res.errors);
+        pushed = res.pushed; caches = st.caches; homes = st.homes; roster = st.roster;
+        if (st.dataAccess === 'ok') access.state = 'fte';
+        else if (Object.keys(st.projects).length || res.repos.length) access.state = 'contractor';
+        else { var e404 = new Error('no access'); e404.status = 404; throw e404; }
         var nowById = {}; Object.keys(projects).forEach(function (k) { nowById[projects[k].id] = projects[k]; });
         var next = {};
-        Object.keys(res.projects).forEach(function (id) {
-          var doc = nowById[id] ? P.merge(nowById[id], res.projects[id]) : res.projects[id];
+        Object.keys(st.projects).forEach(function (id) {
+          var doc = nowById[id] ? P.merge(nowById[id], st.projects[id]) : st.projects[id];
           var slug = doc.slug || M.slugify(doc.meta.name), base = slug, n = 2;
           while (next[slug]) slug = base + '-' + n++;
           next[slug] = doc;
         });
+        // Copies the sync dropped (deleted on GitHub, or a contractor's access taken away) go, unless edited since.
+        Object.keys(nowById).forEach(function (id) { if (!st.projects[id] && dirty[id]) { var d = nowById[id]; next[d.slug] = d; } });
         projects = next;
         Object.keys(started).forEach(function (k) { if (dirty[k] === started[k]) delete dirty[k]; });
       }, function (err) {
         if (!signedIn) throw err;   // /user failed: the token itself doesn't work
-        if (err.status !== 404) { errors.push({ repo: settings.dataRepo, message: err.message }); return; }
+        if (err.status !== 404 && err.status !== 403) { errors.push({ repo: settings.dataRepo, message: err.message }); return; }
         access.state = 'none';
-        projects = P.lockOut(projects, dirty); cache = {}; index = null; clearPictures();
+        projects = P.lockOut(projects, dirty); caches = {}; homes = {}; roster = M.emptyRoster(); index = null; clearPictures();
       })
       .then(function () {
         save('access', access);
-        if (access.state !== 'fte') return;
+        if (access.state !== 'fte' && access.state !== 'contractor') return;
         return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: token }).refresh(index)
           .then(function (ix) {
             index = ix; errors = errors.concat(ix.errors);
@@ -2011,10 +2124,10 @@
       .then(function () {
         syncing = false;
         lastSync = { at: M.now(), errors: errors };
-        save('cache', cache); save('index', index); save('lastSync', lastSync); persist();
+        save('repoCache', caches); save('homes', homes); save('roster', roster); save('index', index); save('lastSync', lastSync); persist();
         if (!projects[ui.slug]) ui.slug = firstSlug();
         render();
-        if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ': Signoff PL is for Dovetail FTEs.');
+        if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ' and is on no shared PL project.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
         checkForUpdate();
@@ -2140,9 +2253,10 @@
       case 'move-up': e.stopPropagation(); move(id, -1); break;
       case 'move-down': e.stopPropagation(); move(id, 1); break;
       case 'project-menu':
-        menu(el, [['edit', 'Project details…'], ['export', 'Export project (JSON)']].concat(DEMO ? [['reset', 'Reset demo', true]] : [])).then(function (c) {
+        menu(el, [['edit', 'Project details…']].concat(isFte() ? [['share', 'Share…']] : [], [['export', 'Export project (JSON)']], DEMO ? [['reset', 'Reset demo', true]] : [])).then(function (c) {
           var p = current();
           if (c === 'edit') projectSheet(p);
+          if (c === 'share') shareSheet(p);
           if (c === 'export') {
             var a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([M.stableStringify(p)], { type: 'application/json' }));
