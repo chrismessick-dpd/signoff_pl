@@ -76,12 +76,35 @@
     body.querySelectorAll('[data-mixed]').forEach(function (b) { b.indeterminate = true; });
   }
 
+  // Middle row: role · company · the PL projects they're on (Chris, 2026-11-07).
+  function whoLine(p) {
+    var on = P.PROJECTS.filter(function (pr) { return P.members(pr.id).indexOf(p) >= 0; }).map(function (pr) { return pr.name; });
+    var bits = [P.ROLES[p.role].label].concat(p.company ? [p.company] : [], on);
+    return '<span class="pp-line">' + P.icon(P.ROLES[p.role].icon) + esc(bits.join(' · ')) + '</span>';
+  }
+  // Bottom row: Access. "Full project" when they have Whole system on every project they're on;
+  // otherwise a badge per tool they can open something in.
+  function accessLine(p) {
+    var projs = P.PROJECTS.filter(function (pr) { return P.members(pr.id).indexOf(p) >= 0; });
+    var tools = {};
+    projs.forEach(function (pr) {
+      if (P.mode(pr.id, p.login) !== 'parts') tools.pl = true;
+      P.toolLeaves(pr).forEach(function (x) { if (P.granted(P.cell(pr.id, p.login, x))) tools[x.tool] = true; });
+    });
+    var keys = ['pl', 'ee', 'me', 'fw', 'loom'].filter(function (k) { return tools[k]; });
+    var full = projs.length && projs.every(function (pr) { return P.mode(pr.id, p.login) === 'system'; });
+    var what = full ? '<span class="full-tag" title="Whole system: the PL project and every linked review, now and later">' + P.icon('check') + 'Full project</span>' :
+      keys.length ? '<span class="rosters" title="' + esc('Can open something in ' + keys.map(function (k) { return P.TOOLS[k].name; }).join(', ')) + '">' + keys.map(function (k) { return '<span class="src ' + k + '">' + P.TOOLS[k].label + '</span>'; }).join('') + '</span>' :
+      '<span class="muted">None yet</span>';
+    return '<span class="pp-access"><span class="pp-access-h">Access</span>' + what + '</span>';
+  }
+
   function card(p) {
         var projs = P.PROJECTS.filter(function (pr) { return P.members(pr.id).indexOf(p) >= 0 || open[p.login + '+' + pr.id]; });
         var others = P.PROJECTS.filter(function (pr) { return projs.indexOf(pr) < 0; });
         return '<section class="card pp-card"><button type="button" class="pp-head" data-open="' + esc(p.login) + '" aria-expanded="' + !!open[p.login] + '">' +
           '<span class="tn-caret' + (open[p.login] ? '' : ' closed') + '">' + P.icon('caret') + '</span>' + P.avatar(p, 'lg') +
-          '<span class="pp-who"><b>' + esc(p.name) + ' <span class="muted pp-login">' + esc(p.login) + '</span></b><span class="pp-line">' + P.role(p) + '<span class="pp-lists">People lists ' + P.rosterTags(p.login) + '</span></span><span class="pp-sum">' + esc(summary(p)) + '</span></span>' +
+          '<span class="pp-who"><b>' + esc(p.name) + ' <span class="muted pp-login">' + esc(p.login) + '</span></b>' + whoLine(p) + accessLine(p) + '</span>' +
           '<span class="pp-flags">' + flags(p) + '</span></button>' +
           (open[p.login] ? '<div class="pp-body">' + projs.map(function (pr) { return projBlock(p, pr); }).join('') +
             others.map(function (pr) { return '<button type="button" class="btn btn-plain pp-addproj" data-addproj="' + esc(p.login + '+' + pr.id) + '">' + P.icon('plus') + 'Add to ' + esc(pr.name) + '</button>'; }).join('') +
