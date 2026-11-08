@@ -5,7 +5,7 @@
 .src { display: inline-block; font: 600 10.5px/1 var(--display); letter-spacing: 0.03em; padding: 4px 6px; border-radius: 5px; background: var(--bg-sunk); color: var(--text-2); white-space: nowrap; }
 .src.ee { background: rgba(0, 114, 127, 0.12); color: var(--accent-ink); }
 .src.me { background: rgba(88, 86, 214, 0.13); color: #4b49b8; }
-.src.fw { background: rgba(224, 120, 0, 0.13); color: var(--warn); }
+.src.fw { background: var(--warn-soft); color: var(--warn); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .src.me { color: #a5a3ff; } }
 :root[data-theme="dark"] .src.me { color: #a5a3ff; }
 
@@ -40,8 +40,8 @@
 
 /* Part state notes */
 .pstate { font-size: 12px; padding: 2px 7px; border-radius: 5px; white-space: nowrap; }
-.pstate.warn { background: var(--warn-soft); color: var(--warn); }
-.pstate.err { background: var(--issue-soft); color: var(--issue); }
+.pstate.warn { background: var(--warn-hatch), var(--warn-soft); color: var(--warn); }
+.pstate.err { background: var(--issue-hatch), var(--issue-soft); color: var(--issue); }
 .pstate.dim { background: var(--na-soft); color: var(--text-2); }
 
 .attn { display: flex; flex-direction: column; }

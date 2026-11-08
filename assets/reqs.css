@@ -19,8 +19,8 @@
 .rq-cell { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid transparent; padding: 0; cursor: pointer; }
 .rq-cell:hover, .rq-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rq-c-pass { background: var(--pass); }
-.rq-c-risk { background: var(--warn); }
-.rq-c-fail { background: var(--issue); }
+.rq-c-risk { background: var(--warn-fill-hatch), var(--warn); }
+.rq-c-fail { background: var(--issue-fill-hatch), var(--issue); }
 .rq-c-open { border-color: var(--na); background: transparent; }
 .rq-c-gap { border-color: var(--hair-2); background: repeating-linear-gradient(45deg, var(--hair-2) 0 3px, transparent 3px 6px); }
 
@@ -56,8 +56,8 @@
 .rq-hint .muted, .rq-row.kid .muted { color: var(--text-3); }
 .rq-state { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 980px; white-space: nowrap; }
 .rq-pass { color: var(--pass); background: var(--pass-soft); }
-.rq-risk { color: var(--warn); background: var(--warn-soft); }
-.rq-fail { color: var(--issue); background: var(--issue-soft); }
+.rq-risk { color: var(--warn); background: var(--warn-hatch), var(--warn-soft); }
+.rq-fail { color: var(--issue); background: var(--issue-hatch), var(--issue-soft); }
 .rq-open, .rq-deprecated { color: var(--text-2); background: var(--na-soft); }
 .rq-gap { color: var(--text-2); box-shadow: inset 0 0 0 1px var(--hair-2); }
 .rq-disc { font: 600 10.5px/1 var(--display); letter-spacing: 0.03em; padding: 4px 6px; border-radius: 5px; background: var(--bg-sunk); color: var(--text-2); white-space: nowrap; justify-self: start; }
