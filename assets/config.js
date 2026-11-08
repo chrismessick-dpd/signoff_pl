@@ -48,7 +48,7 @@ window.SIGNOFF_CONFIG = {
   "demo": {
     "project": {
       "name": "Smart Thermostat", "client": "Acme Climate", "number": "DT-1000", "phase": "EVT",
-      "description": "Wi-Fi smart thermostat powered from 100–240 V AC mains: touch display, room temperature and humidity sensing, and relays that switch the HVAC system's heat, cool and fan calls. First engineering build (EVT)."
+      "description": "Wi-Fi smart thermostat powered from 100–240 V AC mains: touch display, room temperature and humidity sensing, and relays that switch the HVAC system's heat and cool calls. First engineering build (EVT)."
     },
     "tree": [
       { "key": "top", "kind": "assembly", "name": "Smart Thermostat", "number": "DT-1000" },
