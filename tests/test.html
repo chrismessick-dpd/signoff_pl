@@ -41,7 +41,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   theirs.nodes[b.id] = Object.assign({}, b, { deleted: true, updatedAt: at('10:00:01') });
   var c = Object.assign({}, a, { id: 'nNEW', name: 'Display', updatedAt: at('10:00:02') }); theirs.nodes.nNEW = c;
   var merged = P.merge(mine, theirs);
-  ok(merged.nodes[a.id].name === 'Main board rev B' && merged.nodes[b.id].deleted && merged.nodes.nNEW, 'merge keeps both sides’ node edits, deletions and additions');
+  ok(merged.nodes[a.id].name === 'Main board rev B' && merged.nodes[b.id].deleted && merged.nodes.nNEW, 'merge keeps both sides’ node edits, deletions, and additions');
   var older = JSON.parse(JSON.stringify(mine)); older.nodes[a.id].name = 'Stale'; older.nodes[a.id].updatedAt = at('09:00:00');
   eq(P.merge(older, mine).nodes[a.id].name, 'Main board rev B', 'the newer node record wins');
   eq(Object.keys(merged).sort(), ['createdAt', 'createdBy', 'id', 'meta', 'nodes', 'reqs', 'schema', 'slug'], 'a merged document carries only PL fields');
@@ -104,7 +104,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var gone = node(p2, { parent: top.id, name: 'Moved away', source: 'ee', ref: { tool: 'ee', id: 'pGONE' } });
   var r3 = P.rollup(p2, index);
   ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].unlinked === 1 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
-    'purchased, tool-less, unlinked and missing Parts are counted but not in progress', JSON.stringify(r3['']));
+    'purchased, tool-less, unlinked, and missing Parts are counted but not in progress', JSON.stringify(r3['']));
   eq(P.partStatus(p2.nodes[gone.id], index).state, 'notfound', 'a link to a project no repo holds is not found');
   eq(P.partStatus(p2.nodes[gone.id], { entries: {}, errors: [{ tool: 'ee' }] }).state, 'error', 'a link whose tool failed to read is an error, not missing');
   var noSum = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: null } }, errors: [] };
@@ -203,8 +203,8 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
     'fabcheck/p9/preview/index.json': JSON.stringify(pindex) }, ['own']);
   var preader = new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: phub.fetchFor('tok-own') });
   var pix = await preader.refresh(null), pv = pix.entries['ee:p1'].preview;
-  eq(pv && pv.images.map(function (i) { return i.key; }), ['top', 'bottom'], 'reads a design’s stored previews and drops bad file names, types and missing files');
-  ok(pv.hero === 'top' && pv.repo === 'own/ee_design_review_data' && /^[0-9a-f]{40}$/.test(pv.images[0].sha), 'a preview keeps its hero, repo and blob shas');
+  eq(pv && pv.images.map(function (i) { return i.key; }), ['top', 'bottom'], 'reads a design’s stored previews and drops bad file names, types, and missing files');
+  ok(pv.hero === 'top' && pv.repo === 'own/ee_design_review_data' && /^[0-9a-f]{40}$/.test(pv.images[0].sha), 'a preview keeps its hero, repo, and blob shas');
   ok(!pix.entries['ee:p9'], 'a preview without its review adds nothing');
   var pblob = await preader.image(pv.repo, pv.images[1]);
   ok(pblob.type === 'image/webp' && await pblob.text() === 'BOTTOM', 'an image is fetched by its blob sha');
@@ -571,7 +571,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(mid && mid.obj === 1 && side && side.obj === 0, 'seen from above, picking finds the part on top, and the board beside it');
   ok(near(sr.project([0, 0, 0]).slice(0, 2).map(Math.round), [100, 100]), 'project puts the view center in the middle of the canvas');
 
-  // The snapshot must match what Signoff EE's, ME's and FW's demos build today (when they're served
+  // The snapshot must match what Signoff EE's, ME's, and FW's demos build today (when they're served
   // next to this folder). Times differ by design, so they're left out.
   var live = await new Promise(function (resolve) {
     var f = document.createElement('iframe'); f.style.display = 'none'; f.src = '../tools/demo_designs.html?t=' + Date.now();
@@ -588,9 +588,9 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   }
   if (live) {
     var liveData = JSON.parse(live.slice(live.indexOf('{'), live.lastIndexOf(';')));
-    ok(strip(liveData.designs) === strip(Signoff.plDemo.snapshot.designs), 'demo-designs.js matches the EE, ME and FW demos (regenerate it with tools/demo_designs.html if not)');
+    ok(strip(liveData.designs) === strip(Signoff.plDemo.snapshot.designs), 'demo-designs.js matches the EE, ME, and FW demos (regenerate it with tools/demo_designs.html if not)');
   } else {
-    ok(true, 'skipped: EE, ME and FW aren’t served next to this folder, so the demo snapshot wasn’t compared');
+    ok(true, 'skipped: EE, ME, and FW aren’t served next to this folder, so the demo snapshot wasn’t compared');
   }
 
   var failed = results.filter(function (r) { return !r.ok; });

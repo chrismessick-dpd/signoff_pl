@@ -1,7 +1,7 @@
 /* Signoff PL: People & access, the model (no DOM). Chris, 2026-11-07; the views are access-view.js.
 
    PL's people list is the whole company: everyone on any tool's roster (users.json in signoff_pl_data,
-   ee_design_review_data, me_design_review_data, fw_design_review_data and loom_data). Each tool keeps
+   ee_design_review_data, me_design_review_data, fw_design_review_data, and loom_data). Each tool keeps
    managing its own people on its own People page; PL can set access in all of them.
 
    Per person per PL project, one of three modes:

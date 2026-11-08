@@ -10,7 +10,7 @@ and every Loom harness in the one private repo `loom_data`. Only Signoff EE and 
 to someone outside the team (a private `review-ee-…` or `review-me-…` repo per shared review, and a
 People & access page; EE's is the home of People, ME has its own for `review-me-*`).
 
-With this branch, sharing a PL project shares the product and everything it links: its EE, ME and FW
+With this branch, sharing a PL project shares the product and everything it links: its EE, ME, and FW
 reviews and its Loom harnesses, each the way its own tool shares it. The person is invited to every one
 of those repositories, and Loom's sync reads the shared repos too.
 
@@ -36,7 +36,7 @@ GitHub grants access to whole repositories, so EE keeps each audience in its own
 | `loom_data` | Internal harnesses and `users.json` | FTEs |
 | `review-loom-<slug>` | One shared harness | FTEs and the people on the PL projects that use it |
 
-**Per shared thing, not per person.** Each shared PL project, review and harness gets its own repository,
+**Per shared thing, not per person.** Each shared PL project, review, and harness gets its own repository,
 as in EE. Per-person repos (`review-<login>`) would mean a copy of each review per person, and
 everyone's edits would no longer meet in one file. One repo per thing keeps "everyone works on the same
 copy": a second person is one more invitation, and a harness used by two products is shared once.
@@ -56,7 +56,7 @@ person on the boards PL shared, as if they'd been added there.
 **What is shared with a PL project:**
 
 1. The PL project itself: into `review-pl-<slug>`, with its model files (`models/<project id>/`).
-2. Each linked EE, ME and FW review: into that tool's `review-<tool>-<slug>` (created, or reused when
+2. Each linked EE, ME, and FW review: into that tool's `review-<tool>-<slug>` (created, or reused when
    the review is shared already). An EE board's Fabcheck files (`fabcheck/<board id>/`) move with it.
 3. Each linked Loom harness: into `review-loom-<slug>`.
 4. Purchased Parts have nothing to share.
@@ -136,7 +136,7 @@ as every tool does.
 ## What Remove takes away
 
 PL's Remove (in the Share sheet) takes the person off the project's repo *and* off every repo the project
-links: each `review-ee-…`, `review-me-…`, `review-fw-…` and `review-loom-…`, clearing their assignment in
+links: each `review-ee-…`, `review-me-…`, `review-fw-…`, and `review-loom-…`, clearing their assignment in
 each tool's roster. The product was the reason they had those, so the whole set goes (Chris, 2026-11-07).
 PL can't tell whether someone was put on a board through this product or added to it directly in EE's
 People page, so a person who should keep one board on its own is added to it again in EE.

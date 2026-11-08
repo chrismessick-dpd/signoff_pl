@@ -1,17 +1,19 @@
 # Signoff PL (signoff_pl): notes for Claude
 
 Signoff PL (project lead) is the product-level tool. A PL project is a whole product: a tree of
-assemblies and **Parts**. Each Part links to a Signoff EE, ME or FW review by `{tool, id}`, or is
-purchased. PL rolls up progress, issues, stages and mass from each review's
+assemblies and **Parts**. Each Part links to a Signoff EE, ME, or FW review by `{tool, id}`, or is
+purchased. PL rolls up progress, issues, stages, and mass from each review's
 `summary`. The one thing it writes into EE or ME is requirement records, from the Requirements
 tab (Chris, 2026-11-01; see *Requirements tab* below).
+
+**Serial comma** (Chris, 2026-11-08): use the Oxford comma in every list of three or more, in UI text, docs, demo data, checklists, and commit messages: "A, B, and C". Never change check ids or data keys to fit it.
 
 When the suite folder is checked out, also read `../CLAUDE.md`. Then read:
 - `README.md`: data format and layout
 - `docs/guide.md`: users and FTE architecture
 - `docs/roadmap.md`: the phases, with design notes for what's next
 
-This repo is public: no client data, tokens or commit messages naming clients.
+This repo is public: no client data, tokens, or commit messages naming clients.
 
 ## Decisions (Chris, 2026-10-25)
 
@@ -41,7 +43,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
 | `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js` |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
-| `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE, ME and FW demos' summaries |
+| `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE, ME, and FW demos' summaries |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
 
 Notes on behavior:
@@ -62,7 +64,7 @@ Notes on behavior:
    `stamp_version.py`, not a `build.py`.
 2. Serve the tools folder and open `tests/test.html`. It should show PASS (200 tests as of 2026-11-08, after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
-   - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
+   - The snapshot test compares `assets/demo-designs.js` with the live EE, ME, and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
      output over `assets/demo-designs.js`.
 3. Real-repo behavior has been verified only through the fake GitHub (`tests/fake-hub.js`) and
@@ -73,7 +75,7 @@ Notes on behavior:
 
 Chris asked for PL to be visual and easy to build, "Apple, but technical". Map stays the default
 layout; Gallery and Exploded show stored pictures and models only, never made-up ones (Exploded
-names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE or ME (Chris, 2026-11-01).
+names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE, or ME (Chris, 2026-11-01).
 Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
 next time each is sent from Fabcheck. Real ME parts have none until a mechanical checker exists (see
 `../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout; until then a
@@ -98,7 +100,7 @@ the boards. He was worried about repo size, so PL never stores a raw STEP by def
 - four PNG views;
 - the STEP gzipped only when the box stays checked and it's under 10 MB compressed.
 
-Models can be attached to purchased, ME and EE Parts (`MODEL_SOURCES`). A board's tiles keep
+Models can be attached to purchased, ME, and EE Parts (`MODEL_SOURCES`). A board's tiles keep
 Fabcheck's pictures (`previewFor`); its model is used in the 3D view. Files upload at sync, before the project push (`uploadModels`). Waiting files live in
 IndexedDB `signoff-pl-uploads`, which `clearPictures()` doesn't touch.
 
@@ -108,12 +110,12 @@ browser caches scripts by their `?v=` stamp, so re-stamp before reloading.
 
 ## Exploded in 3D (2026-11-01)
 
-Chris wanted to arrange boards and parts in X, Y and Z with edge and vertex references, without
+Chris wanted to arrange boards and parts in X, Y, and Z with edge and vertex references, without
 it becoming CAD software. So it's translation snaps plus 90° turns, and no mates or constraints.
 - **Renderer.** All in `model3d.js`, software only: `renderScene` with board textures and a pick
   buffer. It takes about 30–40 ms per quick frame at 1000 × 560 and about 200 ms for the sharp
   redraw; that was measured, and is why there's no WebGL.
-- **Snapping.** `features()` finds corners, edge chains, hole circles and flat faces. `alignMove()`
+- **Snapping.** `features()` finds corners, edge chains, hole circles, and flat faces. `alignMove()`
   holds the snap rules and is unit-tested. Picking prefers visible features, but a part hidden only
   by the one being moved still counts.
 - **Placements.** `node.place` is written only for the Part that moved, never for every Part, so
@@ -151,7 +153,7 @@ never sets one, but `bom()` multiplies by it if present.
 
 The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In short:
 - **One home per requirement.** System requirements live in the PL project (`reqs`, with `parts`
-  for allocation). A board's, part's or firmware target's requirement lives in its EE, ME or FW review.
+  for allocation). A board's, part's, or firmware target's requirement lives in its EE, ME, or FW review.
   A Part whose source has no Signoff tool can still hold its requirements in PL, with a `parent`
   and `part`. Firmware did until Signoff FW joined `tools` on 2026-11-02; the demo's firmware
   requirements now live in FW's demo (`fdemo3` REQ-001 and REQ-002).
@@ -173,7 +175,7 @@ The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In 
   in Matrix layout (`csv`).
 - **State filters (Chris, 2026-11-08).** The header's failing / at risk / gap / open / met counters
   are on/off toggles like Fabcheck's severity chips: all on, a click hides that state everywhere
-  (System rows, their children and gap rows, PL-held rows and every review section; `ui.rqFilter.off`).
+  (System rows, their children and gap rows, PL-held rows, and every review section; `ui.rqFilter.off`).
   A System row whose own state is off stays, dimmed (`rq-ctx`), while a child or gap of it shows.
   Show all turns them back on. Deprecated has no counter and shows only when asked for.
 - **Writing.** It goes through the engine's `GitHubStore.patchRecords`, after a confirm:
@@ -206,8 +208,8 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   PL node (`source: 'loom'`, `ref: { tool: 'loom', id }`) is the link of record; Loom only reads PL.
   Chris (2026-11-07): keep the tray, so adding a harness is deliberate; don't auto-add harnesses.
 - **No checks.** `P.isDrawing(source)`: a harness Part is counted as `harnesses` in the roll-up and stays
-  out of progress, designs, issues and stages; the BOM shows no progress for it. Tiles, the tray, the
-  Designs panel, List and the picker show "N wires · M ends" (`designStat`); the inspector shows what
+  out of progress, designs, issues, and stages; the BOM shows no progress for it. Tiles, the tray, the
+  Designs panel, List, and the picker show "N wires · M ends" (`designStat`); the inspector shows what
   it holds and Loom's check counts (`harnessHtml`). `reader.js` keeps `summary.harness` and
   `summary.identAt`, and reads the number from `meta.number` when there's no `meta.board`.
 - **Name and number go both ways** without either tool writing the other's repo: the Part sheet stamps
@@ -248,7 +250,7 @@ the open questions):
 PL's own tab in the suite's People & access sheet (`signoff/assets/people.js` takes a host tab with a
 label, shown first and only in PL). Designed from lab sketches (branch `perm-sketches`, `lab/permissions/`);
 Chris kept two layouts, as sub-tabs: **Person first** and **Tree with people**.
-- **Scope (Chris).** This is PL's settings only. EE, ME and FW keep their own People pages as they are,
+- **Scope (Chris).** This is PL's settings only. EE, ME, and FW keep their own People pages as they are,
   each managing its own people. PL's list is the whole company: everyone on any tool's roster (PL, EE,
   ME, FW, Loom), and PL can set access in any of their repos. FTEs come from EE's roster and aren't
   editable here.
@@ -259,7 +261,7 @@ Chris kept two layouts, as sub-tabs: **Person first** and **Tree with people**.
   listed (nothing to share). "Invited" is read from GitHub (each shared repo's pending invitations).
 - **Staged until Apply (Chris).** The footer says Staged (nothing has changed on GitHub yet), Applied
   (done just now) or Live. A Whole-system person missing a Part linked since sharing shows as staged on
-  load ("Linked since the project was shared"). Apply lists every repo to create, invitation and roster
+  load ("Linked since the project was shared"). Apply lists every repo to create, invitation, and roster
   write, then runs `run()`: shares (`shareOne`, PL project first), removals (`revokeOne`), then scopes and
   companies (`setScope`, `setCompany` through `patchPlUser`, which uses `patchRoster`'s proof). Each step
   is safe to repeat. Apply is blocked while a project to share has unsynced edits. In `?demo` it's

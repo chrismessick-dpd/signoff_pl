@@ -221,7 +221,7 @@
       if (st.state === 'manual') { roll.manual++; return; }
       if (st.state === 'unlinked') { roll.unlinked++; return; }
       if (st.state !== 'ok') { roll.attention++; return; }
-      // A harness has no checks: it's counted, but stays out of progress, issues and stages.
+      // A harness has no checks: it's counted, but stays out of progress, issues, and stages.
       if (isDrawing(node.source)) { roll.harnesses++; return; }
       var key = refKey(node.ref);
       if (seen[key]) return;

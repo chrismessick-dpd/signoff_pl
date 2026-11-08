@@ -3,11 +3,11 @@
 Status: built 2026-11-01 (Phases 2a to 2c, without field-level merge). The live write to a real
 review hasn't been tried yet; see `signoff_pl/CLAUDE.md`, *Requirements tab*. This is Phase 2 of
 `roadmap.md` (requirements allocation), reworked for requirements that can be created and edited
-in PL, EE or ME. The mockup is `requirements-mockup.html`. Open it straight from disk; it uses
+in PL, EE, or ME. The mockup is `requirements-mockup.html`. Open it straight from disk; it uses
 made-up Smart Thermostat data.
 
 The request (Chris): a Requirements tab that pulls bidirectionally from ME and EE requirements.
-Requirements can be created in PL, ME or EE, assigned to a tool (System, ME, EE, later FW), and
+Requirements can be created in PL, ME, or EE, assigned to a tool (System, ME, EE, later FW), and
 updated in PL or in that tool. The list should be interactive enough that people want to use it.
 
 ## Decisions (Chris, 2026-11-01)
@@ -23,14 +23,14 @@ updated in PL or in that tool. The list should be interactive enough that people
 
    EE and ME change to match.
 5. **Every requirement is `REQ-###`.**
-   - A `discipline` field classifies it: `sys`, `ee`, `me`, `fw` or `other`.
+   - A `discipline` field classifies it: `sys`, `ee`, `me`, `fw`, or `other`.
    - There are no `SYS-` or `FW-` prefixes. Where a sketch below says SYS-00x, read it as a
      REQ- with discipline `sys`.
 6. **Conflict cards first.** Field-level merge (`fieldAt`) waits.
 7. **No gate tags for now.**
 
 **Later decision (Chris, 2026-11-02): keep it lightweight.** Requirements can be written in each
-EE board, ME part or FW review on their own. When a Part links that review, its requirements show
+EE board, ME part, or FW review on their own. When a Part links that review, its requirements show
 in PL automatically, as a folding section per tool and a row per design, and the PL project's own
 requirements sit on top. Tracing up to a System requirement is optional; an untraced design
 requirement is normal, not something waiting for action. Grouping is by the review's tool, not the
@@ -144,9 +144,9 @@ The PL project gains a `reqs` map with the EE/ME record shape, plus:
 
 | Field | On | Meaning |
 | --- | --- | --- |
-| `owner` | PL records | `'system'` (default), `'fw'`, `'ee'` or `'me'`. Anything other than system means it's waiting to be allocated or moved. |
+| `owner` | PL records | `'system'` (default), `'fw'`, `'ee'`, or `'me'`. Anything other than system means it's waiting to be allocated or moved. |
 | `parts` | System records | PL node ids this requirement is **allocated** to, which drives the coverage strip. PL-only data, so it's safe to keep here. |
-| `parent` | EE/ME/FW records | `{ tool: 'pl', project: 'pl…', id: 'q…', ref, text, at }`. The flow-down link to a System requirement. `ref`, `text` and `at` are a snapshot for display, so a contractor sees the intent without access to PL. |
+| `parent` | EE/ME/FW records | `{ tool: 'pl', project: 'pl…', id: 'q…', ref, text, at }`. The flow-down link to a System requirement. `ref`, `text`, and `at` are a snapshot for display, so a contractor sees the intent without access to PL. |
 | `movedTo` / `movedFrom` | any | `{ tool, project, id }`, set when a requirement changes home (see *Moves*). |
 
 Two different relationships, kept apart:
@@ -161,7 +161,7 @@ any top-level keys it doesn't know (see *Allowlist traps*).
 
 ### IDs that stay stable across tools
 
-- **Global key** = `{ tool, project, id }`, where `tool` is `pl`, `ee`, `me` or later `fw`,
+- **Global key** = `{ tool, project, id }`, where `tool` is `pl`, `ee`, `me`, or later `fw`,
   `project` is the document id, and `id` is the record's `uid`. Every link uses this key.
 - **`ref` is for display only.** It can be renamed, and duplicates are possible. The roadmap's
   `links: { tool, project, ref }` should become `{ tool, project, id }`.
@@ -200,7 +200,7 @@ margin, "205.2 g, 18 % margin", which updates whenever a Part's mass changes.
 - **Requirements themselves: read `doc.reqs` directly.** `reader.js` already downloads every
   project file (cached by blob sha) and keeps only `meta` and `summary`. Add a `reqs` keep,
   rebuilt from known fields like `cleanSummary` does:
-  - `kind`, `method`, `status` and `verify` go through `M.oneOf`;
+  - `kind`, `method`, `status`, and `verify` go through `M.oneOf`;
   - text fields are cut to 2,000 characters;
   - `links` must be strings, and at most 200 of them;
   - `parent` is kept only when it's `{ tool: 'pl', … }`.
@@ -356,14 +356,14 @@ hard-deleted. Comments on the requirement stay in the source document, and PL li
 | **Coverage strip** (Parts × requirements, one cell each, colored by state, gaps hatched) | Shows where the holes are; it's the compliance matrix folded small | Low | **Core**, under the header |
 | **Needs you inbox**: untraced, unallocated, at risk, needs approval (`changed`), parent changed since the child was derived | The reason to open the tab every day. Each item is one action | Medium | **Core**, the pull-in feature |
 | **Click-through**: every check and issue opens in EE/ME at the exact item | Turns PL into the front door for the whole review | Low (needs `&req=` in the engine) | **Core** |
-| **Inline editing**: click the text, status or verify chip | Fast; makes PL a place to work, not only to read | Medium | **Core** for PL-homed records; 2c for review-homed ones |
+| **Inline editing**: click the text, status, or verify chip | Fast; makes PL a place to work, not only to read | Medium | **Core** for PL-homed records; 2c for review-homed ones |
 | **Drag to allocate**: drag a requirement onto a Part in a Parts rail | Matches the System tab's tray and drag-to-place. Allocating feels physical | Medium | **Core** |
 | **Filters**: tool, Part, status, category, gate; search; and "only mine" | Expected; keeps the long list usable | Low | **Core** |
 | **Full compliance matrix** (big grid, export CSV or print) | What the client asks for at a gate | Low (CSV already in the engine) | View toggle |
 | **"Since you last looked" marks** (a dot on rows changed elsewhere since this browser's last visit, with who and what) | A reason to come back, and quiet awareness of contractor activity | Low (per-viewer localStorage) | **Core** |
 | **Suggested parent** (match on `source`, such as "DT-SPEC-12 §6.4", and keywords) | Makes tracing up a one-click job | Low | In the Untraced inbox |
 | **Computed evidence** (mass from the BOM, later others) | Live margin numbers, the kind of thing people screenshot | Low for mass | Nice, small |
-| **Gate tags** (verify by EVT, DVT or PVT) and a burndown per gate | Ties into Phase 3 gates | Medium | Later, with gates |
+| **Gate tags** (verify by EVT, DVT, or PVT) and a burndown per gate | Ties into Phase 3 gates | Medium | Later, with gates |
 | **Flow (Sankey-style) diagram**, System to Parts | Pretty, but adds little beyond the tree and matrix | High | No |
 
 ### Recommended design
@@ -405,7 +405,7 @@ Illustrative sketch; the numbers differ from the mockup.
     Hovering a cell names it, and clicking filters the list to that pair.
 - **List: the tree.**
   - Each System requirement is a row with its ring, ref, text, method, and roll-up state.
-  - Children are indented, each with a tool badge, Part name, ref and state. Where they're at
+  - Children are indented, each with a tool badge, Part name, ref, and state. Where they're at
     risk, a pill shows the blocking issue's check id and severity, and opens it in EE/ME.
   - Untraced EE/ME requirements sit at the bottom under "Not traced to a System requirement".
   - Deprecated requirements are lined out under All, as in EE.
@@ -510,7 +510,7 @@ only if it vendors the new github.js.
    keep their own `REQ-` numbering (proposed), or take a derived ref like `SYS-002.1`?
 6. **Field-level merge** (`fieldAt`) is the engine change that makes two-way editing safe. Do it
    in 2b before writes, or accept conflict cards alone at first?
-7. **Gates.** Should requirements carry a "verify by EVT, DVT or PVT" tag now, or wait for
+7. **Gates.** Should requirements carry a "verify by EVT, DVT, or PVT" tag now, or wait for
    Phase 3?
 
 ## Appendix: the demo trace map used in the mockup

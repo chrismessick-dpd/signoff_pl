@@ -16,7 +16,7 @@
                 previews, ee_design_review/docs/fabcheck-link.md).
    phases:      build phases, for gates (Phase 3 of the plan).
    demo:        the demo product. boardsMm stands in for the board size Fabcheck stores with its
-                pictures (w, h, thickness in mm). Its Parts link to Signoff EE's, ME's and FW's demo projects;
+                pictures (w, h, thickness in mm). Its Parts link to Signoff EE's, ME's, and FW's demo projects;
                 their summaries are in assets/demo-designs.js (tools/demo_designs.html builds it).
                 requirements: the demo's System requirements (keys for parents and Parts) and the
                 EE/ME/FW demo requirements each flows down to ('tool:design id:requirement id'). */

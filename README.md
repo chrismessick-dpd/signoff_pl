@@ -51,7 +51,7 @@ sync has confirmed that for the token in use:
 
 **Sync** (or Ctrl+S) does three things:
 1. It reads who the token belongs to (`/user`).
-2. It pulls, merges and pushes the PL projects in the data repo. A 404 locks PL, as above.
+2. It pulls, merges, and pushes the PL projects in the data repo. A 404 locks PL, as above.
 3. For FTEs, it reads the designs again from Signoff EE and ME:
    - It lists each tool's data repo and every repo starting with its prefix (`config.tools`).
    - It keeps only `meta` and `summary` from each project file, rebuilt from known fields:
@@ -69,7 +69,7 @@ sync has confirmed that for the token in use:
 
 **Demo mode:** `index.html?demo` shows the suite's made-up demo product, a Smart Thermostat.
 Nothing is read from GitHub.
-- Its EE and ME Parts are the Signoff EE and ME demo projects: two boards, an enclosure and a
+- Its EE and ME Parts are the Signoff EE and ME demo projects: two boards, an enclosure, and a
   wall bracket. Every link, including each issue, opens that design or that check in the other
   tool's demo.
 - Their summaries are a snapshot in `assets/demo-designs.js`, so PL's demo still works on its
@@ -88,9 +88,9 @@ Nothing is read from GitHub.
 - **System** (once Overview and Structure; a stored `overview` or `structure` view opens it) shows
   the structure on top and the product's status underneath. The structure has four layouts:
   - **Map** (the default): an indented tree. The top assembly is the trunk, a button with the
-    product's progress ring, Part count, mass and open issues. Each assembly branches off its
+    product's progress ring, Part count, mass, and open issues. Each assembly branches off its
     parent with connector lines, and its Parts sit in a row of tiles on their own branch: a tile
-    per Part with its picture (or a plain drawing until it has one), progress, stage and open
+    per Part with its picture (or a plain drawing until it has one), progress, stage, and open
     issues. With several top-level nodes the trunk is the product itself. A product of one Part
     shows one tile, which is both the top and the Part.
     - Click a Part for the inspector: the picture (Top/Bottom for boards), checklists, the worst
@@ -127,7 +127,7 @@ Nothing is read from GitHub.
   - The original STEP is kept, gzipped, only if **Also keep the original STEP** stays checked. It
     can't be kept over 10 MB compressed.
   - The sheet shows what will be stored. An empty envelope is filled in from the model's size.
-  - The pictures show on the map tile (as a big tile), in Gallery and the BOM.
+  - The pictures show on the map tile (as a big tile), in Gallery, and in the BOM.
     The inspector flips between the views and has a **3D** view you drag to turn. A kept STEP can
     be downloaded from there.
   - The files go into the PL data repo at the next sync, before the project file that names them.
@@ -143,22 +143,22 @@ Nothing is read from GitHub.
       Signoff; until then, type it in the panel.
     - Nothing else is made up: Parts without 3D are named under the view.
   - **Getting around:** drag to turn, Shift-drag (or right-drag) to pan, scroll to zoom. The view
-    buttons are Iso, Top, Front and Right. **Fit** frames everything.
+    buttons are Iso, Top, Front, and Right. **Fit** frames everything.
   - **Exploding:** the slider pulls the parts apart: layers by their order from the top, and a
     little outward.
   - **Where parts start:** a Part you haven't moved is stacked in structure order, first on top.
     **CAD position** puts a model where its STEP put it, so parts exported from one CAD assembly
     line up by themselves. **Back to stack** forgets a placement.
   - **Click a part** to arrange it in the panel:
-    - **Move:** drag it, or type X, Y and Z (mm).
+    - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.
       - Moves keep to a 0.5 mm grid unless you hold Alt.
       - Arrows nudge 1 mm (10 with Shift), and Page Up and Page Down move it in Z.
       - Moving shows the parts assembled.
-    - **Turn:** turn it 90° about X, Y or Z, or press R for Z.
+    - **Turn:** turn it 90° about X, Y, or Z, or press R for Z.
     - **Line up with** another part: **Stack on** puts it on top, centered; **Center on** centers it
       in X and Y.
-    - **Snap:** pick a corner, edge, hole or flat face on this part, then one on another part. This
+    - **Snap:** pick a corner, edge, hole, or flat face on this part, then one on another part. This
       part moves (it never turns):
       - corners meet;
       - flat faces become flush (only the gap between them closes);
@@ -206,7 +206,7 @@ The roll-up rules:
   summary.
 - **A design used twice** (two of the same board) counts once in progress and issues. Its
   quantity multiplies its mass.
-- **Stages** stay per tool, because EE and ME stages have different names. EVT, DVT and PVT
+- **Stages** stay per tool, because EE and ME stages have different names. EVT, DVT, and PVT
   gates will tie them together.
 - **Mass** is in grams, entered per Part.
 
@@ -270,7 +270,7 @@ and deletions are tombstones. The merge is PL's own (`pl.js` `merge`), passed to
 | Repository | Holds | Who's on it |
 | --- | --- | --- |
 | `signoff_pl` (tool) | This tool | FTEs |
-| `signoff_pl_data` (data) | Internal PL projects (`projects/<id>.json`), their model files and `users.json` | FTEs |
+| `signoff_pl_data` (data) | Internal PL projects (`projects/<id>.json`), their model files, and `users.json` | FTEs |
 | `review-pl-<slug>` (one per shared project) | That one project and its model files | FTEs and the people it's shared with |
 
 **Sharing a project** (⋯ → Share…, FTEs only) gives someone outside the team the product and
@@ -294,7 +294,7 @@ off again. The design and the open questions are in [docs/sharing.md](docs/shari
 | `assets/pl.css` | The few PL-only styles |
 | `assets/suite.css`, `assets/vendor/model.js`, `assets/vendor/github.js` | Vendored from Signoff EE by `tools/sync_vendor.py` (don't edit here) |
 | `tools/stamp_version.py` | Stamps `assets/version.js` and the `?v=` cache-busters in `index.html` |
-| `tests/test.html`, `tests/fake-hub.js` | Model, reader and sync tests against a fake GitHub (open over http) |
+| `tests/test.html`, `tests/fake-hub.js` | Model, reader, and sync tests against a fake GitHub (open over http) |
 
 ## Changing it
 
@@ -306,10 +306,10 @@ off again. The design and the open questions are in [docs/sharing.md](docs/shari
    that make browsers load fresh files. `--check` fails if the stamp is stale.
 4. Open `tests/test.html` over http. It should say PASS.
 
-**Adding Signoff FW** is one more entry in `config.tools`, with its data repo, prefix and app
+**Adding Signoff FW** is one more entry in `config.tools`, with its data repo, prefix, and app
 path. Firmware Parts then link like EE and ME ones.
 
 ## Roadmap
 
-Phases 0 and 1 are done. Requirements allocation, interfaces, EVT/DVT/PVT gates and Signoff FW
+Phases 0 and 1 are done. Requirements allocation, interfaces, EVT/DVT/PVT gates, and Signoff FW
 are next; see [docs/roadmap.md](docs/roadmap.md).

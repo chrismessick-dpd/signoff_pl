@@ -6,7 +6,7 @@
    with a role, and the `shared` map saying which review lives in its own private repo
    (<prefix><slug>, e.g. review-ee-main-board). Sharing a PL project:
      1. moves the project into review-pl-<slug>, with its model files (models/<project id>/);
-     2. moves each linked EE, ME and FW review into that tool's review-<tool>-<slug> (an EE board's
+     2. moves each linked EE, ME, and FW review into that tool's review-<tool>-<slug> (an EE board's
         Fabcheck files go with it), or reuses the repo it's already shared in;
      3. moves each linked Loom harness into review-loom-<slug>;
      4. records the person as a contractor on each of those in that tool's roster, and invites the

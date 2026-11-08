@@ -24,7 +24,7 @@
   function build() {
     var user = 'Demo';
     var project = P.newProject(D.project || { name: 'Demo product' }, user);
-    // Fixed ids, so the EE, ME and FW demos' requirements can name their PL parents (`parent` in
+    // Fixed ids, so the EE, ME, and FW demos' requirements can name their PL parents (`parent` in
     // their config.js): the project is pldemo and each System requirement qdemo-<key>.
     project.id = 'pldemo';
     var ids = {}, index = { at: new Date().toISOString(), entries: {}, errors: [], files: {}, demo: true };

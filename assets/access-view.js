@@ -4,8 +4,8 @@
      Person first       a card per person (FTEs share one), clients grouped by company; open a person
                         to set their mode per PL project and tick Parts
      Tree with people   each PL project's tree with chips of who can open each node
-   Edits are staged; the footer says plainly whether anything is staged, just applied or live, and
-   Apply lists every repo it creates, invitation it sends and roster it writes before running.
+   Edits are staged; the footer says plainly whether anything is staged, just applied, or live, and
+   Apply lists every repo it creates, invitation it sends, and roster it writes before running.
    Removing someone from a PL project asks whether their Parts go too.
 
    S.plAccessView(ctx) returns { draw(pane), reset() }. ctx:

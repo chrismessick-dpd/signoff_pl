@@ -3,7 +3,7 @@
 
    readStep(bytes)          OpenCascade (occt-import-js, pinned) in assets/occt-worker.js → mesh
    simplify(mesh, maxTris)  vertex clustering until the mesh has at most maxTris triangles
-   encode(mesh) / decode()  "PLM1": 16-bit positions over the bounding box, indices, a color and a
+   encode(mesh) / decode()  "PLM1": 16-bit positions over the bounding box, indices, a color, and a
                             CAD face per triangle; gzipped
    render(mesh, opts)       a small z-buffer renderer (no WebGL, no libraries) → ImageData
    renderScene(objs, cam)   several placed parts, board pictures as textures, and which part and
@@ -181,7 +181,7 @@
     { key: 'right', label: 'Right', az: -90 * D, el: 0 }
   ];
 
-  // The eye: right, up and toward-the-eye directions in world coordinates.
+  // The eye: right, up, and toward-the-eye directions in world coordinates.
   function camera(az, el) {
     var ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(el), se = Math.sin(el);
     return { r: [ca, -sa, 0], u: [sa * se, ca * se, ce], f: [-sa * ce, -ca * ce, se] };

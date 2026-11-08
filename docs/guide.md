@@ -16,7 +16,7 @@ of those designs is reviewed in its own Signoff tool. PL puts them together.
    - a board reviewed in Signoff EE
    - a mechanical part reviewed in Signoff ME
    - firmware
-   - a purchased item, with its supplier, part number, mass and envelope
+   - a purchased item, with its supplier, part number, mass, and envelope
 2. **Link the reviews.** Pick each Part's review from a list of the projects PL finds. PL reads
    the summary each review keeps up to date. The only thing it writes into a review is
    requirements, and it asks first.
@@ -28,14 +28,14 @@ of those designs is reviewed in its own Signoff tool. PL puts them together.
      meet it. Each Part's own requirements in Signoff EE and ME trace up to them.
      - Rings and a coverage strip show what's met, at risk, failing, or a gap: allocated, but with
        nothing derived yet.
-     - **Needs you** lists what's unallocated, untraced, reworded or at risk.
+     - **Needs you** lists what's unallocated, untraced, reworded, or at risk.
      - Drag a requirement onto a Part to allocate it.
-     - Derive, trace, approve or edit a Part's requirement from here, and PL writes it into the
+     - Derive, trace, approve, or edit a Part's requirement from here, and PL writes it into the
        review.
    - **Issues:** every open issue in the product, worst first. Each one opens the exact check in
      its review.
 
-**Try it:** the demo (`?demo`) is a made-up Smart Thermostat. Its boards, enclosure and wall bracket
+**Try it:** the demo (`?demo`) is a made-up Smart Thermostat. Its boards, enclosure, and wall bracket
 are the Signoff EE and ME demo reviews, so every link opens the real thing. Nothing leaves your
 browser.
 

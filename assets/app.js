@@ -1,4 +1,4 @@
-/* Signoff PL app: state, storage, rendering and interaction.
+/* Signoff PL app: state, storage, rendering, and interaction.
    PL projects sync to the PL data repo through the Signoff engine's GitHubStore with PL's own
    merge (pl.js). The design reviews Parts link to are read (reader.js); the Requirements tab
    (reqs.js) writes requirement records into them, and nothing else. */
@@ -326,14 +326,14 @@
     var sub = [m.client, m.number].filter(Boolean).map(esc).join('<span class="sep">·</span>');
     return '<div class="eyebrow">' + esc(eyebrow) + '</div><h1 class="page-title">' + esc(m.name) + '</h1>' +
       '<div class="page-sub">' + (sub ? '<span>' + sub + '</span>' : '') + (m.phase ? '<span class="chip accent">' + esc(m.phase) + '</span>' : '') +
-      '<button class="btn page-edit" data-act="edit-project" title="Edit the project’s name, client, phase and description">' + ICON.pencil + 'Edit</button></div>';
+      '<button class="btn page-edit" data-act="edit-project" title="Edit the project’s name, client, phase, and description">' + ICON.pencil + 'Edit</button></div>';
   }
   function stat(n, label, cls, detail) {
     return '<div class="card stat ' + esc(cls || '') + '"><div class="stat-num">' + esc(n) + '</div><div class="stat-label">' + esc(label) + '</div>' + (detail ? '<div class="stat-detail">' + detail + '</div>' : '') + '</div>';
   }
 
   // ── System: the structure on top, the product's facts underneath ──
-  // The structure shows as a tree map (default), a gallery, the exploded 3D view or a table.
+  // The structure shows as a tree map (default), a gallery, the exploded 3D view, or a table.
   // Selecting a tile opens the inspector beside it. The map's top button selects the top assembly,
   // or the product itself (PRODUCT) when it has several top-level nodes.
   var PRODUCT = '@product';
@@ -348,7 +348,7 @@
         return '<button role="tab" class="' + (layout === l[0] ? 'on' : '') + '" data-act="layout" data-layout="' + l[0] + '">' + l[1] + '</button>';
       }).join('') + '</div><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button></div></div>';
     if (!ids.length) {
-      return html + trayHtml(p) + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Add the product’s top assembly, then the Parts in it: boards, mechanical parts, firmware and purchased items.</p>' +
+      return html + trayHtml(p) + '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>No Parts yet</h2><p>Add the product’s top assembly, then the Parts in it: boards, mechanical parts, firmware, and purchased items.</p>' +
         '<button class="btn btn-primary" data-act="add-node">Add the first assembly or Part</button></div></div></div>';
     }
     html += layout === 'map' || layout === 'gallery' ? '<div class="sys-diagram">' + (layout === 'gallery' ? gallery(p, t, ids) : treeMap(p, t, rolls)) + '</div>'
@@ -825,7 +825,7 @@
       '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
       '<button class="btn" data-act="xs-fit">Fit</button>' +
       '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span></div>' +
-      '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn or snap it. Parts you haven’t moved are stacked in structure order.' +
+      '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are stacked in structure order.' +
       (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
       (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
   }
@@ -964,7 +964,7 @@
 
   // ── Snapping ─────────────────────────────────────────────
   // Pick a feature on the selected part, then one on another part; the selected part moves so the
-  // first lands on the second (model3d.alignMove). Corners, edges, hole axes and flat faces.
+  // first lands on the second (model3d.alignMove). Corners, edges, hole axes, and flat faces.
   var featCache = typeof WeakMap === 'function' ? new WeakMap() : null;
   function featsOf(mesh) {
     var f = featCache && featCache.get(mesh);
@@ -1015,7 +1015,7 @@
     if (tri >= 0) {
       var f = F.region[tri], pl = F.planes[f];
       if (pl) return { type: 'plane', p: W(pl.p), n: M3.turn(po, pl.n), label: 'Flat face', obj: oi, rank: 2, dist: 0, draw: { face: f } };
-      return { none: true, label: 'Curved face: pick an edge, a hole or a flat face', obj: oi, draw: {} };
+      return { none: true, label: 'Curved face: pick an edge, a hole, or a flat face', obj: oi, draw: {} };
     }
     return null;
   }
@@ -1047,7 +1047,7 @@
     var el = $('.xs-snap-step');
     if (!el) return;
     var n = sceneObjAt(ui.sel);
-    el.textContent = !snapState ? '' : snapState.step === 1 ? 'Step 1 of 2: pick a corner, edge, hole or flat face on ' + (n ? n.s.n.name : 'this part') + '.'
+    el.textContent = !snapState ? '' : snapState.step === 1 ? 'Step 1 of 2: pick a corner, edge, hole, or flat face on ' + (n ? n.s.n.name : 'this part') + '.'
       : 'Step 2 of 2: pick where it goes on another part (' + snapState.from.label.toLowerCase() + ' picked).';
   }
   // Draws the hovered feature (accent) and, while placing it, the one picked first (orange).
@@ -1104,7 +1104,7 @@
         (pl && (pl.rx || pl.ry || pl.rz) ? '<p class="note">Turned ' + [pl.rx, pl.ry, pl.rz].map(function (v, i) { return 'XYZ'[i] + ' ' + v + '°'; }).join(', ') + '</p>' : '') +
         '<div class="field-label">Snap</div>' +
         (snapState ? '<p class="xs-snap-step"></p><button class="btn" data-act="xs-snap-cancel">Cancel</button>'
-          : '<button class="btn btn-primary" data-act="xs-snap">Snap to another part…</button><p class="note">Pick a corner, edge, hole or flat face here, then one on another part. Faces become flush, edges and hole axes line up, corners meet.</p>');
+          : '<button class="btn btn-primary" data-act="xs-snap">Snap to another part…</button><p class="note">Pick a corner, edge, hole, or flat face here, then one on another part. Faces become flush, edges and hole axes line up, corners meet.</p>');
       var others = sceneList(t, P.flatten(t)).parts.filter(function (s) { return s.id !== id; });
       if (others.length) {
         html += '<div class="field-label">Line up with</div><div class="xs-line"><select class="input" id="xs-target">' + others.map(function (s) { return '<option value="' + esc(s.id) + '"' + (ui.xsTarget === s.id ? ' selected' : '') + '>' + esc(s.n.name || 'Unnamed') + '</option>'; }).join('') + '</select>' +
@@ -1764,7 +1764,7 @@
           return '<button type="button" class="' + (source === s.id ? 'on' : '') + '" data-source="' + esc(s.id) + '">' + esc(s.name) + '</button>';
         }).join('') + '</div></div>';
       } else {
-        html += '<div class="field">' + (list.length > 6 ? '<input class="input" id="f-ref-q" type="search" placeholder="Search designs by name, number or client project" autocomplete="off" aria-label="Search designs">' : '') +
+        html += '<div class="field">' + (list.length > 6 ? '<input class="input" id="f-ref-q" type="search" placeholder="Search designs by name, number, or client project" autocomplete="off" aria-label="Search designs">' : '') +
           '<div class="pick-grid" id="f-ref-list">' + pickCards('') + '</div>' +
           (!index ? '<p class="note">Designs haven’t been read yet. ' + (DEMO ? '' : 'Sync to read them from GitHub.') + '</p>'
             : !list.length ? '<p class="note">No designs found in ' + esc(orList(C.tools.map(function (x) { return x.name; }))) + '. Sync to read them again.</p>' : '') + '</div>';
@@ -1961,7 +1961,7 @@
   }
 
   // Sign out of this browser, as Signoff EE's Settings does: the token goes (it's shared), and so
-  // does every copy the suite keeps here (EE, ME, FW and PL working copies, PL's pictures and
+  // does every copy the suite keeps here (EE, ME, FW, and PL working copies, PL's pictures and
   // waiting model files, Fabcheck's runs and hand-offs). Only the theme stays. Unsynced changes
   // would be lost, so they're counted first.
   var SUITE_NS = ['signoff.v1.', 'signoff-me.v1.', 'signoff-fw.v1.', 'signoff-pl.v1.', 'fabcheck.v1.'];
@@ -1973,7 +1973,7 @@
     });
     try { unsynced += Object.keys((JSON.parse(localStorage.getItem('signoff.v1.held') || '{}') || {}).projects || {}).length; } catch (e) { /* ignore */ }
     var ask = 'Sign out of this browser? This removes your GitHub token and every Signoff and Fabcheck copy kept here. Your projects and reviews stay on GitHub.';
-    if (unsynced) ask = plural(unsynced, 'project, review or list has', 'projects, reviews or lists have') + ' changes that aren’t on GitHub yet and would be lost. Sync first unless you mean to throw them away.\n\n' + ask;
+    if (unsynced) ask = plural(unsynced, 'project, review, or list has', 'projects, reviews, or lists have') + ' changes that aren’t on GitHub yet and would be lost. Sync first unless you mean to throw them away.\n\n' + ask;
     if (!confirm(ask)) return;
     var theme = settings.theme;
     try {
@@ -2019,7 +2019,7 @@
         return '<tr><td><span class="chip">' + esc(tool.short) + '</span> ' + esc(it.name) + '</td><td class="muted">' + (it.repo ? 'Shared as <b>' + esc(it.repo.split('/')[1]) + '</b>' : 'Gets its own private repository') + '</td></tr>';
       }
       w.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-head"><h2>Share ' + esc(p.meta.name) + '</h2>' +
-        '<p>Sharing gives someone the product, every review its Parts link to and every harness, each in its own private repository. Internal data stays in the FTE-only repositories.</p></div>' +
+        '<p>Sharing gives someone the product, every review its Parts link to, and every harness, each in its own private repository. Internal data stays in the FTE-only repositories.</p></div>' +
         '<div class="sheet-body">' +
         '<div class="field"><span class="field-label">Shared with</span>' + (onProject.length ? '<div>' + onProject.map(function (l) {
           var u = plan.people.filter(function (x) { return x.login === l; })[0];
@@ -2120,7 +2120,7 @@
   // 2. PL projects: the data repo and the shared repos (share.js syncAll), merged with PL's merge.
   //    A token that opens the data repo is an FTE's; one that reaches only review-pl-* repos is a
   //    contractor's; one that reaches nothing locks PL, which drops the projects it holds (P.lockOut).
-  // 3. Designs: read again from EE, ME, FW and Loom.
+  // 3. Designs: read again from EE, ME, FW, and Loom.
   function sync() {
     if (DEMO) { toast('Demo mode keeps everything in this browser'); return; }
     if (syncing) return;

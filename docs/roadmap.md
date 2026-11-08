@@ -18,7 +18,7 @@ and the latest edit. The format is in Signoff EE's README (*The project summary*
 
 - The product tree, with Parts linked by `{tool, id}`.
 - Purchased and firmware Parts.
-- Roll-up of progress, issues, stages and mass, and one combined issue list.
+- Roll-up of progress, issues, stages, and mass, and one combined issue list.
 - Deep links: EE and ME accept `?project=<id>&item=<check>`.
 - A demo built from the EE and ME demos.
 
@@ -55,7 +55,7 @@ reviews.
   - **open** otherwise
 - **Views.** A Requirements tab in PL, and a compliance matrix export.
 
-## Phase 3: interfaces, gates and a project checklist
+## Phase 3: interfaces, gates, and a project checklist
 
 - **Interfaces** between Parts, for example board to enclosure, board to board, and display to
   firmware. Each has an owner on both sides, the agreed values or documents, and a status.
@@ -73,7 +73,7 @@ reviews.
 ## Signoff FW
 
 Firmware reviews belong in a new tool on the shared engine, configured like Signoff ME:
-- its own repo, data repo and `review-fw-` prefix
+- its own repo, data repo, and `review-fw-` prefix
 - firmware checklists
 
 When it exists, add it to `config.tools` here. FW Parts then link like EE and ME ones, and the
