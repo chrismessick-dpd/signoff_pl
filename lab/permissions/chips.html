@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People &amp; access · Tree with people</title>
+<link rel="stylesheet" href="../../assets/suite.css">
+<link rel="stylesheet" href="../../assets/pl.css">
+<link rel="stylesheet" href="perm.css">
+<style>
+  .ct { padding: 6px 0; }
+  .ct-row { display: grid; grid-template-columns: minmax(260px, 38%) 1fr; gap: 12px; align-items: center; padding: 8px 18px; border-bottom: 1px solid var(--hair); }
+  .ct-row:last-child { border-bottom: none; }
+  .ct-row.k-project { background: var(--accent-soft); }
+  .ct-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .cp { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 2px; border-radius: 980px; font-size: 12px; font-weight: 500; color: var(--text); background: var(--bg-sunk); border: 1.5px solid transparent; }
+  button.cp:hover { box-shadow: 0 0 0 2px var(--accent-soft); }
+  .cp .pav { width: 22px; height: 22px; font-size: 9.5px; }
+  .cp.fte { padding: 3px 9px; color: var(--text-3); gap: 4px; }
+  .cp.fte .pi { width: 12px; height: 12px; }
+  .cp.s-yes, .cp.s-all { background: var(--pass-soft); border-color: var(--pass); }
+  .cp.inh { background: transparent; border: 1.5px dashed var(--text-3); color: var(--text-2); }
+  .cp.inh .pav { opacity: 0.7; }
+  .cp.s-some { background: var(--bg-sunk); border-color: var(--hair-2); }
+  .cp.s-pending { background: var(--warn-hatch), var(--warn-soft); border-color: var(--warn); }
+  .cp.s-new { background: var(--accent-soft); border: 1.5px dashed var(--accent); }
+  .cp.s-add { background: var(--accent-soft); border-color: var(--accent); }
+  .cp.s-remove { background: var(--issue-hatch), var(--issue-soft); border-color: var(--issue); }
+  .cp.s-remove .cp-name { text-decoration: line-through; }
+  .cp-mark { position: absolute; left: 13px; top: -5px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-elev); color: var(--text); box-shadow: 0 0 0 1px var(--hair-2); }
+  .cp-mark .pi { width: 11px; height: 11px; }
+  .cp-mark.inh { color: var(--text-3); }
+  .cp-role { display: inline-grid; place-items: center; color: var(--text-3); margin-left: -2px; }
+  .cp-role .pi { width: 12px; height: 12px; }
+  .pop-role { display: flex; align-items: center; gap: 8px; padding: 2px 8px 6px; font-size: 12px; }
+  .pop-group { padding: 8px 8px 2px; }
+  .cp-add { width: 26px; height: 26px; border-radius: 50%; border: 1.5px dashed var(--hair-2); background: none; color: var(--text-3); display: inline-grid; place-items: center; padding: 0; }
+  .cp-add:hover { border-color: var(--accent); color: var(--accent); }
+  .cp-add .pi { width: 13px; height: 13px; }
+  .cp-note { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); }
+  .pop-mode { padding: 6px 8px; }
+  .pop-acts { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 8px 4px; }
+  label.pop-row { cursor: pointer; }
+  label.pop-row input { accent-color: var(--accent); }
+  .pop .repo { margin-top: 4px; white-space: normal; }
+  @media (max-width: 760px) { .ct-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<script src="perm.js"></script>
+<script src="chips.js"></script>
+</body>
+</html>
