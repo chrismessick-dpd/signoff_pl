@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'access', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -453,6 +453,54 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   // A roster write never changes anything but its records.
   var proofErr = await sharerFor('own').patchRoster('own/ee_design_review_data', { users: [], shared: [] }, function (r) { r.users.bob.role = 'contractor'; return true; }).then(function () { return null; }, function (e) { return e; });
   ok(proofErr && /more than the records/.test(proofErr.message), 'a roster write that touches an unlisted record is refused');
+
+  // ── People & access (access.js): scopes, companies, one-Part removal, and the plan ──
+  var sha = sharerFor('own');
+  await sha.setScope(sp.id, 'eve', 'project');
+  await sha.setCompany('eve', 'Acme', 'client');
+  await sharerFor('own').shareProject(sp, ['eve'], nameOf);
+  var plU = function () { return JSON.parse(shub.files('own/signoff_pl_data')['users.json']).users; };
+  ok(plU().eve.scopes[sp.id] === 'project' && plU().eve.company === 'Acme' && plU().eve.role === 'client', 'a PL scope and a company survive a later share (shareOne keeps fields it doesn’t own)');
+  await sharerFor('own').setScope(sp.id, 'eve', '');
+  ok(!('scopes' in plU().eve) && plU().eve.company === 'Acme', 'clearing the last scope drops the field and keeps the company');
+  await sharerFor('own').setScope(sp.id, 'eve', 'project');
+  var r1o = await sharerFor('own').revokeOne('ee', 'p1', 'Main board', 'eve');
+  ok(!r1o.failed.length && JSON.parse(shub.files('own/ee_design_review_data')['users.json']).users.eve.projects.indexOf('p1') < 0 && plU().eve.projects.indexOf(sp.id) >= 0 &&
+    shub.repos['own/review-ee-main-board'].invitations.concat(shub.repos['own/review-ee-main-board'].collaborators.map(function (l) { return { login: l }; })).every(function (i) { return i.login !== 'eve'; }), 'revokeOne takes someone off one design only, invitation included');
+  var aLoad = await Signoff.plAccess.load(sharerFor('own'));
+  var mkA = function (ld) { return new Signoff.PLAccess({ docs: [sp], rosters: ld.rosters, invites: ld.invites, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, owner: 'own', nameOf: nameOf }); };
+  var acc = mkA(aLoad);
+  var accP = function (l) { return acc.person(l) || {}; };
+  eq([accP('bob').role, accP('dan').role, accP('eve').role, accP('eve').company], ['fte', 'contractor', 'client', 'Acme'], 'PL’s people are everyone on any roster, FTEs from Signoff EE’s');
+  eq([acc.mode(sp.id, 'eve'), acc.mode(sp.id, 'dan'), acc.mode(sp.id, 'bob')], ['project', 'parts', 'fte'], 'modes come from PL’s roster: chosen Parts, Parts only, FTE');
+  var nodeFor = function (a, tool, id) { return Object.keys(a.nodes).map(function (k) { return a.nodes[k]; }).filter(function (n) { return n.key === tool + ':' + id; })[0]; };
+  eq([acc.cell(sp.id, 'eve', nodeFor(acc, 'ee', 'p1')).s, acc.cell(sp.id, 'dan', nodeFor(acc, 'me', 'm1')).s, acc.cell(sp.id, 'eve', nodeFor(acc, 'me', 'm1')).s], ['none', 'yes', 'pending'], 'cells read the rosters and pending GitHub invitations (Dan accepted long ago; Eve has not)');
+  ok(!Object.keys(acc.nodes).some(function (k) { return /Battery|PSU/.test(acc.nodes[k].name); }), 'purchased Parts aren’t listed');
+  eq(acc.plan(), [], 'nothing is staged when the rosters already say what the page shows');
+  acc.setMode(sp.id, 'dan', 'system');
+  var danPlan = acc.plan();
+  eq(danPlan.map(function (o) { return o.k + ':' + o.tool + ':' + o.id; }), ['share:pl:' + sp.id, 'share:ee:p1', 'share:loom:h1'], 'Whole system for someone with one Part shares the project and the Parts they lack');
+  ok(acc.planRows(danPlan).some(function (r) { return r.k === 'roster' && /PL users\.json/.test(r.repo); }), 'the plan names the rosters it writes');
+  var ran = await acc.run(sharerFor('own'), danPlan);
+  eq(ran.failed, [], 'Apply runs with no failures');
+  var acc2 = mkA(await Signoff.plAccess.load(sharerFor('own')));
+  ok(acc2.mode(sp.id, 'dan') === 'system' && !acc2.plan().length, 'after Apply the rosters say Whole system and nothing is staged');
+  acc2.removeFrom(sp.id, 'dan', false);
+  eq(acc2.plan().map(function (o) { return o.k + ':' + o.tool; }), ['remove:pl'], 'removing from the PL project only keeps their Parts');
+  await acc2.run(sharerFor('own'), acc2.plan());
+  var acc3 = mkA(await Signoff.plAccess.load(sharerFor('own')));
+  ok(acc3.mode(sp.id, 'dan') === 'parts' && ['p1', 'm1', 'h1'].every(function (id) { return acc3.holds('base', 'dan', (id === 'p1' ? 'ee:' : id === 'm1' ? 'me:' : 'loom:') + id); }), '…and the rosters agree');
+  acc3.removeFrom(sp.id, 'eve', true);
+  eq(acc3.plan().map(function (o) { return o.k + ':' + o.tool; }).sort(), ['remove:loom', 'remove:me', 'remove:pl', 'scope:undefined'], 'removing from the project and its Parts takes every Part and clears the scope');
+  // The demo story: the Wall Bracket was linked after sharing, so the whole-system client's access is staged.
+  var dr0 = Signoff.plAccess.demoRosters('acme');
+  var dacc = new Signoff.PLAccess({ docs: [demo.project], rosters: dr0.rosters, invites: dr0.invites, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, owner: 'acme', nameOf: function () { return ''; } });
+  var wb = nodeFor(dacc, 'me', 'mdemo13'), wbc = dacc.cell('pldemo', 'morgan-hale', wb);
+  ok(wbc.s === 'new' && wbc.gap && wbc.inherited, 'demo: a Part linked since sharing is staged for the whole-system client, as a new repo');
+  eq(dacc.plan().map(function (o) { return o.k + ':' + o.id + ':' + (o.logins || []).join(); }), ['share:mdemo13:morgan-hale'], '…and that is the whole demo plan on load');
+  var sim = dacc.simulate(dacc.plan());
+  var dacc2 = new Signoff.PLAccess({ docs: [demo.project], rosters: sim.rosters, invites: sim.invites, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, owner: 'acme', nameOf: function () { return ''; } });
+  ok(!dacc2.plan().length && dacc2.cell('pldemo', 'morgan-hale', nodeFor(dacc2, 'me', 'mdemo13')).s === 'pending', 'the demo’s Apply records the share and leaves the invitation pending');
 
   // ── 3D models ──
   var M3 = Signoff.model3d, SHA1 = 'a'.repeat(40), SHA2 = 'b'.repeat(40);

@@ -37,6 +37,7 @@
     this.rosters = {};                      // 'owner/repo' -> normalized roster, read once per operation
     this.names = {};                        // login -> display name for people added here
     this.roles = {};                        // login -> 'client' | 'contractor' for people added here
+    this.companies = {};                    // login -> company, for clients added here
   }
 
   Sharer.prototype.full = function (name) { return this.owner + '/' + name; };
@@ -227,7 +228,10 @@
           var projects = (u && !u.deleted ? u.projects || [] : []).slice();
           if (projects.indexOf(id) >= 0 && u && !u.deleted) return;
           if (projects.indexOf(id) < 0) projects.push(id);
-          r.users[l] = M.stamp({ login: l, name: (u && !u.deleted && u.name) || self.names[l] || l, role: (u && !u.deleted && u.role) || self.roles[l] || 'contractor', projects: projects, deleted: false }, self.login);
+          // Fields this routine doesn't own (a PL scope, a company) stay as they are.
+          var keep = u && !u.deleted ? u : {}, rec = { login: l, name: keep.name || self.names[l] || l, role: keep.role || self.roles[l] || 'contractor', projects: projects, deleted: false };
+          if (!keep.company && self.companies[l]) rec.company = self.companies[l];
+          r.users[l] = M.stamp(Object.assign({}, keep, rec), self.login);
           changed = true;
         });
         return changed;
@@ -333,32 +337,78 @@
     }, Promise.resolve()).then(function () { return { results: results, failedInvites: failed }; });
   };
 
+  /* Take `login` off one design of one tool (or the PL project itself, tool 'pl'): GitHub access to its
+     repo (a pending invitation too) and the assignment in that tool's roster. Resolves { failed: [...] }. */
+  Sharer.prototype.revokeOne = function (toolId, id, name, login, log) {
+    var self = this, tool = this.toolDesc(toolId), failed = [];
+    login = String(login).toLowerCase();
+    log = log || function () {};
+    if (!tool) return Promise.resolve({ failed: failed });
+    var dataFull = this.full(tool.dataRepo);
+    return this.whoAmI().then(function () { return self.rosterOf(dataFull); }).then(function (roster) {
+      var repo = M.sharedRepo(roster || M.emptyRoster(), id);
+      if (!repo) return;
+      return self.revokeFrom(repo, [login], log).then(function (f) { failed = failed.concat(f); })
+        .then(function () {
+          return self.patchRoster(dataFull, { users: [login], shared: [] }, function (r) {
+            var u = r.users[login];
+            if (!M.isOutside(u) || (u.projects || []).indexOf(id) < 0) return false;
+            r.users[login] = M.stamp(Object.assign({}, u, { projects: u.projects.filter(function (x) { return x !== id; }) }), self.login);
+            return true;
+          }, [], 'Signoff: remove ' + login + ' from ' + name);
+        }).catch(function (err) { failed.push({ login: login, repo: dataFull, message: err.message, status: err.status }); });
+    }).then(function () { return { failed: failed }; });
+  };
+
   /* Take `login` off a PL project: GitHub access to the project's repo and the repos of everything it
      links, and the contractor's assignment in each roster. Resolves { failed: [...] }. */
   Sharer.prototype.revokeProject = function (doc, login, nameOf, log) {
     var self = this, items = this.items(doc, nameOf), failed = [];
+    return items.reduce(function (chain, it) {
+      return chain.then(function () {
+        return self.revokeOne(it.tool, it.id, it.name, login, log).then(function (r) { failed = failed.concat(r.failed); });
+      });
+    }, Promise.resolve()).then(function () { return { failed: failed }; });
+  };
+
+  /* A person's record in PL's own roster (signoff_pl_data/users.json), for what only PL keeps:
+     - scopes[projectId] = 'project': on that PL project with only the Parts ticked; no entry means the
+       whole system (the project and everything it links, now and later);
+     - company: the client's company, for grouping clients.
+     `fn(user)` returns the changed fields, or null for no change. Someone PL's roster doesn't know yet
+     gets a record (role from `role`, no projects), so a company can be kept for anyone. */
+  Sharer.prototype.patchPlUser = function (login, role, fn, message) {
+    var self = this, dataFull = this.full(this.pl.dataRepo);
     login = String(login).toLowerCase();
-    log = log || function () {};
     return this.whoAmI().then(function () {
-      return items.reduce(function (chain, it) {
-        return chain.then(function () {
-          var tool = self.toolDesc(it.tool), dataFull = self.full(tool.dataRepo);
-          return self.rosterOf(dataFull).then(function (roster) {
-            var repo = M.sharedRepo(roster || M.emptyRoster(), it.id);
-            if (!repo) return;
-            return self.revokeFrom(repo, [login], log).then(function (f) { failed = failed.concat(f); })
-              .then(function () {
-                return self.patchRoster(dataFull, { users: [login], shared: [] }, function (r) {
-                  var u = r.users[login];
-                  if (!M.isOutside(u) || (u.projects || []).indexOf(it.id) < 0) return false;
-                  r.users[login] = M.stamp(Object.assign({}, u, { projects: u.projects.filter(function (id) { return id !== it.id; }) }), self.login);
-                  return true;
-                }, [], 'Signoff: remove ' + login + ' from ' + it.name);
-              }).catch(function (err) { failed.push({ login: login, repo: dataFull, message: err.message, status: err.status }); });
-          });
-        });
-      }, Promise.resolve());
-    }).then(function () { return { failed: failed }; });
+      return self.patchRoster(dataFull, { users: [login], shared: [] }, function (r) {
+        var u = r.users[login] && !r.users[login].deleted ? r.users[login] : null;
+        if (u && u.role === 'fte') return false;
+        var base = u || { login: login, name: self.names[login] || login, role: role || self.roles[login] || 'contractor', projects: [], deleted: false };
+        var change = fn(base);
+        if (!change) return false;
+        var next = Object.assign({}, base, change);
+        Object.keys(next).forEach(function (k) { if (next[k] === undefined) delete next[k]; });
+        r.users[login] = M.stamp(next, self.login);
+        return true;
+      }, [], message);
+    });
+  };
+  Sharer.prototype.setScope = function (projectId, login, scope) {
+    return this.patchPlUser(login, '', function (u) {
+      var cur = (u.scopes && u.scopes[projectId]) || '';
+      if (cur === (scope || '')) return null;
+      var scopes = Object.assign({}, u.scopes || {});
+      if (scope) scopes[projectId] = scope; else delete scopes[projectId];
+      return { scopes: Object.keys(scopes).length ? scopes : undefined };
+    }, 'Signoff PL: ' + login + (scope ? ' on chosen Parts of ' : ' on the whole of ') + projectId);
+  };
+  Sharer.prototype.setCompany = function (login, company, role) {
+    company = String(company || '').trim();
+    return this.patchPlUser(login, role, function (u) {
+      if ((u.company || '') === company) return null;
+      return { company: company || undefined };
+    }, 'Signoff PL: company of ' + login);
   };
 
   // ── PL's sync across its repositories ──

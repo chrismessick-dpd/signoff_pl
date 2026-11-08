@@ -35,6 +35,7 @@ This repo is public: no client data, tokens or commit messages naming clients.
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
 | `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 4 since Loom harnesses, 2026-11-07). A tool with an empty `prefix` reads only its data repo (Loom's is `review-loom-` since sharing). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
 | `assets/share.js` | Sharing (`S.PLSharer`): the per-tool share routine (`shareOne`), `plan`, `shareProject`, `revokeProject`, and `syncAll`, PL's sync across the data repo and the shared repos. See *Sharing* below. |
+| `assets/access.js`, `assets/access-view.js`, `assets/access.css` | People & access: the model (`S.PLAccess`: people from every roster, modes, cells, `plan`, `run`, the demo's `simulate` and `demoRosters`, live `load`) and PL's tab in the suite's People sheet (`S.plAccessView`). See *People & access* below |
 | `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
 | `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
@@ -59,7 +60,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (148 tests as of 2026-11-07, after Loom harnesses; 138 as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (197 tests as of 2026-11-08, after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
@@ -224,6 +225,34 @@ the open questions):
   a Loom harness and models; rosters; invitations; idempotence; the contractor's sync, reader and
   edit; revoke; the roster proof). Loom: 19.
 - **Not tried live.** The first live share creates real repos; Chris should try a test product first.
+
+## People & access (2026-11-08, Chris)
+
+PL's own tab in the suite's People & access sheet (`signoff/assets/people.js` takes a host tab with a
+label, shown first and only in PL). Designed from lab sketches (branch `perm-sketches`, `lab/permissions/`);
+Chris kept two layouts, as sub-tabs: **Person first** and **Tree with people**.
+- **Scope (Chris).** This is PL's settings only. EE, ME and FW keep their own People pages as they are,
+  each managing its own people. PL's list is the whole company: everyone on any tool's roster (PL, EE,
+  ME, FW, Loom), and PL can set access in any of their repos. FTEs come from EE's roster and aren't
+  editable here.
+- **Model.** Per person per PL project: Whole system (on the PL project, every Part now and later; no
+  scope entry), PL + chosen Parts (PL roster `users[login].scopes[projectId] = 'project'`), or Parts only
+  (not on the PL project). A Part is held when that tool roster's `users[login].projects` has the design
+  id. Clients have a `company` in PL's roster (Person first groups clients by it). Purchased Parts aren't
+  listed (nothing to share). "Invited" is read from GitHub (each shared repo's pending invitations).
+- **Staged until Apply (Chris).** The footer says Staged (nothing has changed on GitHub yet), Applied
+  (done just now) or Live. A Whole-system person missing a Part linked since sharing shows as staged on
+  load ("Linked since the project was shared"). Apply lists every repo to create, invitation and roster
+  write, then runs `run()`: shares (`shareOne`, PL project first), removals (`revokeOne`), then scopes and
+  companies (`setScope`, `setCompany` through `patchPlUser`, which uses `patchRoster`'s proof). Each step
+  is safe to repeat. Apply is blocked while a project to share has unsynced edits. In `?demo` it's
+  simulated against made-up rosters (`accessDemo` in storage, reset with the demo).
+- **Removing (Chris).** Leaving a PL project asks: only the PL project (they keep their Parts), or the
+  project and its Parts. The Share sheet's Remove opens People & access with that question.
+- **share.js.** `shareOne` now keeps user fields it doesn't own (scopes, company); it used to rebuild the
+  record. `revokeProject` is `revokeOne` per item.
+- **Not tried live.** The first live Apply creates real repos and needs the owner's token; try a test
+  product first. Removing someone doesn't touch their records in other PL projects' scopes.
 
 ## Next
 

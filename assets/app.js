@@ -67,6 +67,7 @@
     index = demo.index; dirty = {}; ui.slug = demo.project.slug; ui.closed = {};
     save('projects', projects); save('index', index); save('dirty', dirty); save('demoVersion', DEMO_VERSION);
     save('reqOverlay', {}); save('reqSeen', {});   // the Requirements tab's demo writes belong to the old demo
+    save('accessDemo', null);                       // People & access: the demo's rosters start over too
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
@@ -210,7 +211,7 @@
     // A contractor has no data repo to put a new project in, and People & access is for FTEs.
     $('.side-head [data-act="new-project"]').hidden = !(DEMO || isFte());
     // People & access lives in Signoff EE, whose list decides who's an FTE across the suite.
-    $('#people-link').hidden = !isFte();
+    $('#people-link').hidden = !(isFte() || DEMO);
     if (DEMO) {
       document.querySelectorAll('#side-tools a.side-link').forEach(function (a) {
         var href = a.getAttribute('href');
@@ -2019,7 +2020,7 @@
         '<div class="field"><span class="field-label">Shared with</span>' + (onProject.length ? '<div>' + onProject.map(function (l) {
           var u = plan.people.filter(function (x) { return x.login === l; })[0];
           return '<span class="chip">' + esc(u && u.name ? u.name + ' (@' + l + ')' : '@' + l) + (u && u.role === 'client' ? ' · client' : '') + ' <button type="button" class="btn btn-plain" style="padding:0 4px;font-size:12px" data-revoke="' + esc(l) + '" title="Remove access">Remove</button></span>';
-        }).join(' ') + '</div><p class="note">Remove takes a person off every repository below: the project and each board, part, firmware target and harness it links. Someone who should keep one of them on its own is added to it again in that tool.</p>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
+        }).join(' ') + '</div><p class="note">Remove opens People &amp; access, which asks whether they keep their Parts or lose those too.</p>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
         '<div class="field"><span class="field-label">Add a person</span><div class="row2">' +
           '<div class="field"><label for="sh-name">Name</label><input class="input" id="sh-name" placeholder="First Last"></div>' +
           '<div class="field"><label for="sh-login">GitHub username</label><input class="input" id="sh-login" placeholder="username" autocomplete="off" list="sh-known"></div></div>' +
@@ -2041,14 +2042,12 @@
         if (rb) { w.querySelectorAll('#sh-role button').forEach(function (x) { x.classList.toggle('on', x === rb); }); return; }
         var rv = e.target.closest('[data-revoke]');
         if (rv) {
+          // People & access asks whether their Parts go too, and stages it until Apply (Chris, 2026-11-07).
           var who = rv.dataset.revoke;
-          var fromRepos = plan.items.filter(function (it) { return it.repo; }).map(function (it) { return it.repo.split('/')[1]; });
-          if (!confirm('Remove @' + who + ' from ' + p.meta.name + '?\n\nThis takes away their access to every repository the project uses:\n' + fromRepos.join('\n') + '\n\nTheir copies disappear at their next sync.')) return;
-          var ui2 = progressSheet('Removing ' + who);
-          sh.revokeProject(p, who, designName, ui2.log).then(function (res) {
-            res.failed.forEach(function (f) { ui2.log(f.login + ' on ' + f.repo + ': ' + f.message, 'err'); });
-            ui2.log(res.failed.length ? 'Finished with problems.' : 'Done. Syncing…', res.failed.length ? 'err' : 'ok');
-          }, function (err) { ui2.log('Stopped: ' + err.message, 'err'); }).then(function () { ui2.done(); sync(); });
+          closeSheet();
+          if (window.SignoffPeople && SignoffPeople.tools.some(function (t) { return t.id === 'signoff_pl'; })) {
+            accessView.reset(); SignoffPeople.open('signoff_pl'); accessView.removePrompt(p.id, who);
+          } else toast('Open People & access to remove @' + who);
           return;
         }
         var b = e.target.closest('[data-sheet]');
@@ -2075,6 +2074,41 @@
       if (!document.body.contains(w)) return;
       w.querySelector('.sheet-body').innerHTML = '<p class="note">Couldn’t read the repositories: ' + esc(err.message) + '</p>';
     });
+  }
+
+  // ── People & access: PL's tab in the suite's People sheet (access.js, access-view.js) ──
+  var accessView = S.plAccessView({
+    demo: DEMO,
+    load: function () {
+      if (DEMO) {
+        var kept = load('accessDemo', null);
+        return Promise.resolve(kept && kept.rosters ? Object.assign({ errors: [] }, kept) : Object.assign({ errors: [] }, S.plAccess.demoRosters(settings.owner)));
+      }
+      if (!isFte() || !getToken()) return Promise.reject(new Error('People & access is for FTEs: sync with a token that opens ' + settings.owner + '/' + settings.dataRepo));
+      return S.plAccess.load(sharer());
+    },
+    docs: function () { return Object.keys(projects).map(function (k) { return projects[k]; }); },
+    get opts() { return { tools: C.tools, pl: { dataRepo: settings.dataRepo, prefix: C.repos.prefix || 'review-pl-' }, owner: settings.owner, nameOf: designName }; },
+    apply: function (acc, ops, log) {
+      if (DEMO) {
+        var sim = acc.simulate(ops);
+        save('accessDemo', { rosters: sim.rosters, invites: sim.invites });
+        ops.forEach(function (o) { log((o.k === 'share' ? 'Shared ' + o.name + ' with ' + o.logins.join(', ') : o.k === 'remove' ? 'Removed ' + o.login + ' from ' + o.name : o.k === 'scope' ? 'Scope for ' + o.login + ' on ' + o.name : 'Company for ' + o.login) + ' (demo)', 'ok'); });
+        return Promise.resolve({ failed: [] });
+      }
+      return acc.run(sharer(), ops, log).then(function (res) { sync(); return res; });
+    },
+    // Apply moves a project into its shared repo, so it starts from what's on GitHub, as Share does.
+    blocked: function (ops) {
+      if (DEMO) return '';
+      if (!getToken() || !isFte()) return 'People & access needs an FTE’s token.';
+      var unsynced = ops.filter(function (o) { return o.k === 'share' && o.tool === 'pl' && dirty[o.id]; });
+      return unsynced.length ? 'Sync first, so the shared copy starts from what’s on GitHub.' : '';
+    },
+    toast: function (t) { toast(t); }
+  });
+  if (window.SignoffPeople && SignoffPeople.register) {
+    SignoffPeople.register('signoff_pl', { label: 'Signoff PL', sub: 'Projects', draw: function (el) { accessView.draw(el); } });
   }
 
   // ── Sync ─────────────────────────────────────────────────

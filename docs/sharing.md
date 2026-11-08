@@ -120,10 +120,13 @@ as every tool does.
    its own when it doesn't use another tool's data. PL never moves another tool's data into a PL repo:
    an EE board moves into EE's `review-ee-…`, a harness into Loom's `review-loom-…`.
 2. **Sharing a PL project shares everything** it links. No per-Part access for now.
+   *Superseded 2026-11-08:* PL's People & access tab gives per-person, per-Part access (Whole system,
+   PL + chosen Parts, or Parts only); see `CLAUDE.md`, *People & access*.
    - *Later, maybe:* when a project is shared, a toggle for global access or Part/board-scoped access to
      the project tree, and a grid in PL of contractor vs. Part/board with a check per cell, so access to
      the components can be changed from PL. That needs a PL page that shows Parts and access together.
-3. **Remove takes a person off everything:** the project's repo and every linked board, part, firmware
+3. *Superseded 2026-11-08: Remove now asks whether to take the PL project only or the project and its
+   Parts (People & access).* **Remove takes a person off everything:** the project's repo and every linked board, part, firmware
    target and harness, clearing their assignment in each tool's roster. Someone who needs one board on its
    own is added to it again in EE.
 4. **One repo per shared thing**, as built. "Client repos" meant private repos made when sharing, not one
