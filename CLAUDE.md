@@ -183,6 +183,7 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
 - **Getting into a project.** A harness names its client project in Loom, so it waits in that PL
   project's tray like an EE board; Add all puts harnesses under a *Harnesses* assembly (`GROUPS`). The
   PL node (`source: 'loom'`, `ref: { tool: 'loom', id }`) is the link of record; Loom only reads PL.
+  Chris (2026-11-07): keep the tray, so adding a harness is deliberate; don't auto-add harnesses.
 - **No checks.** `P.isDrawing(source)`: a harness Part is counted as `harnesses` in the roll-up and stays
   out of progress, designs, issues and stages; the BOM shows no progress for it. Tiles, the tray, the
   Designs panel, List and the picker show "N wires · M ends" (`designStat`); the inspector shows what
@@ -191,7 +192,8 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
 - **Name and number go both ways** without either tool writing the other's repo: the Part sheet stamps
   `node.identAt` when Name or Number change (or copies the harness's stamp when they match it), and
   after reading designs `P.adoptHarnesses` brings over a harness whose `summary.identAt` is newer,
-  marking the project dirty so the next sync pushes it. Loom does the reverse at its sync.
+  marking the project dirty so the next sync pushes it. Loom does the reverse at its sync. Chris
+  (2026-11-07): newest-wins after each tool syncs is fine for now.
 - **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.
