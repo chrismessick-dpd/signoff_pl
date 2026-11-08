@@ -2002,7 +2002,7 @@
         '<div class="field"><span class="field-label">Shared with</span>' + (onProject.length ? '<div>' + onProject.map(function (l) {
           var u = plan.people.filter(function (x) { return x.login === l; })[0];
           return '<span class="chip">' + esc(u && u.name ? u.name + ' (@' + l + ')' : '@' + l) + ' <button type="button" class="btn btn-plain" style="padding:0 4px;font-size:12px" data-revoke="' + esc(l) + '" title="Remove access">Remove</button></span>';
-        }).join(' ') + '</div>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
+        }).join(' ') + '</div><p class="note">Remove takes a person off every repository below: the project and each board, part, firmware target and harness it links. Someone who should keep one of them on its own is added to it again in that tool.</p>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
         '<div class="field"><span class="field-label">Add a person</span><div class="row2">' +
           '<div class="field"><label for="sh-name">Name</label><input class="input" id="sh-name" placeholder="First Last"></div>' +
           '<div class="field"><label for="sh-login">GitHub username</label><input class="input" id="sh-login" placeholder="username" autocomplete="off" list="sh-known"></div></div>' +
@@ -2018,7 +2018,14 @@
         var rv = e.target.closest('[data-revoke]');
         if (rv) {
           var who = rv.dataset.revoke;
-          if (!confirm('Remove @' + who + ' from ' + p.meta.name + ' and everything it links? Their copies disappear at their next sync.')) return;
+          var fromRepos = plan.items.filter(function (it) { return it.repo; }).map(function (it) { return it.repo.split('/')[1]; });
+          if (!confirm('Remove @' + who + ' from ' + p.meta.name + '?
+
+This takes away their access to every repository the project uses:
+' + fromRepos.join('
+') + '
+
+Their copies disappear at their next sync.')) return;
           var ui2 = progressSheet('Removing ' + who);
           sh.revokeProject(p, who, designName, ui2.log).then(function (res) {
             res.failed.forEach(function (f) { ui2.log(f.login + ' on ' + f.repo + ': ' + f.message, 'err'); });
