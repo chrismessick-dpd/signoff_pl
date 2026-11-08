@@ -75,8 +75,20 @@ Chris asked for PL to be visual and easy to build, "Apple, but technical". Map s
 layout; Gallery and Exploded show stored pictures and models only, never made-up ones (Exploded
 names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE or ME (Chris, 2026-11-01).
 Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
-next time each is sent from Fabcheck. ME parts have none until a mechanical checker exists (see
-`../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout.
+next time each is sent from Fabcheck. Real ME parts have none until a mechanical checker exists (see
+`../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout; until then a
+STEP attached in PL gives a Part its pictures.
+
+**Demo ME models (2026-11-08, Chris: the mechanical parts had no models).** The demo's Front cover,
+Back cover (both Parts link `me:mdemo5`, the Enclosure review, so it counts once) and Wall Bracket carry
+models as an attached STEP stores them: PL's own meshes and renders of Partcheck's made-up demo STEPs,
+in `assets/demo-models/<tree key>.plm.gz` and `<key>-<view>.webp`, listed in `config.demo.models` by
+blob sha; `demo.js` gives the Parts their `model` and `app.js` `fileBlob` serves those shas from the
+page (`S.plDemo.file`). `config.demo.previews` also has the ME designs' pictures for the tray and picker
+(`demo-previews/mdemo5-*`, the closed enclosure). Every 3D Part has a `place` in the demo tree, where it
+sits assembled (+z faces the room): front cover 0, display board 5, main PCBA −5, back cover −10,
+bracket −16 mm, so Exploded spreads them front to wall in that order. To remake the files, run
+`model3d.readStep`/`simplify`/`encode`/`png` on the Partcheck STEPs in the page, then `gitBlobShaBytes`.
 
 ## 3D models and BOM (2026-11-01)
 

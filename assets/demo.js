@@ -7,6 +7,13 @@
   var P = S.pl, M = S.model;
   var D = (S.config || {}).demo || {};
   var SNAP = window.SIGNOFF_PL_DEMO_DESIGNS || { designs: {} };
+  // The files those models name, by blob sha: assets/demo-models/<key>.plm.gz and <key>-<view>.webp.
+  var demoFiles = {};
+  Object.keys(D.models || {}).forEach(function (k) {
+    var m = D.models[k];
+    demoFiles[m.mesh[0]] = 'assets/demo-models/' + k + '.plm.gz';
+    m.views.forEach(function (v) { demoFiles[v[1]] = 'assets/demo-models/' + k + '-' + v[0] + '.webp'; });
+  });
 
   // The snapshot's edit times, moved forward by its age, so "edited 1 d ago" stays true.
   function shifted(iso) {
@@ -28,7 +35,10 @@
         d.summary.revisions ? { revisions: d.summary.revisions.map(function (r) { return r.sentAt ? Object.assign({}, r, { sentAt: shifted(r.sentAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {}) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
-      // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo).
+      // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo). The demo
+      // ME parts' are PL's own renders (model3d.png, 640 × 480) of Partcheck's made-up demo STEPs
+      // (partcheck/demo; the enclosure is the front cover with the back cover 10 mm behind it), as a
+      // Partcheck send to Signoff ME would one day store them. Nothing writes ME pictures yet.
       var pv = (D.previews || {})[key];
       var mm = (D.boardsMm || {})[key];
       if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], board: mm ? P.cleanBoard(mm) : null, images: pv.map(function (x) {
@@ -43,8 +53,23 @@
         qty: r.qty || 1, supplier: r.supplier || '', mpn: r.mpn || '', massG: r.massG == null ? null : r.massG,
         envelopeMm: r.envelopeMm || '', notes: r.notes || ''
       }, user);
+      // Where each Part sits assembled (place, mm; +z faces the room): front cover, display board,
+      // main PCBA, back cover, wall bracket. Exploded spreads them apart in that order.
+      if (r.place) n.place = P.cleanPlace(r.place);
       ids[r.key] = n.id;
       project.nodes[n.id] = n;
+    });
+    // The demo ME Parts' models, as an attached STEP stores them (app.js modelRecord): a mesh and four
+    // views, named by blob sha and served from assets/demo-models (demoFiles, read by app.js fileBlob).
+    // They are PL's own renders of Partcheck's made-up demo STEPs (partcheck/demo). The enclosure's
+    // review is two Parts, its front and back covers, so Exploded can put the boards between them.
+    Object.keys(D.models || {}).forEach(function (k) {
+      var m = D.models[k], n = project.nodes[ids[k]];
+      if (!n) return;
+      n.model = { file: m.file, size: 0, srcTris: m.tris, tris: m.tris, bboxMm: m.bboxMm, dir: 'models/' + project.id + '/' + n.id + '/',
+        at: M.now(), by: user, step: null, mesh: { sha: m.mesh[0], size: m.mesh[1] },
+        views: m.views.map(function (v) { return { key: v[0], sha: v[1], w: 640, h: 480, size: v[2] }; }) };
+      if (!n.envelopeMm) n.envelopeMm = m.bboxMm.join(' × ');
     });
     // Requirements: System ones in the project (and any firmware ones held in PL), and the
     // EE/ME/FW demo requirements given the parent links PL would have written into those reviews.
@@ -74,5 +99,7 @@
     return { project: project, index: index };
   }
 
-  S.plDemo = { build: build, snapshot: SNAP };
+  // A demo file by blob sha (the ME parts' models and pictures), or null.
+  function file(sha) { return demoFiles[sha] || null; }
+  S.plDemo = { build: build, snapshot: SNAP, file: file };
 })(window.Signoff = window.Signoff || {});

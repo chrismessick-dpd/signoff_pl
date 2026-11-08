@@ -60,7 +60,8 @@
 
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
   // product in config.js), so a browser that saw an older demo doesn't keep it.
-  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {}) + JSON.stringify((C.demo || {}).requirements || []);
+  var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {}) + JSON.stringify((C.demo || {}).requirements || []) +
+    JSON.stringify((C.demo || {}).models || {}) + JSON.stringify((C.demo || {}).tree || []);
   if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
@@ -487,6 +488,9 @@
   }
   // A stored file by blob sha: the cache, then the files waiting to upload, then GitHub.
   function fileBlob(repo, ref) {
+    // The demo's own stored files (demo.js: the ME parts' models) come with the page.
+    var demoFile = DEMO && S.plDemo && S.plDemo.file(ref.sha);
+    if (demoFile) return fetch(demoFile).then(function (r) { if (!r.ok) throw new Error('not found'); return r.blob(); });
     return pvGet(ref.sha).then(function (blob) {
       return blob || upGet(ref.sha).then(function (u) { return u ? u.blob : null; });
     }).then(function (blob) {

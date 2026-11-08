@@ -349,7 +349,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq([bi.totals.massG, bf.totals.massG], [dr[''].massG, dr[''].massG], 'BOM mass totals match the roll-up (211.6 g), indented and consolidated');
   eq(bi.rows.slice(0, 3).map(function (r) { return r.item; }), ['1', '1.1', '1.1.1'], 'indented BOM numbers items by the structure');
   ok(bi.rows.length === P.liveNodes(demo.project).length && bf.rows.every(function (r) { return r.kind === 'part'; }), 'indented lists every node; consolidated lists Parts only');
-  eq(bi.totals.qty, 9, 'the demo BOM has 9 pieces (two screws)');
+  eq(bi.totals.qty, 10, 'the demo BOM has 10 pieces (two screws; the enclosure is its two covers)');
   var bp = JSON.parse(JSON.stringify(demo.project)), main = P.liveNodes(bp).filter(function (n) { return n.ref && n.ref.id === 'pdemo7'; })[0];
   node(bp, { parent: main.parent, name: 'Main PCBA (spare)', source: 'ee', ref: { tool: 'ee', id: 'pdemo7' }, qty: 2, massG: 48 });
   node(bp, { parent: main.parent, name: 'Cable A', source: 'purchased', massG: 1 });
