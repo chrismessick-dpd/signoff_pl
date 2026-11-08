@@ -85,8 +85,9 @@
       html += '<div class="card rq-hero">' + ctx.ring(pct, 84, 8, pct + '%', 'met') + '<div class="rq-hero-body">' +
         '<div class="rq-sub">' + ctx.plural(live.length, 'System requirement') + ' · ' + fromReviews + ' from ' + ctx.plural(designs, 'review') + (kidsCount ? ' · ' + kidsCount + ' traced to System' : '') + '</div>' +
         '<div class="rq-counters">' + ['fail', 'risk', 'gap', 'open', 'pass'].map(function (k) {
-          return '<button class="rq-counter' + (f.state === k ? ' on' : '') + '" data-rq="state" data-v="' + k + '"><i style="background:' + COLORS[k] + '"></i><b>' + tot.counts[k] + '</b> ' + LABEL[k].toLowerCase() + '</button>';
-        }).join('') + '</div>' + strip(p, t, r, f) + '</div></div>';
+          var on = stateOk(f, k);
+          return '<button class="rq-counter' + (on ? '' : ' off') + '" aria-pressed="' + on + '" data-rq="state" data-v="' + k + '" title="' + (on ? 'Hide ' : 'Show ') + LABEL[k].toLowerCase() + ' requirements' + '"><i style="background:' + COLORS[k] + '"></i><b>' + tot.counts[k] + '</b> ' + LABEL[k].toLowerCase() + '</button>';
+        }).join('') + (hidden(f).length ? '<button class="rq-counter-clear" data-rq="state" data-v="">Show all</button>' : '') + '</div>' + strip(p, t, r, f) + '</div></div>';
 
       html += '<div class="filters rq-filters"><div class="seg">' + [['', 'All'], ['sys', 'System']].concat(r.sections.map(function (sec) { return [sec.tool, WORD[sec.tool] || sec.tool]; })).map(function (d) {
         return '<button class="' + ((f.disc || '') === d[0] ? 'on' : '') + '" data-rq="disc" data-v="' + d[0] + '">' + d[1] + '</button>';
@@ -115,16 +116,23 @@
     }
 
     function textMatch(q, s) { return !q || String(s).toLowerCase().indexOf(q.toLowerCase()) >= 0; }
+    // The state counters filter like Fabcheck's severity chips: each is on until clicked off, and
+    // only rows in a state that's on show. A System row also shows, dimmed, for context, when one of
+    // its children or gaps does. Deprecated has no counter: it shows only when asked for.
+    function hidden(f) { return f.off || []; }
+    function stateOk(f, st) { return hidden(f).indexOf(st) < 0; }
+    function hasGap(s, f) { return Object.keys(s.cells).some(function (nid) { return s.cells[nid] === 'gap' && (!f.part || f.part === nid); }); }
     function sysShown(s, f) {
-      if (f.state && s.state !== f.state) return false;
+      if (!stateOk(f, s.state) && !s.kids.concat(s.unallocatedKids).some(function (it) { return kidShown(it, f); }) &&
+        !(stateOk(f, 'gap') && hasGap(s, f))) return false;
       if (f.part && !s.cells[f.part] && !s.kids.some(function (it) { return it.nodes.indexOf(f.part) >= 0; })) return false;
       return textMatch(ui.rqQ, [s.rec.ref, s.rec.text, s.rec.category, s.rec.source].concat(s.kids.map(function (it) { return it.req.ref + ' ' + it.req.text; })).join(' '));
     }
-    function kidShown(it, f) { return !f.part || it.nodes.indexOf(f.part) >= 0; }
+    function kidShown(it, f) { return (!f.part || it.nodes.indexOf(f.part) >= 0) && stateOk(f, it.req.state); }
     // A row in a review's section: deprecated ones only when asked for, as in EE.
     function rowShown(it, f) {
       var q = it.req;
-      if (f.state ? q.state !== f.state : q.state === 'deprecated' && !ui.rqDep) return false;
+      if (!stateOk(f, q.state) || q.state === 'deprecated' && !ui.rqDep) return false;
       return textMatch(ui.rqQ, q.ref + ' ' + q.text + ' ' + q.category);
     }
 
@@ -142,15 +150,15 @@
     // The list: System (this project's own), then a section per review tool with a folding row per
     // design. A design's requirements show whether or not they trace up; traced ones name their parent.
     function list(p, t, r, f) {
-      var sel = ui.rqSel || '', open = ui.rqOpen || {}, html = '';
+      var sel = ui.rqSel || '', open = ui.rqOpen || {}, html = '', filtering = hidden(f).length > 0;
       if (!f.disc || f.disc === 'sys') {
-        var sysOpen = open['sec:sys'] !== false, sysRows = r.sys.filter(function (s) { return sysShown(s, f); });
-        var held = r.untraced.filter(function (it) { return it.home.tool === 'pl' && kidShown(it, f) && !f.state && textMatch(ui.rqQ, it.req.ref + ' ' + it.req.text); });
+        var sysOpen = filtering || open['sec:sys'] !== false, sysRows = r.sys.filter(function (s) { return sysShown(s, f); });
+        var held = r.untraced.filter(function (it) { return it.home.tool === 'pl' && kidShown(it, f) && textMatch(ui.rqQ, it.req.ref + ' ' + it.req.text); });
         html += secHead('sec:sys', sysOpen, 'System', ctx.plural(r.sys.filter(function (s) { return s.state !== 'deprecated'; }).length, 'requirement') + ' · this project');
         if (sysOpen) {
           html += sysList(p, t, r, f, sysRows, sel, open);
           if (!r.sys.length) html += '<div class="rq-row rq-hint"><span></span><span></span><span></span><span class="rq-text"><span class="rq-t muted">No System requirements yet. Add the product’s own here; the reviews’ requirements below can trace up to them.</span></span><button class="btn btn-sm" data-rq="add">Add</button></div>';
-          else if (!sysRows.length) html += '<div class="empty"><p>No System requirement matches.</p></div>';
+          else if (!sysRows.length && !held.length) html += '<div class="empty"><p>No System requirement matches.</p></div>';
           html += held.map(function (it) { return kidRow(p, t, it, sel); }).join('');
         }
       }
@@ -159,13 +167,13 @@
         var tool = P.toolById(sec.tool), name = tool ? tool.name : sec.tool, unit = sec.tool === 'ee' ? 'board' : sec.tool === 'fw' ? 'firmware review' : 'part';
         var designs = sec.designs.filter(function (d) { return !f.part || d.nodes.indexOf(f.part) >= 0; }).map(function (d) {
           return { d: d, rows: d.items.filter(function (it) { return rowShown(it, f); }) };
-        }).filter(function (x) { return x.rows.length || !(f.state || ui.rqQ); });
+        }).filter(function (x) { return x.rows.length || !(filtering || ui.rqQ); });
         if (!designs.length) return;
-        var secOpen = open['sec:' + sec.tool] !== false;
+        var secOpen = filtering || open['sec:' + sec.tool] !== false;
         html += secHead('sec:' + sec.tool, secOpen, esc(name), ctx.plural(sec.designs.length, unit) + ' · ' + ctx.plural(sec.counts.live, 'requirement') + stateDots(sec.counts));
         if (!secOpen) return;
         designs.forEach(function (x) {
-          var d = x.d, key = 'd:' + d.key, dOpen = f.state || ui.rqQ ? open[key] !== false : open[key] === true;
+          var d = x.d, key = 'd:' + d.key, dOpen = filtering ? true : ui.rqQ ? open[key] !== false : open[key] === true;
           var parts = d.nodes.map(function (nid) { return nodeName(t, nid); }).filter(function (n, i, a) { return a.indexOf(n) === i && n.toLowerCase() !== String(d.design.name).toLowerCase(); });
           html += '<div class="rq-row rq-design" data-rq="toggle" data-id="' + esc(key) + '"><button class="rq-caret' + (dOpen ? ' open' : '') + '" data-rq="toggle" data-id="' + esc(key) + '" aria-label="Show or hide its requirements">' + ctx.ICON.chev + '</button>' +
             segRing(d.items.filter(function (it) { return it.req.state !== 'deprecated'; }).map(function (it) { return it.req.state; }), 24) +
@@ -179,8 +187,8 @@
     }
     function sysList(p, t, r, f, sysRows, sel, open) {
       var rows = sysRows.map(function (s) {
-        var q = s.rec, expanded = open[q.id] !== false;
-        var h = '<div class="rq-row' + (sel === q.id ? ' sel' : '') + (s.state === 'deprecated' ? ' dep' : '') + '" data-rq="sel" data-id="' + esc(q.id) + '" draggable="true" data-rq-drag="' + esc(q.id) + '">' +
+        var q = s.rec, expanded = hidden(f).length > 0 || open[q.id] !== false;
+        var h = '<div class="rq-row' + (sel === q.id ? ' sel' : '') + (stateOk(f, s.state) ? '' : ' rq-ctx') + (s.state === 'deprecated' ? ' dep' : '') + '" data-rq="sel" data-id="' + esc(q.id) + '" draggable="true" data-rq-drag="' + esc(q.id) + '">' +
           '<button class="rq-caret' + (expanded ? ' open' : '') + '" data-rq="toggle" data-id="' + esc(q.id) + '" aria-label="Show or hide its requirements">' + ctx.ICON.chev + '</button>' +
           segRing(sysStates(s), 28) + '<span class="rq-ref">' + esc(q.ref) + '</span>' +
           '<span class="rq-text"><span class="rq-t">' + esc(q.text || 'No text yet') + '</span><span class="rq-meta">' + esc([WORD[q.kind], q.category, WORD[q.method], q.source].filter(Boolean).join(' · ')) +
@@ -189,7 +197,7 @@
         (q.parts || []).forEach(function (nid) {
           if (!t.nodes[nid] || (f.part && f.part !== nid)) return;
           var kids = s.kids.filter(function (it) { return it.nodes.indexOf(nid) >= 0 && kidShown(it, f); });
-          if (!kids.length && s.cells[nid] === 'gap' && (!f.disc || f.disc === 'sys' || t.nodes[nid].source === f.disc)) {
+          if (!kids.length && s.cells[nid] === 'gap' && stateOk(f, 'gap') && (!f.disc || f.disc === 'sys' || t.nodes[nid].source === f.disc)) {
             h += '<div class="rq-row kid gap"><span></span>' + ctx.srcChip(t.nodes[nid].source) + '<span class="rq-ref">—</span><span class="rq-text"><span class="rq-t muted">' + esc(t.nodes[nid].name) +
               ': allocated, no requirement for it yet</span></span><button class="btn btn-sm" data-rq="derive" data-id="' + esc(q.id) + '" data-part="' + esc(nid) + '">Derive</button></div>';
           }
@@ -541,14 +549,18 @@
       var r, it;
       switch (a) {
         case 'layout': ui.rqLayout = el.dataset.v; ctx.saveUi(); ctx.renderPage(); break;
-        case 'state': filter('state', el.dataset.v); break;
+        case 'state': {
+          var fs = Object.assign({}, ui.rqFilter || {}), off = hidden(fs).slice(), v = el.dataset.v, at = off.indexOf(v);
+          if (!v) off = []; else if (at >= 0) off.splice(at, 1); else off.push(v);
+          delete fs.state; fs.off = off; ui.rqFilter = fs; ctx.saveUi(); ctx.renderPage(); break;
+        }
         case 'disc': ui.rqFilter = Object.assign({}, ui.rqFilter || {}, { disc: el.dataset.v }); ctx.saveUi(); ctx.renderPage(); break;
         case 'part': filter('part', el.dataset.v); break;
         case 'cell': ui.rqFilter = Object.assign({}, ui.rqFilter || {}, { part: el.dataset.part }); ui.rqSel = id; ui.rqOpen = Object.assign({}, ui.rqOpen); ui.rqOpen[id] = true; ctx.saveUi(); ctx.renderPage(); break;
         case 'toggle': {
           // Sections and System rows start open; a review's design starts folded, except while filtering.
           e.stopPropagation();
-          var f0 = ui.rqFilter || {}, folded = id.indexOf('d:') === 0 && !(f0.state || ui.rqQ);
+          var f0 = ui.rqFilter || {}, folded = id.indexOf('d:') === 0 && !(hidden(f0).length || ui.rqQ);
           var wasOpen = folded ? (ui.rqOpen || {})[id] === true : (ui.rqOpen || {})[id] !== false;
           ui.rqOpen = Object.assign({}, ui.rqOpen); ui.rqOpen[id] = !wasOpen; ctx.saveUi(); ctx.renderPage(); break;
         }

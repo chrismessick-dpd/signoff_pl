@@ -159,6 +159,11 @@ The design is `docs/requirements-tab.md`, with Chris's decisions at the top. In 
   untraced is normal and is no longer in Needs you. Deprecated rows hide unless shown
   (`ui.rqDep`). Export CSV is the full list in List layout (`listCsv`) and the compliance matrix
   in Matrix layout (`csv`).
+- **State filters (Chris, 2026-11-08).** The header's failing / at risk / gap / open / met counters
+  are on/off toggles like Fabcheck's severity chips: all on, a click hides that state everywhere
+  (System rows, their children and gap rows, PL-held rows and every review section; `ui.rqFilter.off`).
+  A System row whose own state is off stays, dimmed (`rq-ctx`), while a child or gap of it shows.
+  Show all turns them back on. Deprecated has no counter and shows only when asked for.
 - **Writing.** It goes through the engine's `GitHubStore.patchRecords`, after a confirm:
   - only `reqs` records change;
   - the file must round-trip;
