@@ -414,6 +414,14 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq(shared.failedInvites, [], 'no invitation failed');
   var again = await sharerFor('own').shareProject(sp, ['cat'], nameOf);
   ok(again.results.every(function (r) { return !r.error && !r.created; }) && !shub.repos['own/review-pl-water-monitor-2'], 'sharing again changes nothing and makes no second repo');
+  // A client: recorded as a client in every roster, and a later share doesn't turn them into a contractor.
+  var shc = sharerFor('own'); shc.roles.eve = 'client';
+  await shc.shareProject(sp, ['eve'], nameOf);
+  var rolesOf = function () { return ['ee_design_review_data', 'signoff_pl_data', 'loom_data', 'me_design_review_data'].map(function (d) { return JSON.parse(shub.files('own/' + d)['users.json']).users.eve.role; }); };
+  eq(rolesOf(), ['client', 'client', 'client', 'client'], 'someone shared as a client is a client in each tool’s roster');
+  await sharerFor('own').shareProject(sp, ['eve'], nameOf);
+  eq(rolesOf(), ['client', 'client', 'client', 'client'], '…and stays one when the project is shared again without a role');
+  eq(again.results.length, 4, 'the project and its three designs');
 
   // The owner syncs: the project now lives in its repo and isn't pushed back to the data repo.
   var r1 = await sharerFor('own').syncAll(r0.state, { merge: P.merge });

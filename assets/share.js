@@ -36,6 +36,7 @@
     this.account = new S.GitHubAccount(opts.token, opts.fetch);
     this.rosters = {};                      // 'owner/repo' -> normalized roster, read once per operation
     this.names = {};                        // login -> display name for people added here
+    this.roles = {};                        // login -> 'client' | 'contractor' for people added here
   }
 
   Sharer.prototype.full = function (name) { return this.owner + '/' + name; };
@@ -221,10 +222,12 @@
         logins.forEach(function (l) {
           var u = r.users[l];
           if (u && !u.deleted && u.role === 'fte') return;   // an FTE is on everything already
+          // A client stays a client and a contractor a contractor; someone new gets the role chosen
+          // when they were added (self.roles), else contractor.
           var projects = (u && !u.deleted ? u.projects || [] : []).slice();
           if (projects.indexOf(id) >= 0 && u && !u.deleted) return;
           if (projects.indexOf(id) < 0) projects.push(id);
-          r.users[l] = M.stamp({ login: l, name: (u && !u.deleted && u.name) || self.names[l] || l, role: 'contractor', projects: projects, deleted: false }, self.login);
+          r.users[l] = M.stamp({ login: l, name: (u && !u.deleted && u.name) || self.names[l] || l, role: (u && !u.deleted && u.role) || self.roles[l] || 'contractor', projects: projects, deleted: false }, self.login);
           changed = true;
         });
         return changed;
@@ -299,7 +302,7 @@
       items.forEach(function (it) {
         var roster = self.rosters[self.full(self.toolDesc(it.tool).dataRepo)] || M.emptyRoster();
         it.repo = M.sharedRepo(roster, it.id);
-        it.people = M.liveUsers(roster).filter(function (u) { return u.role === 'contractor' && (u.projects || []).indexOf(it.id) >= 0; }).map(function (u) { return u.login; });
+        it.people = M.liveUsers(roster).filter(function (u) { return M.isOutside(u) && (u.projects || []).indexOf(it.id) >= 0; }).map(function (u) { return u.login; });
       });
       var ee = self.peopleRepo ? self.rosters[self.full(self.peopleRepo)] : null;
       var people = M.liveUsers(ee || M.emptyRoster());
@@ -347,7 +350,7 @@
               .then(function () {
                 return self.patchRoster(dataFull, { users: [login], shared: [] }, function (r) {
                   var u = r.users[login];
-                  if (!u || u.deleted || u.role !== 'contractor' || (u.projects || []).indexOf(it.id) < 0) return false;
+                  if (!M.isOutside(u) || (u.projects || []).indexOf(it.id) < 0) return false;
                   r.users[login] = M.stamp(Object.assign({}, u, { projects: u.projects.filter(function (id) { return id !== it.id; }) }), self.login);
                   return true;
                 }, [], 'Signoff: remove ' + login + ' from ' + it.name);

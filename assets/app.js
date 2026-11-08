@@ -2008,7 +2008,7 @@
     sh.plan(p, designName).then(function (plan) {
       if (!document.body.contains(w)) return;
       var onProject = plan.items[0].people;
-      var known = plan.people.filter(function (u) { return u.role === 'contractor' && onProject.indexOf(u.login) < 0; });
+      var known = plan.people.filter(function (u) { return M.isOutside(u) && onProject.indexOf(u.login) < 0; });   // clients and contractors
       function row(it) {
         var tool = it.tool === 'pl' ? { short: 'PL' } : P.toolById(it.tool) || { short: it.tool };
         return '<tr><td><span class="chip">' + esc(tool.short) + '</span> ' + esc(it.name) + '</td><td class="muted">' + (it.repo ? 'Shared as <b>' + esc(it.repo.split('/')[1]) + '</b>' : 'Gets its own private repository') + '</td></tr>';
@@ -2018,20 +2018,27 @@
         '<div class="sheet-body">' +
         '<div class="field"><span class="field-label">Shared with</span>' + (onProject.length ? '<div>' + onProject.map(function (l) {
           var u = plan.people.filter(function (x) { return x.login === l; })[0];
-          return '<span class="chip">' + esc(u && u.name ? u.name + ' (@' + l + ')' : '@' + l) + ' <button type="button" class="btn btn-plain" style="padding:0 4px;font-size:12px" data-revoke="' + esc(l) + '" title="Remove access">Remove</button></span>';
+          return '<span class="chip">' + esc(u && u.name ? u.name + ' (@' + l + ')' : '@' + l) + (u && u.role === 'client' ? ' · client' : '') + ' <button type="button" class="btn btn-plain" style="padding:0 4px;font-size:12px" data-revoke="' + esc(l) + '" title="Remove access">Remove</button></span>';
         }).join(' ') + '</div><p class="note">Remove takes a person off every repository below: the project and each board, part, firmware target and harness it links. Someone who should keep one of them on its own is added to it again in that tool.</p>' : '<p class="note">No one outside the team yet.</p>') + '</div>' +
         '<div class="field"><span class="field-label">Add a person</span><div class="row2">' +
           '<div class="field"><label for="sh-name">Name</label><input class="input" id="sh-name" placeholder="First Last"></div>' +
           '<div class="field"><label for="sh-login">GitHub username</label><input class="input" id="sh-login" placeholder="username" autocomplete="off" list="sh-known"></div></div>' +
+          '<div class="field"><span class="field-label">They are</span><div class="seg full" id="sh-role"><button type="button" data-role="client">A client</button><button type="button" class="on" data-role="contractor">A contractor</button></div></div>' +
           '<datalist id="sh-known">' + known.map(function (u) { return '<option value="' + esc(u.login) + '">' + esc(u.name || u.login) + '</option>'; }).join('') + '</datalist>' +
-          (known.length ? '<p class="note">Signoff EE already knows ' + known.map(function (u) { return '<button type="button" class="btn btn-plain" style="padding:0 6px;font-size:12px" data-pick="' + esc(u.login) + '" data-name="' + esc(u.name || '') + '">' + esc(u.name || u.login) + '</button>'; }).join(' ') + '.</p>' : '') +
+          (known.length ? '<p class="note">Signoff EE already knows ' + known.map(function (u) { return '<button type="button" class="btn btn-plain" style="padding:0 6px;font-size:12px" data-pick="' + esc(u.login) + '" data-name="' + esc(u.name || '') + '" data-prole="' + esc(u.role) + '">' + esc(u.name || u.login) + '</button>'; }).join(' ') + '.</p>' : '') +
           '<p class="note">They need a free GitHub account. FTEs (from Signoff EE’s People) are on every repository already.</p></div>' +
         '<div class="field"><span class="field-label">What goes with it</span><div class="card table-scroll" style="overflow:hidden"><table class="table"><tbody>' + plan.items.map(row).join('') + '</tbody></table></div>' +
         (plan.errors.length ? '<p class="note">' + esc(plan.errors.map(function (e) { return e.message; }).join(' ')) + ' Those repositories can’t be shared from here.</p>' : '') + '</div>' +
         '</div><div class="sheet-foot"><span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">Share</button></div></div>';
       w.addEventListener('click', function (e) {
         var pk = e.target.closest('[data-pick]');
-        if (pk) { w.querySelector('#sh-login').value = pk.dataset.pick; w.querySelector('#sh-name').value = pk.dataset.name; return; }
+        if (pk) {
+          w.querySelector('#sh-login').value = pk.dataset.pick; w.querySelector('#sh-name').value = pk.dataset.name;
+          w.querySelectorAll('#sh-role button').forEach(function (x) { x.classList.toggle('on', x.dataset.role === (pk.dataset.prole === 'client' ? 'client' : 'contractor')); });
+          return;
+        }
+        var rb = e.target.closest('#sh-role [data-role]');
+        if (rb) { w.querySelectorAll('#sh-role button').forEach(function (x) { x.classList.toggle('on', x === rb); }); return; }
         var rv = e.target.closest('[data-revoke]');
         if (rv) {
           var who = rv.dataset.revoke;
@@ -2053,6 +2060,7 @@
         if (!confirm('Share ' + p.meta.name + ' with @' + l + '?' + (fresh ? '\n\n' + plural(fresh, 'new private repository', 'new private repositories') + ' will be created.' : '') + '\n\nGitHub emails the invitation.')) return;
         var ui3 = progressSheet('Sharing ' + p.meta.name + ' with ' + l);
         sh.names[l] = w.querySelector('#sh-name').value.trim();
+        sh.roles[l] = (w.querySelector('#sh-role .on') || {}).dataset ? w.querySelector('#sh-role .on').dataset.role : 'contractor';   // someone already known keeps their role
         sh.shareProject(p, [l], designName, ui3.log).then(function (res) {
           res.failedInvites.forEach(function (f) {
             ui3.log(f.login + ' on ' + f.repo + ': ' + (f.status === 403 || f.status === 404 ? 'only the owner (or an org admin) can change access, and the token needs Administration: write' : f.message), 'err');
