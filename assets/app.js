@@ -1362,7 +1362,7 @@
     }).join('') + '</div>';
   }
 
-  // What a design does, from its description (summary.spec, Signoff FW's Description tab): the
+  // What a design does, from its description (summary.spec, Scribe in Signoff EE and FW): the
   // top-level gists, and how much of it isn't tied to requirements yet.
   function specHtml(sp) {
     if (!sp || !sp.gists || !sp.gists.length) return '';
