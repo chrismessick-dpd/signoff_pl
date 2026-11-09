@@ -241,6 +241,14 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   `CACHE_V` bump: previews are read on every refresh. `share.js` doesn't move `drawing/<id>/`; Loom's next
   sync draws it into the shared repo. Tests: 232. Tried in the demo with a hand-added harness entry.
 - **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
+- **Dark drawings (2026-11-09, Chris: light drawings glared on a dark page; not committed).** An image keyed
+  `<key>-dark` is `<key>`'s dark twin (Loom writes `diagram-dark`). `art()` puts both in (`.pv-light`,
+  `.pv-dark`) and `pl.css` shows the one for the theme, following the system setting live; the BOM sheet
+  and print keep the light one. `sides()` leaves twins out of the inspector's side buttons, and
+  `pictureOf` never picks one. Tried in the demo in both themes with a hand-added harness.
+- **Harness icon (2026-11-09, Chris; not committed).** Its connectors span all three wires (36 tall). They'd
+  been drawn 16 × 16: People & access's checkbox class was also `.pa-box`, and its `width` and `height`
+  resized the SVG rects. That rule is now `input.pa-box` (`access.css`).
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.
 

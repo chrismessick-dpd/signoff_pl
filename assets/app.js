@@ -470,8 +470,9 @@
       return '<svg viewBox="0 0 120 76" aria-hidden="true"><path class="pa-box" d="M38 26 L60 16 L82 26 L82 52 L60 62 L38 52 Z"/><path class="pa-edge" d="M38 26 L60 36 L82 26 M60 36 V62 M49 21 L71 31"/></svg>';
     }
     if (n.source === 'loom') {
-      return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-box" x="10" y="26" width="18" height="24" rx="3"/><rect class="pa-box" x="92" y="26" width="18" height="24" rx="3"/>' +
-        '<path class="pa-wire" d="M28 32 C52 32 68 44 92 44 M28 38 C52 38 68 38 92 38 M28 44 C52 44 68 32 92 32"/></svg>';
+      // Each connector spans every wire, with room above the top one and below the bottom one (Chris, 2026-11-09).
+      return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-box" x="10" y="20" width="18" height="36" rx="3"/><rect class="pa-box" x="92" y="20" width="18" height="36" rx="3"/>' +
+        '<path class="pa-wire" d="M28 29 C52 29 68 47 92 47 M28 38 C52 38 68 38 92 38 M28 47 C52 47 68 29 92 29"/></svg>';
     }
     if (n.source !== 'fw' && P.toolById(n.source)) return '<svg viewBox="0 0 120 76" aria-hidden="true"><rect class="pa-unknown" x="20" y="12" width="80" height="52" rx="8"/></svg>';
     return '<svg viewBox="0 0 120 76" aria-hidden="true"><text class="pa-fw" x="60" y="47" text-anchor="middle">{ }</text></svg>';
@@ -681,16 +682,32 @@
       try { if (db) db.close(); indexedDB.deleteDatabase('signoff-pl-pictures'); } catch (e) { /* storage blocked */ }
     });
   }
+  // Theme twins (Loom's harness drawings, 2026-11-09): an image keyed '<key>-dark' is <key> drawn for a
+  // dark page. It's never a side of its own: art() puts both in, and CSS shows the one for the theme
+  // (pl.css, .pv-light and .pv-dark), so it follows a theme change without a redraw.
+  function darkOf(pv, img) {
+    return (img && pv.images.filter(function (i) { return i.key === img.key + '-dark'; })[0]) || null;
+  }
+  function sides(pv) {
+    return pv.images.filter(function (i) { return !/-dark$/.test(i.key) || !pv.images.some(function (j) { return j.key + '-dark' === i.key; }); });
+  }
   function pictureOf(pv, key) {
-    return pv ? pv.images.filter(function (i) { return i.key === (key || pv.hero); })[0] || pv.images[0] : null;
+    if (!pv) return null;
+    var list = sides(pv);
+    return list.filter(function (i) { return i.key === (key || pv.hero); })[0] || list[0];
   }
   // The picture of a Part (or of a design in the picker), or its plain drawing.
   function art(n, big, entry, key) {
     var pv = previewFor(n, entry), img = pictureOf(pv, key);
     if (!img) return partArt(n, big);
-    var url = img.src || pvUrls[img.sha];
-    if (url) return '<img class="pv" alt="" src="' + esc(url) + '">';
-    return '<img class="pv" alt="" data-sha="' + esc(img.sha) + '" data-type="' + esc(img.type) + '" data-repo="' + esc(pv.repo) + '">' + partArt(n, big);
+    var dk = darkOf(pv, img);
+    function tag(i, cls) {
+      var url = i.src || pvUrls[i.sha];
+      return url ? '<img class="pv' + cls + '" alt="" src="' + esc(url) + '">'
+        : '<img class="pv' + cls + '" alt="" data-sha="' + esc(i.sha) + '" data-type="' + esc(i.type) + '" data-repo="' + esc(pv.repo) + '">';
+    }
+    var ready = (img.src || pvUrls[img.sha]) && (!dk || dk.src || pvUrls[dk.sha]);
+    return tag(img, dk ? ' pv-light' : '') + (dk ? tag(dk, ' pv-dark') : '') + (ready ? '' : partArt(n, big));
   }
   function loadPictures(root) {
     if (!allowed()) return;
@@ -1406,7 +1423,7 @@
     var pv = previewFor(n, st.entry), mdl = modelOf(n), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
     var turn = mdl && ui.pic === '3d';
     html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '" aria-label="3D view: drag to turn, scroll to zoom"></canvas>' : art(n, true, e, side)) +
-      (pv && (pv.images.length > 1 || mdl) ? '<div class="seg map-ins-flip">' + pv.images.map(function (i) {
+      (pv && (sides(pv).length > 1 || mdl) ? '<div class="seg map-ins-flip">' + sides(pv).map(function (i) {
         return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
       }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, scroll to zoom">3D</button>' : '') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
       '<p class="map-ins-sub">' + esc([e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';

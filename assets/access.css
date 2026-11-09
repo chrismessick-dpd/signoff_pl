@@ -111,7 +111,7 @@ button.pa-caret:hover { background: var(--bg-sunk); }
 .pa-tree li + li { border-top: 1px dashed var(--hair); }
 .pa-tree .pa-repo { max-width: 42%; }
 .pa-state { min-width: 98px; text-align: right; }
-.pa-box { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+input.pa-box { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
 .pa-mode button { font-size: 11px; padding: 3px 7px; }
 .pa-mode button.changed { box-shadow: 0 0 0 1.5px var(--accent) inset; }
 .pa-mode button.changed::after { content: " •"; color: var(--accent); }

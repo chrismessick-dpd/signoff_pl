@@ -445,3 +445,19 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 @media (max-width: 600px) {
   #f-mode button { white-space: normal; line-height: 1.25; text-align: center; padding: 6px; }
 }
+
+/* A picture with a dark twin (Loom's harness drawings): the one for the theme shows (app.js art). */
+img.pv.pv-dark { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) img.pv.pv-light { display: none !important; }
+  :root:not([data-theme="light"]) img.pv.pv-dark[src] { display: block !important; }
+}
+:root[data-theme="dark"] img.pv.pv-light { display: none !important; }
+:root[data-theme="dark"] img.pv.pv-dark[src] { display: block !important; }
+/* White paper (the BOM sheet) and print always take the light one; the extra classes outrank the theme rules. */
+:root .bom-paper img.pv.pv-light.pv-light[src] { display: block !important; }
+:root .bom-paper img.pv.pv-dark.pv-dark.pv-dark { display: none !important; }
+@media print {
+  :root img.pv.pv-light.pv-light.pv-light[src] { display: block !important; }
+  :root img.pv.pv-dark.pv-dark.pv-dark.pv-dark { display: none !important; }
+}
