@@ -62,7 +62,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (200 tests as of 2026-11-08, after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (213 tests as of 2026-11-08, after waiting Parts; 200 after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME, and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
@@ -217,6 +217,21 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   after reading designs `P.adoptHarnesses` brings over a harness whose `summary.identAt` is newer,
   marking the project dirty so the next sync pushes it. Loom does the reverse at its sync. Chris
   (2026-11-07): newest-wins after each tool syncs is fine for now.
+- **Parts waiting to be started (2026-11-08, Chris: some purchased harnesses turned out to need building;
+  new things wait in a tray in the tool they belong to, to be added on purpose, across the suite).** The
+  Part sheet has three modes: Existing design, **Not started yet** (pick the tool: EE, ME, FW, or Loom), and
+  Generic Part. Not started yet saves `source: <tool>`, `ref: null`, which `partStatus` calls `planned`
+  (it was `unlinked`): "Not started" on the tile, counted in `roll.planned`, never as needing attention.
+  Loom lists such Parts under *From Signoff PL* (`loom/assets/store.js` `waiting`); its Start makes the
+  harness with the Part's name and number and writes `summary.plPart: { project, node }`. PL keeps it
+  (`reader.js`, `CACHE_V` 5) and `P.claimPlanned` links the waiting Part to it after every designs read and
+  at load (`claimAll` in `app.js`): the earliest started (`plPart.at`, stamped at Start; Loom's copies drop `plPart`), only while the Part still waits for
+  that tool, never an archived design. Until then `P.claimedElsewhere` keeps it out of every tray. Switching
+  a purchased Part to another kind keeps its supplier, MPN, envelope, and model on the node, hidden
+  (`modelOf` and `mpnOf` in `app.js`, the BOM in `pl.js`), so switching back brings them back. EE, ME, and FW
+  list them too (the engine's From Signoff PL, `config.pl`; see `ee_design_review/CLAUDE.md`), and Start
+  there writes the same `summary.plPart`. Tests: 213. Not tried live. The `me-send` branch also set `CACHE_V` to 5:
+  make it 6 when merging.
 - **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.

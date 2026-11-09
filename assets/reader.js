@@ -60,6 +60,11 @@
     // A Loom harness (loom/assets/store.js, summarize): when its name and number were last edited
     // there, and what it holds.
     if (s.identAt != null) out.identAt = str(s.identAt).slice(0, 40);
+    // The waiting PL Part a design was started from (pl.js claimPlanned): { project, node }.
+    var pp = s.plPart;
+    if (pp && typeof pp === 'object' && typeof pp.project === 'string' && typeof pp.node === 'string' && pp.project && pp.node) {
+      out.plPart = { project: pp.project.slice(0, 80), node: pp.node.slice(0, 80), at: str(pp.at).slice(0, 40) };
+    }
     if (s.harness && typeof s.harness === 'object') {
       var hs = s.harness;
       out.harness = { ends: num(hs.ends), splices: num(hs.splices), wires: num(hs.wires), cables: num(hs.cables), sets: num(hs.sets),
@@ -167,8 +172,8 @@
   // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
-  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness).
-  var CACHE_V = 4;
+  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart).
+  var CACHE_V = 5;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

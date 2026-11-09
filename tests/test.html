@@ -103,8 +103,8 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var loose = node(p2, { parent: top.id, name: 'Unlinked board', source: 'ee' });
   var gone = node(p2, { parent: top.id, name: 'Moved away', source: 'ee', ref: { tool: 'ee', id: 'pGONE' } });
   var r3 = P.rollup(p2, index);
-  ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].unlinked === 1 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
-    'purchased, tool-less, unlinked, and missing Parts are counted but not in progress', JSON.stringify(r3['']));
+  ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].planned === 1 && r3[''].unlinked === 0 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
+    'purchased, tool-less, waiting (a board not started yet), and missing Parts are counted but not in progress', JSON.stringify(r3['']));
   eq(P.partStatus(p2.nodes[gone.id], index).state, 'notfound', 'a link to a project no repo holds is not found');
   eq(P.partStatus(p2.nodes[gone.id], { entries: {}, errors: [{ tool: 'ee' }] }).state, 'error', 'a link whose tool failed to read is an error, not missing');
   var noSum = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: null } }, errors: [] };
@@ -191,6 +191,39 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   hp.nodes[hn.id] = Object.assign({}, hp.nodes[hn.id], { name: 'Renamed in PL', identAt: '2026-11-07T13:00:00.000Z' });
   eq(P.adoptHarnesses(hp, hix, 'ann'), [], 'a newer PL edit is kept (Loom takes it at its next sync)');
   ok(hp.nodes[hn.id].name === 'Renamed in PL' && hp.nodes[hb.id].name === 'Main board', '…and review Parts are never renamed');
+
+  // ── Parts waiting to be started in their tool (pl.js claimPlanned; Loom's From Signoff PL list) ──
+  var wp = P.newProject({ name: 'Water Monitor' }, 'ann'), wtop = node(wp, { kind: 'assembly', name: 'Top' });
+  var wn = node(wp, { parent: wtop.id, name: 'Pump harness', number: 'H-300', source: 'loom', ref: null, supplier: 'Cable Co', mpn: 'CC-12' });
+  var wbuy = node(wp, { parent: wtop.id, name: 'Bought harness', source: 'purchased', ref: null });
+  eq(P.partStatus(wn, null).state, 'planned', 'a Part to be made in a tool, with no link yet, is waiting (planned)');
+  var wr = P.rollup(wp, { entries: {}, errors: [] })[''];
+  ok(wr.planned === 1 && wr.unlinked === 0 && wr.attention === 0, '…counted as planned, not as needing attention');
+  var wb = P.bom(wp, null).rows.filter(function (r) { return r.id === wn.id; })[0];
+  ok(wb.supplier === '' && wb.mpn === '', 'a non-purchased Part keeps its old supplier and MPN hidden from the BOM');
+  function startedFile(id, at, project, nodeId, archived) {
+    return { tool: 'loom', id: id, name: 'Pump harness', number: 'H-300', archived: !!archived,
+      summary: Signoff.plReader.cleanSummary({ tool: 'loom', name: 'Pump harness', number: 'H-300', at: '2026-11-08T12:00:00.000Z', identAt: '', archived: !!archived, plPart: { project: project, node: nodeId, at: at }, harness: { wires: 2, ends: 2 } }) };
+  }
+  ok(Signoff.plReader.cleanSummary({ plPart: { project: 'p', node: 7 } }).plPart === undefined && Signoff.plReader.cleanSummary({ plPart: { project: 'p', node: 'n' } }).plPart.node === 'n', 'the reader keeps a well-formed plPart only');
+  var wix = { entries: {
+    'loom:hb': startedFile('hb', '2026-11-08T10:05:00.000Z', wp.id, wn.id),
+    'loom:ha': startedFile('ha', '2026-11-08T10:00:00.000Z', wp.id, wn.id),
+    'loom:hx': startedFile('hx', '2026-11-08T09:00:00.000Z', wp.id, wn.id, true),
+    'loom:hp': startedFile('hp', '2026-11-08T09:00:00.000Z', wp.id, wbuy.id),
+    'loom:ho': startedFile('ho', '2026-11-08T09:00:00.000Z', 'pl-other', wn.id) }, errors: [] };
+  ok(P.claimedElsewhere(wix.entries['loom:ha'].summary, [wp]) && !P.claimedElsewhere(wix.entries['loom:hp'].summary, [wp]), 'a design started from a waiting Part stays out of trays; one naming a Part that no longer waits for it doesn’t');
+  eq(P.claimPlanned(wp, wix, 'ann'), [wn.id], 'the waiting Part links to the design started from it');
+  eq(wp.nodes[wn.id].ref, { tool: 'loom', id: 'ha' }, '…the earliest started of two, skipping an archived one');
+  ok(wp.nodes[wn.id].name === 'Pump harness' && wp.nodes[wn.id].mpn === 'CC-12' && wp.nodes[wn.id].updatedBy === 'ann', '…keeping its own fields');
+  ok(!wp.nodes[wbuy.id].ref && P.partStatus(wp.nodes[wbuy.id], wix).state === 'purchased', 'a Part switched back to Purchased isn’t linked');
+  eq(P.claimPlanned(wp, wix, 'ann'), [], '…and it links once');
+  ok(!P.claimedElsewhere(wix.entries['loom:hb'].summary, [wp]), 'the other design now waits in the tray like any other');
+  // A board started from a waiting Part in Signoff EE (which writes summary.tool as 'EE').
+  var wee = node(wp, { parent: wtop.id, name: 'Sensor board', source: 'ee', ref: null });
+  var eeSum = Signoff.plReader.cleanSummary({ tool: 'EE', name: 'Sensor board', plPart: { project: wp.id, node: wee.id, at: '2026-11-08T11:00:00.000Z' } });
+  ok(P.claimedElsewhere(eeSum, [wp], 'ee'), 'an EE board started from a waiting Part stays out of trays');
+  eq(P.claimPlanned(wp, { entries: { 'ee:pnew': { tool: 'ee', id: 'pnew', summary: eeSum } }, errors: [] }, 'ann'), [wee.id], '…and its Part links to it');
 
   // Board previews stored by Fabcheck next to a review (EE docs/fabcheck-link.md, "Board previews").
   var phub = new FakeHub();

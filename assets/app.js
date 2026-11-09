@@ -72,6 +72,22 @@
   }
 
   function persist() { save('projects', projects); save('dirty', dirty); }
+  // A Part waiting to be started in its tool (pl.js, state 'planned') links to the design started from
+  // it as soon as PL has read that design (claimPlanned). Returns how many Parts it linked.
+  function claimAll() {
+    var linked = 0;
+    if (!index || DEMO && !index.entries) return 0;
+    Object.keys(projects).forEach(function (k) {
+      var p = projects[k];
+      if (p.meta.deleted) return;
+      var got = P.claimPlanned(p, index, me()).length;
+      if (!got) return;
+      linked += got; p.meta.updatedAt = M.now(); p.meta.updatedBy = me(); dirty[p.id] = M.now();
+    });
+    if (linked) persist();
+    return linked;
+  }
+  claimAll();
   function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
     rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep }); }
   function me() { return settings.user || 'Anonymous'; }
@@ -147,6 +163,7 @@
     notfound: ['err', 'Not found', 'No repository your token reaches holds this design. It may have been deleted, or the token can’t open its repo.'],
     error: ['err', 'Couldn’t read', 'The tool’s repositories couldn’t be read at the last refresh.'],
     unlinked: ['dim', 'Not linked', 'Link this Part to its design review.'],
+    planned: ['dim', 'Not started', 'Waiting in its tool’s From Signoff PL list: start it there, and it links to this Part at the next sync. Or link an existing design here.'],
     manual: ['dim', 'No review tool yet', 'Signoff FW is planned; until then this Part is tracked here only.']
   };
   function stateChip(st) {
@@ -567,7 +584,10 @@
   }
 
   // A Part's own model pictures, in the shape of a design's preview.
-  function modelOf(n) { return n && n.kind === 'part' ? P.cleanModel(n.model) : null; }
+  // A Part's model shows only while its kind takes one (MODEL_SOURCES): a purchased Part switched to
+  // Loom keeps its model, supplier, and MPN on the node, hidden, so switching back brings them back.
+  function modelOf(n) { return n && n.kind === 'part' && MODEL_SOURCES[n.source] ? P.cleanModel(n.model) : null; }
+  function mpnOf(n) { return n && n.source === 'purchased' ? n.mpn || '' : ''; }
   function modelPreview(n) {
     var m = modelOf(n);
     if (!m || !m.views.length) return null;
@@ -710,7 +730,7 @@
         var n = t.nodes[id], st = P.partStatus(n, index), e = st.entry || {};
         return '<button class="gal-tile' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
           '<div class="gal-art map-art">' + art(n, true, st.entry) + '</div><div class="map-name">' + esc(n.name || 'Unnamed') + (n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '') + '</div>' +
-          '<div class="map-meta"><span>' + esc(e.number || n.number || n.mpn || '') + (e.revision ? ' · Rev ' + esc(e.revision) : '') + '</span>' + srcChip(n.source) + '</div></button>';
+          '<div class="map-meta"><span>' + esc(e.number || n.number || mpnOf(n) || '') + (e.revision ? ' · Rev ' + esc(e.revision) : '') + '</span>' + srcChip(n.source) + '</div></button>';
       }).join('') + '</div></section>';
     }).join('') + '</div>';
   }
@@ -1092,7 +1112,7 @@
   // The panel beside the 3D view: where the selected part is, and the tools that move it.
   function arrangePanel(p, t, id) {
     var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
-    html += '<h2>' + esc(n.name || 'Unnamed') + '</h2><p class="map-ins-sub">' + esc([e && e.number || n.number || n.mpn, n.kind === 'assembly' ? 'Assembly' : ''].filter(Boolean).join(' · ')) + '</p>';
+    html += '<h2>' + esc(n.name || 'Unnamed') + '</h2><p class="map-ins-sub">' + esc([e && e.number || n.number || mpnOf(n), n.kind === 'assembly' ? 'Assembly' : ''].filter(Boolean).join(' · ')) + '</p>';
     if (n.kind !== 'part') return html + '<p class="map-ins-text">Assemblies aren’t drawn; arrange the Parts in them.</p></aside>';
     var list = sceneList(t, [id]), inScene = list.parts.length > 0, board = n.source === 'ee' && e && e.preview;
     if (inScene) {
@@ -1176,7 +1196,8 @@
     if (!want) return [];
     P.flatten(t).forEach(function (id) { if (t.nodes[id].ref) used[P.refKey(t.nodes[id].ref)] = 1; });
     return C.tools.reduce(function (all, tool) { return all.concat(S.plReader.designs(index, tool.id)); }, []).filter(function (d) {
-      return !d.archived && !used[d.tool + ':' + d.id] && d.summary && String(d.summary.project || '').toLowerCase() === want;
+      return !d.archived && !used[d.tool + ':' + d.id] && d.summary && String(d.summary.project || '').toLowerCase() === want &&
+        !P.claimedElsewhere(d.summary, Object.keys(projects).map(function (k) { return projects[k]; }), d.tool);
     });
   }
   function trayHtml(p) {
@@ -1319,11 +1340,11 @@
     var qty = n.qty > 1 ? ' <span class="map-qty">×' + esc(n.qty) + '</span>' : '';
     if (!tool && modelOf(n)) {
       return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true) + '</div>' +
-        '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || cap(st.state === 'purchased' ? 'Purchased' : '')) + '</span>' + srcChip(n.source) + '</div></button>';
+        '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(mpnOf(n) || n.number || cap(st.state === 'purchased' ? 'Purchased' : '')) + '</span>' + srcChip(n.source) + '</div></button>';
     }
     if (!tool) {
       return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
-        '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(n.mpn || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
+        '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(mpnOf(n) || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
     }
     return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true, st.entry) + '</div>' +
       '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div>' +
@@ -1353,7 +1374,7 @@
       (pv && (pv.images.length > 1 || mdl) ? '<div class="seg map-ins-flip">' + pv.images.map(function (i) {
         return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
       }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, scroll to zoom">3D</button>' : '') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
-      '<p class="map-ins-sub">' + esc([e.number || n.number || n.mpn, e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
+      '<p class="map-ins-sub">' + esc([e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
     if (s && s.harness) {
       html += harnessHtml(s);
       if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
@@ -1435,7 +1456,7 @@
         var n = t.nodes[id], r = rolls[id], st = P.partStatus(n, index), kids = (t.children[id] || []).length;
         var flag = t.flags[id] ? '<span class="pstate err" title="' + (t.flags[id] === 'cycle' ? 'Two moves made this a loop; it was put at the top. Move it where it belongs.' : 'Its assembly was deleted; it was put at the top.') + '">' + (t.flags[id] === 'cycle' ? 'Moved to top' : 'Orphaned') + '</span> ' : '';
         var caret = kids ? '<button class="t-caret' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" aria-label="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '">' + ICON.chev + '</button>' : '<span class="t-spacer"></span>';
-        var sub = n.kind === 'part' ? [n.number, st && st.entry && st.entry.number && st.entry.number !== n.number ? st.entry.number : '', n.mpn].filter(Boolean).join(' · ') : (n.number || plural(r.parts, 'Part'));
+        var sub = n.kind === 'part' ? [n.number, st && st.entry && st.entry.number && st.entry.number !== n.number ? st.entry.number : '', mpnOf(n)].filter(Boolean).join(' · ') : (n.number || plural(r.parts, 'Part'));
         var progress = n.kind === 'assembly' ? (r.designs ? pbar(r.pct) : '<span class="muted">—</span>')
           : st.state === 'ok' ? (st.summary.harness ? '<span class="muted">' + esc(designStat(st.summary)) + '</span>' : pbar(st.summary.pct)) : st.state === 'purchased' ? '<span class="muted">Purchased</span>' : stateChip(st);
         var issues = n.kind === 'assembly' ? (r.designs ? sevs(r.open) : '') : st.state === 'ok' ? sevs((st.summary.issues || {}).open || {}) : '';
@@ -1717,9 +1738,12 @@
 
     var kind = n.kind, source = n.source || '';
     var linked = P.refKey(n.ref);   // "tool:id" of the picked design, or ''
-    // A Part is either an existing design from Signoff EE or ME, or a generic Part you type in
-    // (purchased, or firmware until Signoff FW exists). New Parts start on the design list.
-    var generic = !P.toolById(source), lastGeneric = generic ? source : 'purchased';
+    // A Part is an existing design from a Signoff tool, one to be made in a tool that isn't started yet
+    // (it waits in that tool's From Signoff PL list and links itself once started there; pl.js
+    // claimPlanned), or a generic Part you type in (purchased). New Parts start on the design list.
+    var mode = !P.toolById(source) ? 'generic' : id && !linked ? 'planned' : 'design';
+    var generic = mode === 'generic', lastGeneric = generic ? source : 'purchased';
+    var lastPlanned = mode === 'planned' ? source : (P.toolById('loom') ? 'loom' : (C.tools[0] || {}).id);
     function allDesigns() {
       return C.tools.reduce(function (all, tool) { return all.concat(S.plReader.designs(index, tool.id)); }, []);
     }
@@ -1756,10 +1780,17 @@
       var box = w.querySelector('#f-link');
       if (kind !== 'part') { box.innerHTML = ''; return; }
       var list = allDesigns(), tools = orList(C.tools.map(function (x) { return x.short; }));
-      var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['generic', 'Generic Part']].map(function (m) {
-        return '<button type="button" class="' + ((generic ? 'generic' : 'design') === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
+      var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['planned', 'Not started yet'], ['generic', 'Generic Part']].map(function (m) {
+        return '<button type="button" class="' + (mode === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
       }).join('') + '</div></div>';
-      if (generic) {
+      if (mode === 'planned') {
+        var tl = P.toolById(source) || {};
+        html += '<div class="field"><span class="field-label">To be made in</span><div class="seg full" id="f-plan">' + C.tools.map(function (x) {
+          return '<button type="button" class="' + (source === x.id ? 'on' : '') + '" data-plan="' + esc(x.id) + '">' + esc(x.short) + '</button>';
+        }).join('') + '</div><p class="note">' + (source === 'loom'
+          ? 'The Part waits in Loom’s From Signoff PL list. Start it there and Loom makes the harness with this name and number; it links to this Part at PL’s next sync.'
+          : 'The Part waits in ' + esc(tl.name || 'its tool') + '’s From Signoff PL list. Start it there and the new review gets this name and number; it links to this Part at PL’s next sync.') + '</p></div>';
+      } else if (generic) {
         html += '<div class="field"><span class="field-label">Kind of Part</span><div class="seg full" id="f-source">' + P.sources().filter(function (s) { return !s.tool; }).map(function (s) {
           return '<button type="button" class="' + (source === s.id ? 'on' : '') + '" data-source="' + esc(s.id) + '">' + esc(s.name) + '</button>';
         }).join('') + '</div></div>';
@@ -1786,7 +1817,7 @@
     }
     // A STEP is read here when picked and stored on Save. `mdl` is the Part's model (null once
     // removed); `prep` a newly read one.
-    var mdl = id ? modelOf(n) : null, prep = null, keepStep = true, reading = '';
+    var mdl = id && n.kind === 'part' ? P.cleanModel(n.model) : null, prep = null, keepStep = true, reading = '';
     function modelField() {
       if (reading) return '<div class="m-busy"><span class="spin" aria-hidden="true"></span>' + esc(reading) + '</div>';
       var pick = '<label class="btn m-pick"><input type="file" accept=".step,.stp" id="f-step" hidden>' + (prep || mdl ? 'Replace…' : 'Attach STEP…') + '</label>';
@@ -1836,10 +1867,12 @@
       if (k) { kind = k.dataset.kind; w.querySelectorAll('#f-kind button').forEach(function (b) { b.classList.toggle('on', b === k); }); partFields(); return; }
       var md = e.target.closest('[data-mode]');
       if (md) {
-        generic = md.dataset.mode === 'generic';
-        source = generic ? lastGeneric : (linked ? linked.split(':')[0] : (C.tools[0] || {}).id);
+        mode = md.dataset.mode; generic = mode === 'generic';
+        source = generic ? lastGeneric : mode === 'planned' ? lastPlanned : (linked ? linked.split(':')[0] : (C.tools[0] || {}).id);
         partFields(); return;
       }
+      var pl = e.target.closest('[data-plan]');
+      if (pl) { source = lastPlanned = pl.dataset.plan; partFields(); return; }
       var s = e.target.closest('[data-source]');
       if (s) { source = lastGeneric = s.dataset.source; partFields(); return; }
       if (e.target.closest('[data-model="remove"]')) { prep = null; mdl = null; refreshModel(); return; }
@@ -1869,7 +1902,7 @@
       if (id && !P.canMove(t, id, parent)) { toast('An assembly can’t go inside itself'); return; }
       var fields = { kind: kind, name: name, number: val(w, '#f-number'), parent: parent, notes: val(w, '#f-notes') };
       if (kind === 'part') {
-        var refId = linked.split(':')[1] || '', mass = val(w, '#f-mass'), qty = parseInt(val(w, '#f-qty'), 10);
+        var refId = mode === 'design' ? linked.split(':')[1] || '' : '', mass = val(w, '#f-mass'), qty = parseInt(val(w, '#f-qty'), 10);
         Object.assign(fields, {
           source: source, ref: P.toolById(source) && refId ? { tool: source, id: refId } : null,
           qty: qty > 0 ? qty : 1, massG: mass === '' ? null : Math.max(0, Number(mass)),
@@ -2177,7 +2210,9 @@
         return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: token }).refresh(index)
           .then(function (ix) {
             index = ix; errors = errors.concat(ix.errors);
-            // Harness names and numbers edited in Loom since come over; they go up with the next sync.
+            // Waiting Parts started in their tool link up, and harness names and numbers edited in
+            // Loom since come over; both go up with the next sync.
+            claimAll();
             Object.keys(projects).forEach(function (k) {
               var p = projects[k];
               if (!P.adoptHarnesses(p, index, me()).length) return;

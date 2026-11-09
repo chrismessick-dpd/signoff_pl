@@ -178,7 +178,10 @@
        nosummary   linked; the project file has no summary yet (open it in its tool once)
        notfound    linked, but no repository this token reaches holds that project
        error       linked, but its tool's repositories couldn't be read
-       unlinked    a design Part (EE, ME…) not linked to a review yet
+       planned     a Part to be made in a Signoff tool (EE, ME, FW, Loom) that isn't started yet: it
+                   waits in that tool's From Signoff PL tray, and links itself once started there
+                   (claimPlanned)
+       unlinked    a Part with no source
        purchased   bought in; no review
        manual      a source with no Signoff tool yet (firmware)
      Assemblies return null. */
@@ -187,7 +190,7 @@
     if (node.source === 'purchased') return { state: 'purchased' };
     if (!toolById(node.source)) return { state: node.source ? 'manual' : 'unlinked' };
     var key = refKey(node.ref);
-    if (!key) return { state: 'unlinked' };
+    if (!key) return { state: 'planned' };
     var e = index && index.entries && index.entries[key];
     if (e) return { state: e.summary ? 'ok' : 'nosummary', entry: e, summary: e.summary || null };
     if (index && (index.errors || []).some(function (x) { return x.tool === node.source; })) return { state: 'error' };
@@ -196,7 +199,7 @@
 
   function emptyRoll() {
     var r = { total: 0, reviewed: 0, pct: 0, open: {}, openTotal: 0, fixed: 0, waived: 0,
-      parts: 0, designs: 0, summarized: 0, attention: 0, purchased: 0, manual: 0, unlinked: 0,
+      parts: 0, designs: 0, summarized: 0, attention: 0, purchased: 0, manual: 0, unlinked: 0, planned: 0,
       massG: 0, massParts: 0, massMissing: 0, stages: {}, harnesses: 0 };
     SEVERITIES.forEach(function (s) { r.open[s] = 0; });
     return r;
@@ -220,6 +223,7 @@
       if (st.state === 'purchased') { roll.purchased++; return; }
       if (st.state === 'manual') { roll.manual++; return; }
       if (st.state === 'unlinked') { roll.unlinked++; return; }
+      if (st.state === 'planned') { roll.planned++; return; }
       if (st.state !== 'ok') { roll.attention++; return; }
       // A harness has no checks: it's counted, but stays out of progress, issues, and stages.
       if (isDrawing(node.source)) { roll.harnesses++; return; }
@@ -387,7 +391,9 @@
       var part = n.kind === 'part';
       rows.push({
         id: id, item: item[id], level: t.depth[id], kind: n.kind, name: n.name || '', number: (part && e.number) || n.number || '',
-        rev: e.revision || '', source: part ? n.source || '' : '', state: st.state || '', supplier: n.supplier || '', mpn: n.mpn || '',
+        rev: e.revision || '', source: part ? n.source || '' : '', state: st.state || '',
+        // Only a purchased Part shows its supplier and MPN; another kind keeps them hidden (app.js modelOf).
+        supplier: n.source === 'purchased' ? n.supplier || '' : '', mpn: n.source === 'purchased' ? n.mpn || '' : '',
         qty: part ? (n.qty > 0 ? Number(n.qty) : 1) : null, extQty: part ? ext[id] : null,
         massG: part && hasMass(n) ? Number(n.massG) : null, extMassG: part && hasMass(n) ? Math.round(Number(n.massG) * ext[id] * 10) / 10 : null,
         stage: (s && s.stage) || e.stage || '', pct: s && !isDrawing(n.source) ? s.pct : null, notes: n.notes || '', ref: refKey(n.ref), uses: [id]
@@ -429,8 +435,56 @@
     return changed;
   }
 
+  /* A design started from a waiting Part (state 'planned') names it in its summary as
+     plPart: { project: PL project id, node: node id, at: when it was started } (Loom's harnesses so far;
+     loom/assets/store.js). Here each waiting Part of this project takes the design that names it: the
+     earliest started (plPart.at) when several do, and only while the Part still waits for that tool (a Part switched
+     back to Purchased stays purchased, and the design waits in the tray like any other). Archived
+     designs and designs another Part already links are skipped. Returns the ids of the nodes it
+     linked (stamped with `user`). */
+  function claimFor(project, index) {
+    var out = {}, used = {};
+    liveNodes(project).forEach(function (n) { var k = refKey(n.ref); if (k) used[k] = 1; });
+    var entries = (index && index.entries) || {};
+    Object.keys(entries).sort(function (a, b) {
+      var startedAt = function (k) { var s = entries[k].summary; return (s && s.plPart && s.plPart.at) || '~'; };   // unstamped last
+      var x = startedAt(a), y = startedAt(b);
+      return x < y ? -1 : x > y ? 1 : a < b ? -1 : 1;
+    }).forEach(function (k) {
+      var e = entries[k], s = e.summary, pp = s && s.plPart;
+      if (!pp || pp.project !== project.id || e.archived || used[k] || out[pp.node]) return;
+      var n = project.nodes[pp.node];
+      if (!n || n.deleted || n.kind !== 'part' || n.ref || n.source !== e.tool || !toolById(n.source)) return;
+      out[pp.node] = k; used[k] = 1;
+    });
+    return out;   // { node id: 'tool:id' }
+  }
+  function claimPlanned(project, index, user) {
+    var found = claimFor(project, index), changed = [];
+    Object.keys(found).forEach(function (id) {
+      var n = project.nodes[id], e = index.entries[found[id]], f = { ref: { tool: e.tool, id: e.id } };
+      // The harness took the Part's name and number; from here they sync both ways by identAt.
+      if (isDrawing(n.source) && e.summary.identAt) f.identAt = e.summary.identAt;
+      project.nodes[id] = M.stamp(Object.assign({}, n, f), user);
+      changed.push(id);
+    });
+    return changed;
+  }
+  // True when a design of `tool` names a waiting Part of a PL project in `projects` (so no tray offers
+  // it: that Part takes it at the next claim). EE, ME, and FW write summary.tool upper case; the index's
+  // tool id (`tool`) is what Parts use.
+  function claimedElsewhere(summary, projects, tool) {
+    var pp = summary && summary.plPart;
+    if (!pp) return false;
+    return (projects || []).some(function (p) {
+      var n = p.id === pp.project && p.nodes && p.nodes[pp.node];
+      return !!n && !n.deleted && n.kind === 'part' && !n.ref && n.source === String(tool || summary.tool || '').toLowerCase();
+    });
+  }
+
   S.pl = {
     SEVERITIES: SEVERITIES, sources: sources, toolById: toolById, isDrawing: isDrawing, adoptHarnesses: adoptHarnesses,
+    claimFor: claimFor, claimPlanned: claimPlanned, claimedElsewhere: claimedElsewhere,
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
