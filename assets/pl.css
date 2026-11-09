@@ -418,3 +418,9 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 /* Edit beside the phase chip in a project's header */
 .page-edit { padding: 3px 10px; font-size: 13px; gap: 5px; }
 .page-edit svg { width: 13px; height: 13px; }
+
+/* The Part sheet's mode choice (Existing design, Placeholder for…, Generic Part): its labels name every
+   tool, so on a narrow screen they wrap inside their buttons instead of scrolling out of sight. */
+@media (max-width: 600px) {
+  #f-mode button { white-space: normal; line-height: 1.25; text-align: center; padding: 6px; }
+}

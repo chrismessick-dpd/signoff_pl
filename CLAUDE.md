@@ -219,9 +219,9 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   (2026-11-07): newest-wins after each tool syncs is fine for now.
 - **Parts waiting to be started (2026-11-08, Chris: some purchased harnesses turned out to need building;
   new things wait in a tray in the tool they belong to, to be added on purpose, across the suite).** The
-  Part sheet has three modes: Existing design, **Not started yet** (pick the tool: EE, ME, FW, or Loom), and
-  Generic Part. Not started yet saves `source: <tool>`, `ref: null`, which `partStatus` calls `planned`
-  (it was `unlinked`): "Not started" on the tile, counted in `roll.planned`, never as needing attention.
+  Part sheet has three modes: Existing design, **Placeholder for EE, ME, FW, or Loom** (Chris renamed it
+  from Not started yet; pick the tool), and Generic Part. A placeholder saves `source: <tool>`, `ref: null`, which `partStatus` calls `planned`
+  (it was `unlinked`): "Placeholder" on the tile, counted in `roll.planned`, never as needing attention.
   Loom lists such Parts under *From Signoff PL* (`loom/assets/store.js` `waiting`); its Start makes the
   harness with the Part's name and number and writes `summary.plPart: { project, node }`. PL keeps it
   (`reader.js`, `CACHE_V` 5) and `P.claimPlanned` links the waiting Part to it after every designs read and

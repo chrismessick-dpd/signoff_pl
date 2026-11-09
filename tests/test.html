@@ -104,7 +104,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var gone = node(p2, { parent: top.id, name: 'Moved away', source: 'ee', ref: { tool: 'ee', id: 'pGONE' } });
   var r3 = P.rollup(p2, index);
   ok(r3[''].purchased === 1 && r3[''].manual === 1 && r3[''].planned === 1 && r3[''].unlinked === 0 && r3[''].attention === 1 && r3[''].total === 400 && r3[''].massMissing === 4,
-    'purchased, tool-less, waiting (a board not started yet), and missing Parts are counted but not in progress', JSON.stringify(r3['']));
+    'purchased, tool-less, waiting (a placeholder board), and missing Parts are counted but not in progress', JSON.stringify(r3['']));
   eq(P.partStatus(p2.nodes[gone.id], index).state, 'notfound', 'a link to a project no repo holds is not found');
   eq(P.partStatus(p2.nodes[gone.id], { entries: {}, errors: [{ tool: 'ee' }] }).state, 'error', 'a link whose tool failed to read is an error, not missing');
   var noSum = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: null } }, errors: [] };

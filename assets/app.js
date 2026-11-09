@@ -163,7 +163,7 @@
     notfound: ['err', 'Not found', 'No repository your token reaches holds this design. It may have been deleted, or the token can’t open its repo.'],
     error: ['err', 'Couldn’t read', 'The tool’s repositories couldn’t be read at the last refresh.'],
     unlinked: ['dim', 'Not linked', 'Link this Part to its design review.'],
-    planned: ['dim', 'Not started', 'Waiting in its tool’s From Signoff PL list: start it there, and it links to this Part at the next sync. Or link an existing design here.'],
+    planned: ['dim', 'Placeholder', 'A placeholder, waiting in its tool’s From Signoff PL list: start it there, and it links to this Part at the next sync. Or link an existing design here.'],
     manual: ['dim', 'No review tool yet', 'Signoff FW is planned; until then this Part is tracked here only.']
   };
   function stateChip(st) {
@@ -1780,7 +1780,7 @@
       var box = w.querySelector('#f-link');
       if (kind !== 'part') { box.innerHTML = ''; return; }
       var list = allDesigns(), tools = orList(C.tools.map(function (x) { return x.short; }));
-      var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['planned', 'Not started yet'], ['generic', 'Generic Part']].map(function (m) {
+      var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['planned', 'Placeholder for ' + tools], ['generic', 'Generic Part']].map(function (m) {
         return '<button type="button" class="' + (mode === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
       }).join('') + '</div></div>';
       if (mode === 'planned') {
