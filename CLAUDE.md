@@ -234,6 +234,12 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   list them too (the engine's From Signoff PL, `config.pl`; see `ee_design_review/CLAUDE.md`), and Start
   there writes the same `summary.plPart`. Tests: 213. Not tried live. The `me-send` branch also set `CACHE_V` to 5:
   make it 6 when merging.
+- **Drawings (2026-11-09, Chris).** A harness with wires has a picture of its wiring diagram, which Loom
+  stores at sync next to the harness (`drawing/<id>/preview/`, Fabcheck's preview layout; `loom/CLAUDE.md`).
+  The Loom tool in `config.js` has `previews: 'drawing/'`, so the reader attaches it as the entry's
+  `preview` and tiles, the inspector, and Gallery show it as they show a board's (`previewFor`). No
+  `CACHE_V` bump: previews are read on every refresh. `share.js` doesn't move `drawing/<id>/`; Loom's next
+  sync draws it into the shared repo. Tests: 232. Tried in the demo with a hand-added harness entry.
 - **Not done:** the demo has no harness Part (the snapshot generator would need Loom's demo summary).
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.

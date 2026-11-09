@@ -169,15 +169,22 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
         total: 0, reviewed: 0, pct: 0, checklists: {}, issues: { open: { critical: 0, major: 0, minor: 0 }, fixed: 0, waived: 0 },
         harness: { ends: 3, splices: 1, wires: 7, cables: 1, sets: 2, wireMm: 2830, errors: 0, warnings: 2, boards: ['p1'] } } });
   }
-  lhub.makeRepo('own/loom_data', { 'projects/h1.json': harnessFile('h1', 'Sensor harness', 'H-100', '2026-11-07T12:00:00.000Z') }, ['own']);
+  // Loom stores each harness's wiring diagram next to it (loom/assets/store.js storeDrawings).
+  var ldraw = JSON.stringify({ v: 1, tool: 'loom', src: 'x', hero: 'diagram', images: [{ key: 'diagram', file: 'diagram.png', type: 'image/png', w: 1600, h: 685 }] });
+  lhub.makeRepo('own/loom_data', { 'projects/h1.json': harnessFile('h1', 'Sensor harness', 'H-100', '2026-11-07T12:00:00.000Z'),
+    'drawing/h1/preview/index.json': ldraw, 'drawing/h1/preview/diagram.png': 'PNG1', 'drawing/h2/preview/index.json': ldraw, 'drawing/h2/preview/diagram.png': 'OLD' }, ['own']);
   lhub.makeRepo('own/review-loom-nothing', { 'projects/h9.json': harnessFile('h9', 'Stray', 'X', '') }, ['own']);
-  lhub.makeRepo('own/review-loom-shared', { 'projects/h2.json': harnessFile('h2', 'Shared harness', 'H-200', '') }, ['own']);
+  lhub.makeRepo('own/review-loom-shared', { 'projects/h2.json': harnessFile('h2', 'Shared harness', 'H-200', ''), 'drawing/h2/preview/index.json': ldraw, 'drawing/h2/preview/diagram.png': 'PNG2' }, ['own']);
   lhub.push('own/loom_data', Object.assign(lhub.files('own/loom_data'), { 'users.json': M.stableStringify({ schema: 1, users: {}, shared: { h2: { id: 'h2', repo: 'own/review-loom-shared', name: 'Shared harness' } } }) }));
   var lix = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: lhub.fetchFor('tok-own') }).refresh(null);
   var le = lix.entries['loom:h1'];
   ok(le && le.number === 'H-100' && le.summary.harness.wires === 7 && le.summary.identAt === '2026-11-07T12:00:00.000Z', 'a Loom harness is read with its number (meta.number), contents and identAt');
   ok(lix.entries['loom:h2'] && lix.entries['loom:h2'].repo === 'own/review-loom-shared' && !lix.entries['loom:h9'], 'shared harness repos are read, and only for the harnesses Loom’s shared map puts there');
   eq(lix.errors, [], 'no errors reading harnesses');
+  var lpv = le.preview, lpv2 = lix.entries['loom:h2'].preview;
+  ok(lpv && lpv.hero === 'diagram' && lpv.repo === 'own/loom_data' && lpv.images.length === 1 && lpv.images[0].w === 1600 && !lpv.board, 'a harness’s stored drawing is its preview, with no board size');
+  ok(lpv2 && lpv2.repo === 'own/review-loom-shared' && await (await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: lhub.fetchFor('tok-own') }).image(lpv2.repo, lpv2.images[0])).text() === 'PNG2',
+    'a shared harness’s drawing comes from its own repo, not a copy left in loom_data');
   var hp = P.newProject({ name: 'Water Monitor' }, 'ann'), htop = node(hp, { kind: 'assembly', name: 'Top' });
   var hb = node(hp, { parent: htop.id, name: 'Main board', source: 'ee', ref: { tool: 'ee', id: 'p1' } });
   var hn = node(hp, { parent: htop.id, name: 'Old name', number: 'H-099', source: 'loom', ref: { tool: 'loom', id: 'h1' }, identAt: '2026-11-07T11:00:00.000Z' });

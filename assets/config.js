@@ -13,7 +13,8 @@
                 (Loom's harnesses): they have no checks, so they stay out of progress and stages,
                 and their name and number sync both ways (pl.js adoptHarnesses).
                 `previews` is the folder a checker stores pictures in (Fabcheck's board
-                previews, ee_design_review/docs/fabcheck-link.md).
+                previews, ee_design_review/docs/fabcheck-link.md; Loom's harness drawings,
+                loom/assets/store.js storeDrawings).
    phases:      build phases, for gates (Phase 3 of the plan).
    demo:        the demo product. boardsMm stands in for the board size Fabcheck stores with its
                 pictures (w, h, thickness in mm). Its Parts link to Signoff EE's, ME's, and FW's demo projects;
@@ -43,7 +44,7 @@ window.SIGNOFF_CONFIG = {
     { "id": "fw", "name": "Signoff FW", "short": "FW", "desc": "Firmware design review",
       "dataRepo": "fw_design_review_data", "prefix": "review-fw-", "app": "../fw_design_review/index.html" },
     { "id": "loom", "name": "Loom", "short": "Loom", "desc": "Harness drawing",
-      "dataRepo": "loom_data", "prefix": "review-loom-", "app": "../loom/index.html", "review": false }
+      "dataRepo": "loom_data", "prefix": "review-loom-", "app": "../loom/index.html", "review": false, "previews": "drawing/" }
   ],
   "demo": {
     "project": {
