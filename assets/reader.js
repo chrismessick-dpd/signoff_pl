@@ -84,6 +84,13 @@
         return { label: str(r.label).slice(0, 40), status: REV_STATUS.indexOf(r.status) >= 0 ? r.status : '', sentAt: str(r.sentAt).slice(0, 20) };
       });
     }
+    // summary.spec: a firmware description's top-level gists and gaps (EE README, "The project summary").
+    if (s.spec && typeof s.spec === 'object') {
+      var sp = s.spec;
+      out.spec = { gists: (Array.isArray(sp.gists) ? sp.gists : []).filter(function (g) { return g && typeof g === 'object'; }).slice(0, 12).map(function (g) {
+        return { title: str(g.title).slice(0, 120), gist: str(g.gist).slice(0, 300), depth: g.depth === 1 ? 1 : 0 };
+      }), sections: num(sp.sections), untraced: num(sp.untraced), undescribed: num(sp.undescribed), flagged: num(sp.flagged) };
+    }
     if (Array.isArray(s.open)) {
       out.open = s.open.filter(function (i) { return i && typeof i === 'object'; }).map(function (i) {
         return { id: str(i.id), severity: SEVERITIES.indexOf(i.severity) >= 0 ? i.severity : 'minor', text: str(i.text),
@@ -172,8 +179,8 @@
   // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
-  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart).
-  var CACHE_V = 5;
+  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec).
+  var CACHE_V = 6;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

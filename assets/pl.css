@@ -122,6 +122,12 @@
 .map-rev.built { background: var(--accent-soft); }
 .map-rev.built span { color: var(--accent-ink); }
 .map-rev.withdrawn b { text-decoration: line-through; color: var(--text-3); }
+.map-ins-spec { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+.map-ins-spec .ins-eyebrow { margin-bottom: 0; }
+.map-spec { font-size: 13px; line-height: 1.4; }
+.map-spec b { display: block; font-weight: 600; }
+.map-spec span { color: var(--text-2); }
+.map-spec.sub { padding-left: 12px; border-left: 2px solid var(--hair); }
 .map-cl { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 10px; align-items: center; font-size: 12.5px; }
 .map-cl .pbar { min-width: 0; }
 .map-ins-issues { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--hair); padding-top: 10px; }

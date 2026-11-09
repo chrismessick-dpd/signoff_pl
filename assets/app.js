@@ -1362,6 +1362,16 @@
     }).join('') + '</div>';
   }
 
+  // What a design does, from its description (summary.spec, Signoff FW's Description tab): the
+  // top-level gists, and how much of it isn't tied to requirements yet.
+  function specHtml(sp) {
+    if (!sp || !sp.gists || !sp.gists.length) return '';
+    var gaps = [sp.untraced ? sp.untraced + ' untraced' : '', sp.undescribed ? plural(sp.undescribed, 'requirement') + ' not described' : '', sp.flagged ? sp.flagged + ' flagged for a requirement' : ''].filter(Boolean);
+    return '<div class="map-ins-spec"><div class="ins-eyebrow">What it does</div>' + sp.gists.filter(function (g) { return g.gist || !g.depth; }).map(function (g) {
+      return '<div class="map-spec' + (g.depth ? ' sub' : '') + '"><b>' + esc(g.title) + '</b>' + (g.gist ? '<span>' + esc(g.gist) + '</span>' : '') + '</div>';
+    }).join('') + (gaps.length ? '<p class="note">' + esc(gaps.join(' · ')) + '</p>' : '') + '</div>';
+  }
+
   // The selected Part's detail, beside the map (over it on narrow screens).
   function inspector(p, t, id) {
     if (id === PRODUCT || t.nodes[id].kind === 'assembly') return asmInspector(p, t, id);
@@ -1380,6 +1390,7 @@
       if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
     } else if (s) {
       var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
+      html += specHtml(s.spec);
       html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
       var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
       if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
