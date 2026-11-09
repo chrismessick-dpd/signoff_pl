@@ -284,7 +284,7 @@
   Sharer.prototype.items = function (doc, nameOf) {
     var self = this, out = [{ tool: 'pl', id: doc.id, name: doc.meta.name }], seen = {};
     S.pl.liveNodes(doc).forEach(function (n) {
-      if (n.kind !== 'part' || !n.ref || !n.ref.tool || !n.ref.id) return;
+      if ((n.kind !== 'part' && !S.pl.isLinkedAssembly(n)) || !n.ref || !n.ref.tool || !n.ref.id) return;   // a Part's design, or an assembly's own
       var key = n.ref.tool + ':' + n.ref.id;
       if (seen[key] || !self.toolDesc(n.ref.tool)) return;
       seen[key] = 1;

@@ -236,6 +236,29 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   Tested in the demo by adding a `loom:hdemo1` entry to the stored index by hand: the tray offered it,
   Add it made *Harnesses*, and progress stayed 49%.
 
+## Assemblies with their own review (2026-11-08, Chris)
+
+A mechanical part may be an assembly: Signoff ME's details window marks it (`summary.kind:
+'assembly'`, kept by `reader.js`, `CACHE_V` 7), and PL shows that review on an assembly's branch.
+- **Model.** An assembly node may carry `source: 'me'` and `ref` like a Part. `partStatus` still returns
+  null for every assembly; `linkStatus` is `partStatus` for a Part and the linked review's status for a
+  linked assembly (`isLinkedAssembly`). Use `linkStatus` anywhere that walks the tree to reach designs.
+  It's used in `rollup` (counts in the assembly's roll and every roll above, not as a Part and with no
+  mass), `issues`, `unlistedIssues`, `bom`, `plreqs.js` `items`, `share.js` `items`, `access.js` (a
+  `<node>~review` leaf inside the assembly), and the System panels.
+- **UI.** The branch head and trunk show the tool chip and stage (`ownChip`); the assembly inspector shows
+  the review (`ownReviewHtml`) and Open in Signoff ME. The tray marks assembly reviews and adds them as
+  assemblies. An assembly's sheet picks only assembly reviews and offers to remove Parts that link the same
+  review. Picking one for a Part turns the sheet into an assembly. A Part linked to an assembly review
+  offers *Link to an assembly…* (`asmLinkSheet`): an existing assembly, or a new one where the Part is.
+  The assembly takes the review's name and number, and the Part is removed.
+  A Part with a mass, model, or quantity above one (`partCarries`) is never removed that way: the sheet
+  leaves it, and *Link to an assembly…* moves it inside the assembly (ticked by default).
+- **Not done:** the Requirements tab's allocation, matrix, and derive columns still list Parts only
+  (`reqs.js`, `kind === 'part'`), so a System requirement can't be allocated to an assembly's review yet.
+- **Tests:** 227. Tried in the demo with `me:mdemo5` marked an assembly in the stored index. The demo
+  itself is unchanged.
+
 ## Sharing (2026-11-07, merged to `main` and pushed with Loom's `fa25c7d`)
 
 Chris asked whether sharing a PL project shares its Loom harnesses, and for PL to share projects the

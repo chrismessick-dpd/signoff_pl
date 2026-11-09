@@ -6,6 +6,8 @@
        meta:  { name, client, number, description, phase, archived, updatedAt, updatedBy },
        nodes: { id: { id, parent: '' | node id, order, kind: 'assembly' | 'part', name, number,
                       source: 'ee' | 'me' | … | 'fw' | 'purchased', ref: { tool, id } | null,
+                      (an assembly may link a review too: source 'me' and the ref of a Signoff ME
+                      review of an assembly, summary.kind 'assembly'; see linkStatus)
                       qty, supplier, mpn, massG, envelopeMm, notes,
                       createdAt, updatedAt, updatedBy, deleted } },
        reqs:  { id: requirement record, see plreqs.js } }
@@ -184,17 +186,30 @@
        unlinked    a Part with no source
        purchased   bought in; no review
        manual      a source with no Signoff tool yet (firmware)
-     Assemblies return null. */
+     Assemblies return null (linkStatus covers an assembly's own review). */
   function partStatus(node, index) {
     if (!node || node.kind !== 'part') return null;
     if (node.source === 'purchased') return { state: 'purchased' };
     if (!toolById(node.source)) return { state: node.source ? 'manual' : 'unlinked' };
+    if (!refKey(node.ref)) return { state: 'planned' };
+    return refStatus(node, index);
+  }
+  function refStatus(node, index) {
     var key = refKey(node.ref);
-    if (!key) return { state: 'planned' };
     var e = index && index.entries && index.entries[key];
     if (e) return { state: e.summary ? 'ok' : 'nosummary', entry: e, summary: e.summary || null };
     if (index && (index.errors || []).some(function (x) { return x.tool === node.source; })) return { state: 'error' };
     return { state: 'notfound' };
+  }
+  /* An assembly can link a review of the whole assembly (Chris, 2026-11-08: a mechanical part may be
+     an assembly, so its Signoff ME review says so, summary.kind 'assembly', and PL shows it on that
+     assembly's branch). linkStatus is partStatus for a Part, the same states as a linked Part for a
+     linked assembly, and null for an assembly that links nothing. Everything that walks the tree to
+     reach designs (roll-up, issues, discussion, requirements, sharing) uses it. */
+  function isLinkedAssembly(node) { return !!node && node.kind === 'assembly' && !!refKey(node.ref) && !!toolById(node.source); }
+  function linkStatus(node, index) {
+    if (node && node.kind === 'assembly') return isLinkedAssembly(node) ? refStatus(node, index) : null;
+    return partStatus(node, index);
   }
 
   function emptyRoll() {
@@ -211,6 +226,8 @@
      - A design used twice (two of the same board) counts once in each total.
      - Mass is per Part times quantity, and only over Parts that have one; massMissing counts
        the rest, except firmware Parts, which have none. Assemblies have no mass of their own.
+     - An assembly's own review (linkStatus) counts in its roll and every roll above it like a
+       Part's design, but not as a Part, and adds no mass.
      - Stages are listed per tool, not mapped onto each other. */
   function rollup(project, index) {
     var t = tree(project), out = {};
@@ -224,6 +241,9 @@
       if (st.state === 'manual') { roll.manual++; return; }
       if (st.state === 'unlinked') { roll.unlinked++; return; }
       if (st.state === 'planned') { roll.planned++; return; }
+      design(roll, node, seen, st);
+    }
+    function design(roll, node, seen, st) {
       if (st.state !== 'ok') { roll.attention++; return; }
       // A harness has no checks: it's counted, but stays out of progress, issues, and stages.
       if (isDrawing(node.source)) { roll.harnesses++; return; }
@@ -250,6 +270,7 @@
       (function gather(nid) {
         var n = t.nodes[nid];
         if (n.kind === 'part') add(roll, n, seen);
+        else if (isLinkedAssembly(n)) design(roll, n, seen, refStatus(n, index));
         (t.children[nid] || []).forEach(gather);
       })(id);
       out[id] = finish(roll);
@@ -257,7 +278,11 @@
     }
     t.roots.forEach(walk);
     var all = emptyRoll(), seenAll = {};
-    flatten(t).forEach(function (id) { if (t.nodes[id].kind === 'part') add(all, t.nodes[id], seenAll); });
+    flatten(t).forEach(function (id) {
+      var n = t.nodes[id];
+      if (n.kind === 'part') add(all, n, seenAll);
+      else if (isLinkedAssembly(n)) design(all, n, seenAll, refStatus(n, index));
+    });
     out[''] = finish(all);
     return out;
   }
@@ -267,7 +292,7 @@
   function issues(project, index) {
     var t = tree(project), out = [], seen = {};
     flatten(t).forEach(function (id) {
-      var n = t.nodes[id], st = partStatus(n, index);
+      var n = t.nodes[id], st = linkStatus(n, index);
       if (!st || st.state !== 'ok') return;
       var key = refKey(n.ref);
       if (seen[key]) return;
@@ -284,7 +309,7 @@
   function unlistedIssues(project, index) {
     var t = tree(project), n = 0, seen = {};
     flatten(t).forEach(function (id) {
-      var st = partStatus(t.nodes[id], index);
+      var st = linkStatus(t.nodes[id], index);
       if (!st || st.state !== 'ok' || st.summary.open) return;
       var key = refKey(t.nodes[id].ref);
       if (seen[key]) return;
@@ -294,6 +319,9 @@
     });
     return n;
   }
+
+  // A design that's a review of an assembly (summary.kind, Signoff ME's details window).
+  function isAssemblyDesign(entry) { return !!(entry && entry.summary && entry.summary.kind === 'assembly'); }
 
   // ── Access ───────────────────────────────────────────────
   // An FTE is anyone whose token opens the PL data repo; a contractor's token opens only the
@@ -387,11 +415,11 @@
     })(t.roots, '', 1);
     function hasMass(n) { return n.massG != null && n.massG !== '' && !isNaN(n.massG); }
     ids.forEach(function (id) {
-      var n = t.nodes[id], st = partStatus(n, index) || {}, e = st.entry || {}, s = st.summary;
+      var n = t.nodes[id], st = linkStatus(n, index) || {}, e = st.entry || {}, s = st.summary;
       var part = n.kind === 'part';
       rows.push({
-        id: id, item: item[id], level: t.depth[id], kind: n.kind, name: n.name || '', number: (part && e.number) || n.number || '',
-        rev: e.revision || '', source: part ? n.source || '' : '', state: st.state || '',
+        id: id, item: item[id], level: t.depth[id], kind: n.kind, name: n.name || '', number: ((part || isLinkedAssembly(n)) && e.number) || n.number || '',
+        rev: e.revision || '', source: part || isLinkedAssembly(n) ? n.source || '' : '', state: st.state || '',
         // Only a purchased Part shows its supplier and MPN; another kind keeps them hidden (app.js modelOf).
         supplier: n.source === 'purchased' ? n.supplier || '' : '', mpn: n.source === 'purchased' ? n.mpn || '' : '',
         qty: part ? (n.qty > 0 ? Number(n.qty) : 1) : null, extQty: part ? ext[id] : null,
@@ -484,6 +512,7 @@
 
   S.pl = {
     SEVERITIES: SEVERITIES, sources: sources, toolById: toolById, isDrawing: isDrawing, adoptHarnesses: adoptHarnesses,
+    linkStatus: linkStatus, isLinkedAssembly: isLinkedAssembly, isAssemblyDesign: isAssemblyDesign,
     claimFor: claimFor, claimPlanned: claimPlanned, claimedElsewhere: claimedElsewhere,
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,

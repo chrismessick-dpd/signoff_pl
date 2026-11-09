@@ -94,15 +94,21 @@
         var n = t.nodes[id];
         if (n.kind === 'assembly') {
           var kids = (t.children[id] || []).map(function (k) { return build(k, id); }).filter(Boolean);
+          // An assembly's own review (P.isLinkedAssembly) is held like a Part's, so it's listed first inside it.
+          var own = P.isLinkedAssembly(n) && design(n, n.id + '~review');
+          if (own) kids.unshift(own);
           if (!kids.length) return null;
           var a = { id: n.id, kind: 'asm', name: n.name || 'Assembly', kids: kids, project: doc.id };
           self.nodes[a.id] = a; kids.forEach(function (k) { k.parent = a.id; });
           return a;
         }
+        return design(n, n.id);
+      }
+      function design(n, pid) {
         if (!n.ref || !n.ref.tool || !n.ref.id || !self.tools[n.ref.tool] || n.ref.tool === 'pl') return null;
         var nm = nameOf(n.ref.tool, n.ref.id) || n.name || n.ref.id;
         self.item(n.ref.tool, n.ref.id, nm);
-        var part = { id: n.id, kind: 'part', tool: n.ref.tool, key: n.ref.tool + ':' + n.ref.id, name: n.name || nm, project: doc.id };
+        var part = { id: pid, kind: 'part', tool: n.ref.tool, key: n.ref.tool + ':' + n.ref.id, name: n.name || nm, project: doc.id };
         self.nodes[part.id] = part;
         return part;
       }

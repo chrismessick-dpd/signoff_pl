@@ -386,7 +386,7 @@
   function discussionPanel(t, ids) {
     var seen = {}, rows = [];
     ids.forEach(function (id) {
-      var n = t.nodes[id], st = P.partStatus(n, index);
+      var n = t.nodes[id], st = P.linkStatus(n, index);
       if (!st || !st.summary || seen[P.refKey(n.ref)]) return;
       seen[P.refKey(n.ref)] = 1;
       (st.summary.recent || []).forEach(function (c) { rows.push({ c: c, n: n }); });
@@ -422,7 +422,7 @@
     // One row per linked design, in tree order.
     var seen = {}, cards = [];
     ids.forEach(function (id) {
-      var n = t.nodes[id], st = P.partStatus(n, index);
+      var n = t.nodes[id], st = P.linkStatus(n, index);
       if (!st || ['ok', 'nosummary'].indexOf(st.state) < 0 || seen[P.refKey(n.ref)]) return;
       seen[P.refKey(n.ref)] = 1;
       var s = st.summary, e = st.entry;
@@ -436,12 +436,12 @@
     if (cards.length) html += '<div class="section-title">Designs</div><div class="card sys-designs">' + cards.join('') + '</div>';
 
     var attn = ids.filter(function (id) {
-      var st = P.partStatus(t.nodes[id], index);
+      var st = P.linkStatus(t.nodes[id], index);
       return st && ['nosummary', 'notfound', 'error', 'unlinked'].indexOf(st.state) >= 0;
     });
     if (attn.length) {
       html += '<div class="section-title">Needs attention</div><div class="card attn">' + attn.map(function (id) {
-        var n = t.nodes[id], st = P.partStatus(n, index);
+        var n = t.nodes[id], st = P.linkStatus(n, index);
         return '<div class="attn-row" data-act="edit-node" data-id="' + esc(id) + '">' + srcChip(n.source) +
           '<div class="attn-text">' + esc(n.name) + '<div>' + esc(STATE_TEXT[st.state][2]) + '</div></div>' + stateChip(st) + '</div>';
       }).join('') + '</div>';
@@ -1210,13 +1210,14 @@
         return '<button class="pick" draggable="true" data-drag-design="' + esc(d.tool + ':' + d.id) + '" data-act="place-design" data-key="' + esc(d.tool + ':' + d.id) + '">' +
           '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
           '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span><span>' + esc(designStat(s)) + '</span></div>' +
-          '<div class="pick-tags">' + srcChip(d.tool) + '</div></div></button>';
+          '<div class="pick-tags">' + srcChip(d.tool) + (P.isAssemblyDesign(d) ? '<span>Assembly</span>' : '') + '</div></div></button>';
       }).join('') + '</div></section>';
   }
   function designPart(p, key, parent) {
     var d = index && index.entries[key];
     if (!d) return null;
-    var node = P.newNode(p, { kind: 'part', name: d.name || d.id, number: d.number || '', parent: parent || '', source: d.tool, ref: { tool: d.tool, id: d.id }, qty: 1,
+    var asm = P.isAssemblyDesign(d);   // a review of an assembly (Signoff ME) makes an assembly node
+    var node = P.newNode(p, { kind: asm ? 'assembly' : 'part', name: d.name || d.id, number: d.number || '', parent: parent || '', source: d.tool, ref: { tool: d.tool, id: d.id }, qty: 1,
       identAt: P.isDrawing(d.tool) && d.summary ? d.summary.identAt || '' : undefined }, me());
     p.nodes[node.id] = node;
     return node;
@@ -1314,8 +1315,8 @@
     function branch(id) {
       var n = t.nodes[id], r = rolls[id], list = t.children[id] || [];
       return '<div class="tm-asm" data-drop="' + esc(id) + '"><div class="tm-head">' +
-        '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
-        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' +
+        '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + (P.isLinkedAssembly(n) ? ' linked' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
+        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' + ownChip(n) +
         '<span class="tm-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') + '</button>' +
         (list.length ? '<button class="icon-btn tm-fold' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" title="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '" aria-expanded="' + !ui.closed[id] + '" aria-label="' + (ui.closed[id] ? 'Expand ' : 'Collapse ') + esc(n.name) + '">' + ICON.chev + '</button>' : '') +
         '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(n.name) + '">' + ICON.plus + '</button></div>' +
@@ -1325,13 +1326,22 @@
     var name = n ? n.name || 'Unnamed' : p.meta.name, num = n ? n.number : p.meta.number;
     var trunk = '<div class="tm-head tm-top-head"><button class="tm-top' + (ui.sel === id ? ' sel' : '') + '" data-act="select-node" data-id="' + esc(id) + '">' +
       ring(r.designs ? r.pct : 0, 54, 6, r.designs ? pct(r.pct) + '%' : '—') +
-      '<span class="tm-top-text"><span class="tm-eyebrow">' + (top ? 'Top assembly' : 'Product') + (num ? ' · ' + esc(num) : '') + '</span>' +
+      '<span class="tm-top-text"><span class="tm-eyebrow">' + (top ? 'Top assembly' : 'Product') + (num ? ' · ' + esc(num) : '') + (n ? ownChip(n) : '') + '</span>' +
       '<span class="tm-top-name">' + esc(name) + '</span>' +
       '<span class="tm-sub">' + [plural(r.parts, 'Part'), r.designs && plural(r.designs, 'design'), r.massG && fmtMass(r.massG)].filter(Boolean).join(' · ') + '</span></span>' +
       (r.openTotal ? sevs(r.open) : '<span class="tm-sub">No open issues</span>') + '</button>' +
       (top ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(top) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button>'
         : '<button class="icon-btn" data-act="add-node" title="Add a Part or assembly" aria-label="Add a Part or assembly">' + ICON.plus + '</button>') + '</div>';
     return trayHtml(p) + '<div class="tm"><div class="tm-trunk" data-drop="' + esc(top) + '">' + trunk + kids(top ? t.children[top] || [] : t.roots) + '</div></div>';
+  }
+
+  // An assembly's own review (an ME review of the whole assembly, P.linkStatus): its tool's chip and
+  // stage beside the assembly's name, or what's wrong with the link.
+  function ownChip(n) {
+    if (!P.isLinkedAssembly(n)) return '';
+    var st = P.linkStatus(n, index), s = st.summary;
+    return '<span class="tm-own" title="' + esc('Reviewed as an assembly in ' + P.toolById(n.source).name) + '">' + srcChip(n.source) +
+      (s ? '<span>' + esc(s.stage || '') + '</span>' : st.entry ? '<span>' + esc(st.entry.stage || '') + '</span>' : stateChip(st)) + '</span>';
   }
 
   function tile(n) {
@@ -1409,6 +1419,10 @@
     }
     if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
     if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
+    if (P.isAssemblyDesign(st.entry)) {
+      html += '<div class="ins-own"><p class="map-ins-text">' + srcChip(n.source) + ' ' + esc(tool.name) + ' reviews this as an assembly. Link it to an assembly here and the review shows on that branch, counted with the Parts inside it.</p>' +
+        '<button class="btn" data-act="asm-link" data-id="' + esc(id) + '">Link to an assembly…</button></div>';
+    }
     var solo = P.soloPart(t) === id && P.topAssembly(t);
     return html + '<div class="map-ins-acts">' + (tool && (st.state === 'ok' || st.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '">Open in ' + esc(tool.name) + '</a>' : '') +
       '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button>' +
@@ -1424,6 +1438,8 @@
     var html = '<aside class="map-ins card" aria-label="' + esc(name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>' +
       '<div class="ins-eyebrow">' + kind + '</div><h2>' + esc(name) + '</h2>' +
       (where.length ? '<p class="map-ins-sub">' + esc(where.join(' · ')) + '</p>' : '');
+    var own = !prod && P.isLinkedAssembly(n) ? P.linkStatus(n, index) : null;
+    if (own) html += ownReviewHtml(n, own);
     html += '<div class="map-ins-row">' + ring(r.designs ? r.pct : 0, 64, 7, r.designs ? pct(r.pct) + '%' : '—') + '<div>' +
       (r.designs ? '<b>' + pct(r.pct) + '% reviewed</b><br>across ' + plural(r.designs, 'linked design') : '<b>No linked designs yet</b>') + '</div></div>';
     var attn = r.unlinked + r.attention;
@@ -1448,14 +1464,31 @@
     }
     var stages = Object.keys(r.stages).sort();
     if (stages.length) html += '<div class="ins-stages"><div class="ins-label">Stages</div>' + stages.map(function (k) { var s = k.split(':'); return '<span>' + srcChip(s[0]) + ' ' + esc(s.slice(1).join(':')) + (r.stages[k] > 1 ? ' ×' + r.stages[k] : '') + '</span>'; }).join('') + '</div>';
-    var iss = P.issues(p, index).filter(function (i) { return prod || inside[i.node.id]; }), shown = iss.slice(0, 5);
+    var iss = P.issues(p, index).filter(function (i) { return prod || i.node.id === id || inside[i.node.id]; }), shown = iss.slice(0, 5);
     if (shown.length) {
       html += '<div class="map-ins-issues"><div class="ins-label">Top open issues</div>' + shown.map(function (i) {
         return '<a href="' + esc(designUrl(i.node, i.id)) + '"><span class="sev ' + esc(i.severity) + '">' + cap(i.severity) + '</span><span>' + esc(i.text) + '<span class="ins-from"> · ' + esc(i.node.name) + '</span></span></a>';
       }).join('') + (iss.length > shown.length ? '<button class="ins-more" data-act="view" data-view="issues">All ' + esc(iss.length) + ' in Issues ›</button>' : '') + '</div>';
     }
     return html + '<div class="map-ins-acts">' + (prod ? '<button class="btn" data-act="edit-project">Edit project</button><button class="btn" data-act="add-node">' + ICON.plus + ' Add</button>'
-      : '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button><button class="btn" data-act="add-child" data-id="' + esc(id) + '">' + ICON.plus + ' Add inside</button>') + '</div></aside>';
+      : (own && (own.state === 'ok' || own.state === 'nosummary') ? '<a class="btn btn-primary" href="' + esc(designUrl(n)) + '">Open in ' + esc(P.toolById(n.source).name) + '</a>' : '') +
+        '<button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit</button><button class="btn" data-act="add-child" data-id="' + esc(id) + '">' + ICON.plus + ' Add inside</button>') + '</div></aside>';
+  }
+  // The review of the assembly itself, above the roll-up of what's in it.
+  function ownReviewHtml(n, st) {
+    var e = st.entry || {}, s = st.summary;
+    var html = '<div class="ins-own"><div class="ins-label">' + srcChip(n.source) + ' Reviewed as an assembly</div>';
+    if (s) {
+      var open = (s.issues || {}).open || {}, total = P.SEVERITIES.reduce(function (a, k) { return a + (Number(open[k]) || 0); }, 0);
+      html += '<div class="ins-own-row"><b>' + esc(e.name || s.name || n.name) + '</b><span>' + esc([e.number, e.revision && 'Rev ' + e.revision, s.stage || e.stage].filter(Boolean).join(' · ')) + '</span></div>' +
+        '<div class="ins-own-row">' + pbar(s.pct) + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div>';
+      var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
+      if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
+      if (s.at) html += '<p class="note">Edited ' + relTime(s.at) + (s.by ? ' by ' + esc(s.by) : '') + '</p>';
+    } else if (STATE_TEXT[st.state]) {
+      html += '<p class="map-ins-text">' + stateChip(st) + ' ' + esc(STATE_TEXT[st.state][2]) + '</p>';
+    }
+    return html + '<p class="note">The progress below counts it with the designs inside.</p></div>';
   }
 
   function listTable(t, rolls, ids) {
@@ -1471,11 +1504,12 @@
         var progress = n.kind === 'assembly' ? (r.designs ? pbar(r.pct) : '<span class="muted">—</span>')
           : st.state === 'ok' ? (st.summary.harness ? '<span class="muted">' + esc(designStat(st.summary)) + '</span>' : pbar(st.summary.pct)) : st.state === 'purchased' ? '<span class="muted">Purchased</span>' : stateChip(st);
         var issues = n.kind === 'assembly' ? (r.designs ? sevs(r.open) : '') : st.state === 'ok' ? sevs((st.summary.issues || {}).open || {}) : '';
-        var stage = n.kind === 'part' && st.state === 'ok' ? esc(st.summary.stage || '') : n.kind === 'part' && st.entry ? esc(st.entry.stage || '') : '';
+        var own = P.linkStatus(n, index);   // a Part's design, or an assembly's own review
+        var stage = own && own.state === 'ok' ? esc(own.summary.stage || '') : own && own.entry ? esc(own.entry.stage || '') : '';
         var mass = n.kind === 'assembly' ? (r.massG ? fmtMass(r.massG) : '') : n.massG != null && n.massG !== '' ? fmtMass(Number(n.massG) * (n.qty || 1)) : '';
         return '<tr class="' + (n.kind === 'assembly' ? 'asm' : 'part') + '" data-act="edit-node" data-id="' + esc(id) + '">' +
           '<td><div class="t-name" style="padding-left:' + (t.depth[id] * 20) + 'px">' + caret + '<div class="t-label">' + flag + '<b>' + esc(n.name || 'Unnamed') + '</b>' + (sub ? '<div class="t-sub">' + esc(sub) + '</div>' : '') + '</div></div></td>' +
-          '<td>' + (n.kind === 'part' ? srcChip(n.source) : '') + '</td>' +
+          '<td>' + (n.kind === 'part' || P.isLinkedAssembly(n) ? srcChip(n.source) : '') + '</td>' +
           '<td class="hide-narrow">' + stage + '</td><td>' + progress + '</td><td>' + issues + '</td>' +
           '<td class="num hide-narrow">' + (n.kind === 'part' && n.qty > 1 ? '×' + n.qty : '') + '</td><td class="num hide-narrow">' + mass + '</td>' +
           '<td class="t-acts">' + (n.kind === 'assembly' ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside">' + ICON.plus + '</button>' : '') +
@@ -1749,6 +1783,8 @@
 
     var kind = n.kind, source = n.source || '';
     var linked = P.refKey(n.ref);   // "tool:id" of the picked design, or ''
+    // An assembly may link a review of the whole assembly (summary.kind 'assembly'; P.linkStatus).
+    function isAsmKey(k) { return !!k && (P.isAssemblyDesign(index && index.entries[k]) || (n.kind === 'assembly' && k === P.refKey(n.ref))); }
     // A Part is an existing design from a Signoff tool, one to be made in a tool that isn't started yet
     // (it waits in that tool's From Signoff PL list and links itself once started there; pl.js
     // claimPlanned), or a generic Part you type in (purchased). New Parts start on the design list.
@@ -1761,7 +1797,7 @@
     // Design cards, those of this product's client project first. A design another Part already
     // links to is marked, not hidden: the same board can be used twice.
     function pickCards(q) {
-      var list = allDesigns(), mine = String(p.meta.name || '').toLowerCase(), used = {};
+      var list = allDesigns().filter(function (d) { return kind !== 'assembly' || P.isAssemblyDesign(d); }), mine = String(p.meta.name || '').toLowerCase(), used = {};
       P.flatten(t).forEach(function (x) { if (x !== id && t.nodes[x].ref) used[P.refKey(t.nodes[x].ref)] = 1; });
       var shown = list.filter(function (d) {
         return !q || [d.name, d.number, d.summary && d.summary.project, (P.toolById(d.tool) || {}).short].join(' ').toLowerCase().indexOf(q) >= 0;
@@ -1774,7 +1810,7 @@
           '<div class="map-art">' + art({ source: d.tool, number: d.number }, false, d) + '</div><div class="pick-body"><div class="map-name">' + esc(d.name || d.id) + '</div>' +
           '<div class="map-meta"><span>' + esc([d.number, d.revision && 'Rev ' + d.revision].filter(Boolean).join(' · ')) + '</span>' +
           (s ? '<span>' + (s.harness ? esc(designStat(s)) : esc(s.stage || d.stage || '') + (s.stage || d.stage ? ' · ' : '') + pct(s.pct) + '%') + '</span>' : '<span>Not summarized yet</span>') + '</div>' +
-          '<div class="pick-tags">' + srcChip(d.tool) + (s && s.project && here.indexOf(d) < 0 ? '<span>' + esc(s.project) + '</span>' : '') +
+          '<div class="pick-tags">' + srcChip(d.tool) + (P.isAssemblyDesign(d) ? '<span>Assembly</span>' : '') + (s && s.project && here.indexOf(d) < 0 ? '<span>' + esc(s.project) + '</span>' : '') +
             (used[key] ? '<span>In use</span>' : '') + (d.archived ? '<span>Archived</span>' : '') + '</div></div></button>';
       }
       var missing = linked && !list.some(function (d) { return d.tool + ':' + d.id === linked; });
@@ -1789,7 +1825,15 @@
     }
     function linkFields() {
       var box = w.querySelector('#f-link');
-      if (kind !== 'part') { box.innerHTML = ''; return; }
+      if (kind !== 'part') {
+        var asms = allDesigns().filter(function (d) { return P.isAssemblyDesign(d); });
+        box.innerHTML = '<div class="field"><span class="field-label">Review of this assembly (optional)</span>' +
+          (asms.length || linked ? (asms.length > 6 ? '<input class="input" id="f-ref-q" type="search" placeholder="Search assembly reviews" autocomplete="off" aria-label="Search assembly reviews">' : '') +
+            '<div class="pick-grid" id="f-ref-list">' + pickCards('') + '</div><p class="note">A Signoff ME part marked as an assembly in its details. Its review shows on this branch and counts with the Parts inside. Click it again to unlink.</p>'
+            : '<p class="note">None yet. In Signoff ME, open a part’s details and choose <b>An assembly</b>; after the next sync it can be linked here.</p>') + '</div>';
+        loadPictures(box);
+        return;
+      }
       var list = allDesigns(), tools = orList(C.tools.map(function (x) { return x.short; }));
       var html = '<div class="field"><div class="seg full" id="f-mode">' + [['design', 'Existing ' + tools + ' design'], ['planned', 'Placeholder for ' + tools], ['generic', 'Generic Part']].map(function (m) {
         return '<button type="button" class="' + (mode === m[0] ? 'on' : '') + '" data-mode="' + m[0] + '">' + esc(m[1]) + '</button>';
@@ -1871,11 +1915,16 @@
       e.preventDefault(); e.stopPropagation();
       readFile(e.dataTransfer.files[0]);
     });
+    function setKind(k) {
+      kind = k;
+      w.querySelectorAll('#f-kind button').forEach(function (b) { b.classList.toggle('on', b.dataset.kind === k); });
+      partFields();
+    }
     partFields();
     w.addEventListener('input', function (e) { if (e.target.id === 'f-ref-q') refreshPicks(); });
     w.addEventListener('click', function (e) {
       var k = e.target.closest('[data-kind]');
-      if (k) { kind = k.dataset.kind; w.querySelectorAll('#f-kind button').forEach(function (b) { b.classList.toggle('on', b === k); }); partFields(); return; }
+      if (k) { setKind(k.dataset.kind); return; }
       var md = e.target.closest('[data-mode]');
       if (md) {
         mode = md.dataset.mode; generic = mode === 'generic';
@@ -1891,11 +1940,16 @@
       if (pk) {
         linked = linked === pk.dataset.pick ? '' : pk.dataset.pick;
         if (linked) source = linked.split(':')[0];
+        // ME is the source of truth: a review of an assembly makes this an assembly.
+        if (linked && kind === 'part' && isAsmKey(linked)) { setKind('assembly'); toast('That review is of an assembly, so this is an assembly'); }
+        var asmPick = kind === 'assembly' && linked && isAsmKey(linked);
         var d = allDesigns().filter(function (x) { return x.tool + ':' + x.id === linked; })[0];
         // The Part takes the design's name and number, unless you've typed your own.
+        // An assembly takes its review's name and number even over typed ones (ME is the source of truth;
+        // they can still be edited before Save).
         [['#f-name', 'name'], ['#f-number', 'number']].forEach(function (f) {
           var el = w.querySelector(f[0]);
-          if (!el.value.trim() || el.value === el.dataset.auto) { el.value = d ? d[f[1]] || '' : ''; el.dataset.auto = el.value; }
+          if ((asmPick && d) || !el.value.trim() || el.value === el.dataset.auto) { el.value = d ? d[f[1]] || '' : ''; el.dataset.auto = el.value; }
         });
         refreshPicks(); return;
       }
@@ -1912,6 +1966,22 @@
       var parent = val(w, '#f-parent');
       if (id && !P.canMove(t, id, parent)) { toast('An assembly can’t go inside itself'); return; }
       var fields = { kind: kind, name: name, number: val(w, '#f-number'), parent: parent, notes: val(w, '#f-notes') };
+      var dupes = [];
+      if (kind === 'assembly') {
+        var ak = isAsmKey(linked) ? linked : '';
+        fields.source = ak ? ak.split(':')[0] : '';
+        fields.ref = ak ? { tool: ak.split(':')[0], id: ak.split(':').slice(1).join(':') } : null;
+        // A Part that links the same review stood for the assembly until now, so it can go (Chris:
+        // the enclosure Part goes away and the branch becomes the enclosure).
+        // Only a Part that carries nothing an assembly can't hold goes; one with a mass, model, or
+        // quantity stays (it may be one of several physical parts that share the review).
+        var same = ak && ak !== P.refKey(n.ref) ? P.flatten(t).filter(function (x) { return x !== id && t.nodes[x].kind === 'part' && P.refKey(t.nodes[x].ref) === ak; }) : [];
+        dupes = same.filter(function (x) { return !partCarries(t.nodes[x]).length; });
+        var kept = same.filter(function (x) { return dupes.indexOf(x) < 0; });
+        if (dupes.length && !confirm(dupes.map(function (x) { return t.nodes[x].name || 'A Part'; }).join(', ') + (dupes.length === 1 ? ' links' : ' link') + ' the same review. Remove ' + (dupes.length === 1 ? 'it' : 'them') + ', now that this assembly stands for it?' +
+          (kept.length ? '\n\n' + kept.map(function (x) { return (t.nodes[x].name || 'A Part') + ' (' + partCarries(t.nodes[x]).join(', ') + ')'; }).join(', ') + ' also ' + (kept.length === 1 ? 'links' : 'link') + ' it and stay' + (kept.length === 1 ? 's' : '') + '; delete ' + (kept.length === 1 ? 'it' : 'them') + ' yourself if not needed.' : ''))) dupes = [];
+      }
+      function dropDupes() { dupes.forEach(function (x) { p.nodes[x] = M.stamp(Object.assign({}, p.nodes[x], { deleted: true }), me()); if (ui.sel === x) ui.sel = ''; }); }
       if (kind === 'part') {
         var refId = mode === 'design' ? linked.split(':')[1] || '' : '', mass = val(w, '#f-mass'), qty = parseInt(val(w, '#f-qty'), 10);
         Object.assign(fields, {
@@ -1944,12 +2014,52 @@
       }
       if (id) {
         if (parent !== (n.parent || '')) fields.order = P.nextOrder(p, parent);
-        closeSheet(); setNode(id, fields); attach(id); return;
+        dropDupes(); closeSheet(); setNode(id, fields); attach(id); return;
       }
       var node = P.newNode(p, fields, me());
       p.nodes[node.id] = node;
       if (parent) delete ui.closed[parent];
-      closeSheet(); touch(p); attach(node.id);
+      dropDupes(); closeSheet(); touch(p); attach(node.id);
+    });
+  }
+
+  // What a Part carries that an assembly can't (assemblies have no mass, model, or quantity), so
+  // replacing the Part with an assembly would lose it.
+  function partCarries(n) {
+    return [n.massG != null && n.massG !== '' && 'a mass', modelOf(n) && 'a 3D model', n.qty > 1 && 'a quantity of ' + n.qty].filter(Boolean);
+  }
+  // A Part linked to a review of an assembly (summary.kind 'assembly'): pick the assembly that stands
+  // for it, or make one where the Part is. The assembly takes the link and the review's name and
+  // number (ME is the source of truth), and the Part is removed.
+  function asmLinkSheet(partId) {
+    var p = current(), t = P.tree(p), n = t.nodes[partId], st = P.partStatus(n, index), e = st && st.entry;
+    if (!e) return;
+    var asms = P.flatten(t).filter(function (x) { return t.nodes[x].kind === 'assembly'; });
+    var guess = asms.filter(function (x) { return !P.isLinkedAssembly(t.nodes[x]) && (t.nodes[x].name || '').toLowerCase() === (e.name || '').toLowerCase(); })[0] || '';
+    var carries = partCarries(n);
+    var w = sheet('<div class="sheet-head"><h2>Link ' + esc(e.name || n.name) + ' to an assembly</h2><p>' + esc(P.toolById(n.source).name) + ' reviews it as an assembly. The assembly you pick takes the review, its name, and its number' +
+      (carries.length ? '. This Part has ' + esc(orList(carries).replace(' or ', ' and ')) + ', which an assembly can’t hold.' : ', and this Part is removed.') + '</p></div>' +
+      '<div class="sheet-body"><div class="field"><label for="f-asm">Assembly</label><select class="input" id="f-asm">' +
+      '<option value="@new">A new assembly where this Part is</option>' + asms.map(function (x) {
+        var a = t.nodes[x], taken = P.isLinkedAssembly(a);
+        return '<option value="' + esc(x) + '"' + (x === guess ? ' selected' : '') + (taken ? ' disabled' : '') + '>' + ' '.repeat(t.depth[x]) + esc(a.name || 'Unnamed') + (taken ? ' (has a review)' : '') + '</option>';
+      }).join('') + '</select><p class="note">The Parts already in it stay where they are.</p></div>' +
+      (carries.length ? '<label class="check"><input type="checkbox" id="f-keep" checked> Keep this Part inside the assembly (it still links the review, which counts once)</label>' : '') + '</div>' +
+      '<div class="sheet-foot"><span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">Link</button></div>');
+    w.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-sheet]'); if (!b) return;
+      if (b.dataset.sheet === 'cancel') return closeSheet();
+      var pick = val(w, '#f-asm'), f = { source: n.source, ref: { tool: n.ref.tool, id: n.ref.id }, name: e.name || n.name, number: e.number || n.number || '' }, target;
+      if (pick === '@new') {
+        var a = P.newNode(p, Object.assign({ kind: 'assembly', parent: n.parent || '', order: n.order }, f), me());
+        p.nodes[a.id] = a; target = a.id;
+      } else {
+        p.nodes[pick] = M.stamp(Object.assign({}, p.nodes[pick], f), me()); target = pick;
+      }
+      var keepIt = carries.length && w.querySelector('#f-keep').checked;
+      p.nodes[partId] = M.stamp(Object.assign({}, n, keepIt ? { parent: target, order: P.nextOrder(p, target) } : { deleted: true }), me());
+      ui.sel = target; delete ui.closed[target]; saveUi();
+      closeSheet(); touch(p); toast('Linked to ' + (p.nodes[target].name || 'the assembly'));
     });
   }
 
@@ -2335,6 +2445,7 @@
       case 'edit-project': projectSheet(current()); break;
       case 'add-child': e.stopPropagation(); nodeSheet(null, { parent: id }); break;
       case 'edit-node': nodeSheet(id); break;
+      case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
       case 'xs-view': case 'xs-fit': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
@@ -2356,7 +2467,7 @@
       case 'place-all': placeAll(current()); break;
       case 'place-design': (function () {
         var d = index && index.entries[el.dataset.key];
-        if (d) nodeSheet(null, { source: d.tool, ref: { tool: d.tool, id: d.id }, name: d.name || d.id, number: d.number || '' });
+        if (d) nodeSheet(null, { kind: P.isAssemblyDesign(d) ? 'assembly' : 'part', source: d.tool, ref: { tool: d.tool, id: d.id }, name: d.name || d.id, number: d.number || '' });
       })(); break;
       case 'open-url': if (el.dataset.url) location.href = el.dataset.url; break;
       case 'toggle-node': e.stopPropagation(); if (ui.closed[id]) delete ui.closed[id]; else ui.closed[id] = 1; saveUi(); renderPage(); break;

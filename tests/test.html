@@ -225,6 +225,40 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(P.claimedElsewhere(eeSum, [wp], 'ee'), 'an EE board started from a waiting Part stays out of trays');
   eq(P.claimPlanned(wp, { entries: { 'ee:pnew': { tool: 'ee', id: 'pnew', summary: eeSum } }, errors: [] }, 'ann'), [wee.id], '…and its Part links to it');
 
+  // ── An assembly linked to a review of the whole assembly (Signoff ME summary.kind 'assembly') ──
+  ok(Signoff.plReader.cleanSummary({ kind: 'assembly' }).kind === 'assembly' && !('kind' in Signoff.plReader.cleanSummary({ kind: 'part' })), 'the reader keeps summary.kind only as assembly');
+  function meSum(name, total, reviewed, major, reqs) {
+    return Signoff.plReader.cleanSummary({ tool: 'ME', name: name, project: 'Gizmo', stage: 'Detailed design', total: total, reviewed: reviewed, pct: Math.round(100 * reviewed / total),
+      kind: name === 'Enclosure' ? 'assembly' : undefined, issues: { open: { major: major }, fixed: 0, waived: 0 },
+      open: major ? [{ id: 'pd-1', severity: 'major', text: 'Wall too thin', checklist: 'Part design' }] : [],
+      reqList: (reqs || []).map(function (r) { return { id: r, ref: 'REQ-001', text: 'Fits the bracket', status: 'approved', verify: 'open', state: 'open', discipline: 'me' }; }) });
+  }
+  var lap = P.newProject({ name: 'Gizmo' }, 'ann'), latop = node(lap, { kind: 'assembly', name: 'Gizmo' });
+  var lmech = node(lap, { parent: latop.id, kind: 'assembly', name: 'Mechanical' });
+  var lcov = node(lap, { parent: lmech.id, name: 'Cover', source: 'me', ref: { tool: 'me', id: 'mcov' }, massG: 20 });
+  var lold = node(lap, { parent: latop.id, name: 'Enclosure', source: 'me', ref: { tool: 'me', id: 'menc' } });
+  var laix = { entries: { 'me:menc': { tool: 'me', id: 'menc', name: 'Enclosure', summary: meSum('Enclosure', 10, 5, 1, ['rq1']) }, 'me:mcov': { tool: 'me', id: 'mcov', name: 'Cover', summary: meSum('Cover', 10, 10, 0) } }, errors: [] };
+  ok(P.isAssemblyDesign(laix.entries['me:menc']) && !P.isAssemblyDesign(laix.entries['me:mcov']), 'a review says whether it is of an assembly');
+  ok(P.linkStatus(lmech, laix) === null && P.partStatus(lmech, laix) === null, 'an assembly that links nothing has no status');
+  // Chris's case: the Enclosure Part goes, and the Mechanical branch becomes the enclosure.
+  lap.nodes[lmech.id] = Object.assign({}, lap.nodes[lmech.id], { name: 'Enclosure', source: 'me', ref: { tool: 'me', id: 'menc' } });
+  lap.nodes[lold.id] = Object.assign({}, lap.nodes[lold.id], { deleted: true });
+  var lmn = lap.nodes[lmech.id];
+  ok(P.isLinkedAssembly(lmn) && P.linkStatus(lmn, laix).state === 'ok' && P.partStatus(lmn, laix) === null, 'a linked assembly reads its review (linkStatus), and partStatus still says it isn’t a Part');
+  var lar = P.rollup(lap, laix);
+  ok(lar[lmech.id].parts === 1 && lar[lmech.id].designs === 2 && lar[lmech.id].total === 20 && lar[lmech.id].reviewed === 15 && lar[lmech.id].open.major === 1,
+    'the assembly’s own review counts in its roll with the Parts inside, but not as a Part');
+  ok(lar[latop.id].designs === 2 && lar[''].designs === 2 && lar[''].pct === 75 && lar[''].massG === 20 && lar[''].massMissing === 0, '…and in every roll above it, adding no mass');
+  eq(P.issues(lap, laix).map(function (i) { return [i.node.id, i.id]; }), [[lmech.id, 'pd-1']], 'its open issues are listed, on the assembly');
+  ok(P.rollup(lap, laix)[''].stages['me:Detailed design'] === 2, 'its stage is counted');
+  ok(Signoff.plReqs.items(lap, laix).some(function (it) { return it.home.project === 'menc' && it.nodes[0] === lmech.id; }), 'its requirements show in the Requirements tab, under the assembly');
+  var labom = P.bom(lap, laix).rows.filter(function (r) { return r.id === lmech.id; })[0];
+  ok(labom.kind === 'assembly' && labom.source === 'me' && labom.stage === 'Detailed design' && labom.pct === 50 && labom.qty === null, 'the BOM shows the assembly’s review on its row');
+  eq(new Signoff.PLSharer({ owner: 'own', token: 't', fetch: function () {}, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' } }).items(lap).map(function (x) { return x.tool + ':' + x.id; }).sort(),
+    ['me:mcov', 'me:menc', 'pl:' + lap.id], 'sharing the project shares the assembly’s review too');
+  var laacc = new Signoff.PLAccess({ docs: [lap], rosters: {}, invites: {}, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, owner: 'own', nameOf: function () { return ''; } });
+  ok(Object.keys(laacc.nodes).some(function (k) { return laacc.nodes[k].key === 'me:menc'; }), 'People & access lists the assembly’s review');
+
   // Board previews stored by Fabcheck next to a review (EE docs/fabcheck-link.md, "Board previews").
   var phub = new FakeHub();
   var pindex = { v: 1, tool: 'fabcheck', runId: 'r1', at: '2026-11-01T00:00:00Z', hero: 'top', images: [

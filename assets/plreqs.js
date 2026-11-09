@@ -58,7 +58,7 @@
     var t = P.tree(project), out = [], byDesign = {};
     P.flatten(t).forEach(function (id) {
       var n = t.nodes[id], k = P.refKey(n.ref);
-      if (n.kind !== 'part' || !k) return;
+      if ((n.kind !== 'part' && !P.isLinkedAssembly(n)) || !k) return;   // a Part's design, or an assembly's own
       (byDesign[k] = byDesign[k] || []).push(id);
     });
     Object.keys(byDesign).forEach(function (k) {
