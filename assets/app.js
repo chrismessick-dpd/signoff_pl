@@ -1316,8 +1316,9 @@
       var n = t.nodes[id], r = rolls[id], list = t.children[id] || [];
       return '<div class="tm-asm" data-drop="' + esc(id) + '"><div class="tm-head">' +
         '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + (P.isLinkedAssembly(n) ? ' linked' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
-        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' + ownChip(n) +
+        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-title"><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' + (asmNumber(n) ? '<span class="tm-pn">' + esc(asmNumber(n)) + '</span>' : '') + '</span>' + ownChip(n) +
         '<span class="tm-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') + '</button>' +
+        ownOpen(n) +
         (list.length ? '<button class="icon-btn tm-fold' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" title="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '" aria-expanded="' + !ui.closed[id] + '" aria-label="' + (ui.closed[id] ? 'Expand ' : 'Collapse ') + esc(n.name) + '">' + ICON.chev + '</button>' : '') +
         '<button class="icon-btn" data-act="add-child" data-id="' + esc(id) + '" title="Add inside" aria-label="Add inside ' + esc(n.name) + '">' + ICON.plus + '</button></div>' +
         (ui.closed[id] && list.length ? '' : list.length ? kids(list) : '<div class="tm-kids"><div class="tm-item tm-leaves"><div class="map-empty">Empty: drag a Part here, or use +</div></div></div>') + '</div>';
@@ -1330,6 +1331,7 @@
       '<span class="tm-top-name">' + esc(name) + '</span>' +
       '<span class="tm-sub">' + [plural(r.parts, 'Part'), r.designs && plural(r.designs, 'design'), r.massG && fmtMass(r.massG)].filter(Boolean).join(' · ') + '</span></span>' +
       (r.openTotal ? sevs(r.open) : '<span class="tm-sub">No open issues</span>') + '</button>' +
+      (n ? ownOpen(n) : '') +
       (top ? '<button class="icon-btn" data-act="add-child" data-id="' + esc(top) + '" title="Add inside" aria-label="Add inside ' + esc(name) + '">' + ICON.plus + '</button>'
         : '<button class="icon-btn" data-act="add-node" title="Add a Part or assembly" aria-label="Add a Part or assembly">' + ICON.plus + '</button>') + '</div>';
     return trayHtml(p) + '<div class="tm"><div class="tm-trunk" data-drop="' + esc(top) + '">' + trunk + kids(top ? t.children[top] || [] : t.roots) + '</div></div>';
@@ -1342,6 +1344,19 @@
     var st = P.linkStatus(n, index), s = st.summary;
     return '<span class="tm-own" title="' + esc('Reviewed as an assembly in ' + P.toolById(n.source).name) + '">' + srcChip(n.source) +
       (s ? '<span>' + esc(s.stage || '') + '</span>' : st.entry ? '<span>' + esc(st.entry.stage || '') + '</span>' : stateChip(st)) + '</span>';
+  }
+
+  // An assembly's number under its name: its own, else its review's.
+  function asmNumber(n) {
+    var st = P.isLinkedAssembly(n) ? P.linkStatus(n, index) : null;
+    return n.number || (st && st.entry && st.entry.number) || '';
+  }
+  // A link beside a linked assembly's head that opens its review (in the same tab, like every tool link).
+  function ownOpen(n) {
+    if (!P.isLinkedAssembly(n)) return '';
+    var st = P.linkStatus(n, index), tool = P.toolById(n.source);
+    if (st.state !== 'ok' && st.state !== 'nosummary') return '';
+    return '<a class="tm-open" href="' + esc(designUrl(n)) + '" title="Open ' + esc(n.name || 'it') + ' in ' + esc(tool.name) + '">Open in ' + esc(tool.short) + ' ›</a>';
   }
 
   function tile(n) {

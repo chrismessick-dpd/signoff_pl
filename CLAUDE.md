@@ -53,6 +53,8 @@ Notes on behavior:
   drops the synced projects from the browser (`P.lockOut`) and keeps unsynced ones hidden. No
   designs are read for non-FTEs. There's no local-only mode.
 - **Roll-up rules:**
+  - A design with nothing to review (no checks: requirements only) is 100%, and so is a roll-up of
+    only such designs (2026-11-09). The reader turns older summaries' 0 into 100 (`CACHE_V` 8).
   - A design used by several Parts counts once.
   - Purchased Parts, and Parts whose source has no Signoff tool, are left out of progress.
   - Mass is the sum of `massG × qty` (grams).
@@ -246,6 +248,8 @@ A mechanical part may be an assembly: Signoff ME's details window marks it (`sum
   It's used in `rollup` (counts in the assembly's roll and every roll above, not as a Part and with no
   mass), `issues`, `unlistedIssues`, `bom`, `plreqs.js` `items`, `share.js` `items`, `access.js` (a
   `<node>~review` leaf inside the assembly), and the System panels.
+- **Map heads (2026-11-09, Chris).** Every assembly's branch shows its number under its name (`asmNumber`:
+  its own, else its review's), and a linked one has *Open in ME ›* beside it (`ownOpen`, also on the trunk).
 - **UI.** The branch head and trunk show the tool chip and stage (`ownChip`); the assembly inspector shows
   the review (`ownReviewHtml`) and Open in Signoff ME. The tray marks assembly reviews and adds them as
   assemblies. An assembly's sheet picks only assembly reviews and offers to remove Parts that link the same

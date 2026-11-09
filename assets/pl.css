@@ -296,6 +296,12 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .tm-trunk { border-radius: var(--radius); }
 .tm-head { display: flex; align-items: center; gap: 6px; }
 .tm-head > .icon-btn { width: 28px; height: 28px; flex: none; opacity: 0.55; }
+/* An assembly's name with its number under it, and the link that opens its own review. */
+.tm-title { display: inline-flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.tm-pn { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tm-open { flex: none; font-size: 12.5px; font-weight: 500; color: var(--accent); text-decoration: none; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
+.tm-open:hover { background: var(--accent-soft); }
+.tm-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tm-head:hover > .icon-btn, .tm-head > .icon-btn:focus-visible { opacity: 1; }
 .tm-fold svg { width: 14px; height: 14px; transition: transform 0.15s; }
 .tm-fold.closed { opacity: 1; color: var(--accent); }

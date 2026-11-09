@@ -259,6 +259,15 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var laacc = new Signoff.PLAccess({ docs: [lap], rosters: {}, invites: {}, tools: tools, pl: { dataRepo: 'signoff_pl_data', prefix: 'review-pl-' }, owner: 'own', nameOf: function () { return ''; } });
   ok(Object.keys(laacc.nodes).some(function (k) { return laacc.nodes[k].key === 'me:menc'; }), 'People & access lists the assembly’s review');
 
+  // Nothing to review is 100% (Chris, 2026-11-09): a review of requirements only, even one written before the engine said so.
+  var zs = Signoff.plReader.cleanSummary({ tool: 'ME', name: 'Knob', total: 0, reviewed: 0, pct: 0, checklists: { x: { name: 'X', total: 0, reviewed: 0, pct: 0 } } });
+  ok(zs.pct === 100 && zs.checklists.x.pct === 100, 'a summary with no checks reads as 100%');
+  ok(Signoff.plReader.cleanSummary({ total: 0, pct: 0, harness: { wires: 1 } }).pct === 0, '…but a harness keeps its own');
+  var zp = P.newProject({ name: 'Z' }, 'ann'), zt = node(zp, { kind: 'assembly', name: 'Top' });
+  node(zp, { parent: zt.id, name: 'Knob', source: 'me', ref: { tool: 'me', id: 'mz' } });
+  var zr = P.rollup(zp, { entries: { 'me:mz': { tool: 'me', id: 'mz', summary: zs } }, errors: [] });
+  ok(zr[''].pct === 100 && zr[zt.id].pct === 100 && zr[''].designs === 1, 'a product whose only design has nothing to review is 100%');
+
   // Board previews stored by Fabcheck next to a review (EE docs/fabcheck-link.md, "Board previews").
   var phub = new FakeHub();
   var pindex = { v: 1, tool: 'fabcheck', runId: 'r1', at: '2026-11-01T00:00:00Z', hero: 'top', images: [
@@ -289,10 +298,10 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var BAD = '"><img src=x onerror=alert(1)>';
   var badSum = { pct: BAD, total: BAD, issues: { open: { critical: BAD, major: 2 }, fixed: BAD }, open: [{ id: 'x', severity: BAD, text: 't' }], checklists: { a: { pct: 250, name: 'A' } }, name: { toString: 1 } };
   var cs = Signoff.plReader.cleanSummary(badSum);
-  ok(cs.pct === 0 && cs.total === 0 && cs.issues.open.critical === 0 && cs.issues.open.major === 2 && cs.issues.fixed === 0 && cs.open[0].severity === 'minor' && cs.checklists.a.pct === 100 && cs.name === '',
+  ok(cs.pct === 100 && cs.total === 0 && cs.issues.open.critical === 0 && cs.issues.open.major === 2 && cs.issues.fixed === 0 && cs.open[0].severity === 'minor' && cs.checklists.a.pct === 100 && cs.name === '',
     'a summary from a review file is rebuilt with numbers and known severities only', JSON.stringify(cs));
   var dirtyIx = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: badSum } } };
-  eq(Signoff.plReader.cleanIndex(dirtyIx).entries['ee:p1'].summary.pct, 0, 'an index stored in the browser is cleaned the same way');
+  eq(Signoff.plReader.cleanIndex(dirtyIx).entries['ee:p1'].summary.pct, 100, 'an index stored in the browser is cleaned the same way (no checks reads as 100%)');
   hub.makeRepo('own/review-ee-evil', { 'projects/p1.json': file('p1', 'Planted', summary(100, 99, { critical: 0, major: 0, minor: 0 })), 'projects/p7.json': file('p2', 'Renamed', null) }, ['own']);
   hub.push('own/ee_design_review_data', { 'users.json': JSON.stringify({ shared: { p1: { repo: 'own/review-ee-main' }, p2: { repo: 'own/review-ee-sensor' } } }) });
   var ix7 = await reader.refresh(ix6);

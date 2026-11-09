@@ -47,12 +47,14 @@
     Object.keys(obj(s.checklists)).forEach(function (k) {
       if (k === '__proto__') return;
       var c = obj(s.checklists[k]);
-      checklists[k] = { name: str(c.name), total: num(c.total), reviewed: num(c.reviewed), pct: num(c.pct, 100), issuesOpen: num(c.issuesOpen) };
+      checklists[k] = { name: str(c.name), total: num(c.total), reviewed: num(c.reviewed), pct: num(c.total) ? num(c.pct, 100) : 100, issuesOpen: num(c.issuesOpen) };
     });
     var q = s.reqs && typeof s.reqs === 'object' ? s.reqs : null;
     var out = {
       v: num(s.v), tool: str(s.tool), name: str(s.name), client: str(s.client), project: str(s.project), number: str(s.number), revision: str(s.revision),
-      stage: str(s.stage), archived: !!s.archived, total: num(s.total), reviewed: num(s.reviewed), pct: num(s.pct, 100),
+      // Nothing to review (no checks: requirements only) is 100%, as the engine writes since 2026-11-09;
+      // older summaries said 0. A Loom harness has no checks either, but no progress at all.
+      stage: str(s.stage), archived: !!s.archived, total: num(s.total), reviewed: num(s.reviewed), pct: num(s.total) || s.harness ? num(s.pct, 100) : 100,
       checklists: checklists, issues: { open: open, fixed: num(iss.fixed), waived: num(iss.waived) },
       reqs: q ? { total: num(q.total), approved: num(q.approved), pass: num(q.pass), fail: num(q.fail), risk: num(q.risk), open: num(q.open), unlinked: num(q.unlinked) } : null,
       at: str(s.at), by: str(s.by)
@@ -181,8 +183,8 @@
   // The shape of a cached entry. Bump it whenever keep() or cleanSummary() starts keeping a new field:
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
-  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind).
-  var CACHE_V = 7;
+  // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind; 8: pct 100 with nothing to review).
+  var CACHE_V = 8;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

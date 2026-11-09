@@ -261,7 +261,8 @@
     }
     function finish(roll) {
       roll.openTotal = SEVERITIES.reduce(function (a, s) { return a + roll.open[s]; }, 0);
-      roll.pct = roll.total ? Math.round(100 * roll.reviewed / roll.total) : 0;
+      // Linked designs with nothing to review (no checks) are done: 100%.
+      roll.pct = roll.total ? Math.round(100 * roll.reviewed / roll.total) : roll.designs ? 100 : 0;
       roll.massG = Math.round(roll.massG * 10) / 10;
       return roll;
     }
