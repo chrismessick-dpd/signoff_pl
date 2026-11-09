@@ -1,1 +1,1 @@
-window.SIGNOFF_VERSION = { hash: '1d8be156b76f', date: '2026-11-09' };
+window.SIGNOFF_VERSION = { hash: 'e1303b8e0299', date: '2026-11-09' };
