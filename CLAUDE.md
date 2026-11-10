@@ -169,6 +169,16 @@ System. PL has no view deep link.
   only Parts get `arrangePanel`; assemblies and the product get the inspector.
 - **Panels.** Map and Gallery sit in a gray `.sys-diagram` panel. Underneath, Designs is one compact
   card with a row per design (`.sys-design`), and Stages is a row of chips (Chris, 2026-11-01).
+- **Drag autoscroll (2026-11-09, Chris: moving a Part to a branch scrolled out of view was hard).** PL
+  scrolls `#main`, not the window, and `#main` has `scroll-behavior: smooth`, so the browser's own drag
+  scroll barely woke. `autoScroll` in `app.js` runs for every drag that starts in the page (Map tiles,
+  assemblies, and the tray; Requirements rows scroll too, but only the Map re-marks its target): within
+  48 px of the top or bottom of the scroller under the pointer (or past it, over the header) it scrolls
+  with `behavior: 'instant'`, faster toward the edge, stepped by time from animation frames and from
+  `dragover` (a resting pointer may get one only every ~350 ms), and re-marks `.drop-on` under the pointer
+  after each scroll. It stops on dragend, drop, or a second with no dragover (a render can detach the
+  dragged tile). Tested with synthetic drag events in a hidden pane (both directions, stops at the ends,
+  a drop on the trunk after scrolling up); a real mouse drag hasn't been tried.
 - **One Part** (`P.soloPart`), alone or in the one top assembly: the map shows a single tile that
   is both the top and the Part. Its inspector adds *Edit assembly* and *Add Part*.
 

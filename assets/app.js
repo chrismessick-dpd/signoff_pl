@@ -1394,12 +1394,66 @@
     var z = e.target.closest && e.target.closest('[data-drop]');
     return dragging && z ? z : null;
   }
+  function markDrop(z) {
+    document.querySelectorAll('.drop-on').forEach(function (x) { if (x !== z) x.classList.remove('drop-on'); });
+    if (z) z.classList.add('drop-on');
+  }
   document.addEventListener('dragover', function (e) {
     var z = dropTarget(e);
-    document.querySelectorAll('.drop-on').forEach(function (x) { if (x !== z) x.classList.remove('drop-on'); });
-    if (!z) return;
-    e.preventDefault(); z.classList.add('drop-on');
+    markDrop(z);
+    if (z) e.preventDefault();
+    autoScroll.at(e.clientX, e.clientY);   // after, so a scroll re-marks what's now under the pointer
   });
+
+  // Edge autoscroll for every drag that starts in the page (the Map's tiles, assemblies, and tray, and
+  // the Requirements tab's rows). The browser's own drag scroll only wakes in a thin strip at the
+  // scroller's edge, and PL scrolls #main, not the window. Within EDGE px of the top or bottom of the
+  // scroller under the pointer (or past it, over the header), scroll it each frame, faster toward the
+  // edge, and re-mark the drop target under the pointer, since the page moves under a still pointer.
+  var autoScroll = (function () {
+    var EDGE = 48, MAX = 22;   // px band; px per frame at (or past) the edge
+    var x = 0, y = 0, live = false, raf = 0, last = 0;
+    function scroller() {
+      for (var el = document.elementFromPoint(x, y); el && el !== document.body; el = el.parentElement) {
+        var oy = getComputedStyle(el).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+      }
+      return document.getElementById('main');   // over the header or a gap: the page's scroller
+    }
+    function speed(d) { return d >= EDGE ? 0 : MAX * Math.pow(1 - Math.max(d, 0) / EDGE, 2); }
+    // Time-based, so it runs at the same speed from animation frames and from dragover (which keeps
+    // firing while the pointer rests; frames can stall during a drag or in a hidden tab).
+    function step() {
+      // A resting pointer may get a dragover only every ~350 ms, so allow long steps
+      var now = performance.now(), dt = last ? Math.min((now - last) / 16.7, 24) : 1;
+      last = now;
+      var el = scroller(), r = el && el.getBoundingClientRect();
+      if (!r || x < r.left || x > r.right) return;
+      var up = speed(y - r.top), down = speed(r.bottom - y), v = down > up ? down : -up;
+      if (!v) return;
+      var before = el.scrollTop;
+      // 'instant': #main has scroll-behavior: smooth, which would turn each step into an animation
+      el.scrollTo({ top: before + (v > 0 ? Math.ceil(v * dt) : Math.floor(v * dt)), behavior: 'instant' });
+      if (el.scrollTop !== before && dragging) {
+        var under = document.elementFromPoint(x, y);
+        markDrop(under && under.closest('[data-drop]'));
+      }
+    }
+    // A render mid-drag can detach the dragged element, so its dragend never reaches the document:
+    // stop when no dragover has come for a second.
+    var heard = 0;
+    function frame() {
+      raf = 0;
+      if (!live) return;
+      if (performance.now() - heard > 1000) { stop(); return; }
+      step(); raf = requestAnimationFrame(frame);
+    }
+    function stop() { live = false; last = 0; if (raf) cancelAnimationFrame(raf); raf = 0; }
+    document.addEventListener('dragstart', function (e) { live = true; last = 0; heard = performance.now(); x = e.clientX; y = e.clientY; if (!raf) raf = requestAnimationFrame(frame); });
+    document.addEventListener('dragend', stop);
+    document.addEventListener('drop', stop);
+    return { at: function (cx, cy) { heard = performance.now(); if (cx || cy) { x = cx; y = cy; } if (live) step(); }, stop: stop };
+  })();
   document.addEventListener('drop', function (e) {
     var z = dropTarget(e), p = current(), what = dragging;
     if (!z || !p) return;
