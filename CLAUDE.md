@@ -262,8 +262,10 @@ A mechanical part may be an assembly: Signoff ME's details window marks it (`sum
   It's used in `rollup` (counts in the assembly's roll and every roll above, not as a Part and with no
   mass), `issues`, `unlistedIssues`, `bom`, `plreqs.js` `items`, `share.js` `items`, `access.js` (a
   `<node>~review` leaf inside the assembly), and the System panels.
-- **Map heads (2026-11-09, Chris).** Every assembly's branch shows its number under its name (`asmNumber`:
+- **Map heads (2026-11-09, Chris).** Every assembly's branch shows its number under its name (`numberOf`:
   its own, else its review's), and a linked one has *Open in ME ›* beside it (`ownOpen`, also on the trunk).
+  Tiles of Parts linked to a review (EE, ME, FW, and Loom) show their number under the name the same way
+  (`.map-pn`); purchased and generic tiles already show their MPN or number in the meta line.
 - **UI.** The branch head and trunk show the tool chip and stage (`ownChip`); the assembly inspector shows
   the review (`ownReviewHtml`) and Open in Signoff ME. The tray marks assembly reviews and adds them as
   assemblies. An assembly's sheet picks only assembly reviews and offers to remove Parts that link the same

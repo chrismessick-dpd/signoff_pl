@@ -1333,7 +1333,7 @@
       var n = t.nodes[id], r = rolls[id], list = t.children[id] || [];
       return '<div class="tm-asm" data-drop="' + esc(id) + '"><div class="tm-head">' +
         '<button class="tm-node' + (ui.sel === id ? ' sel' : '') + (P.isLinkedAssembly(n) ? ' linked' : '') + '" data-act="select-node" data-id="' + esc(id) + '" draggable="true" data-drag-node="' + esc(id) + '">' +
-        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-title"><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' + (asmNumber(n) ? '<span class="tm-pn">' + esc(asmNumber(n)) + '</span>' : '') + '</span>' + ownChip(n) +
+        '<span class="tm-glyph">' + ICON_ASM + '</span><span class="tm-title"><span class="tm-name">' + esc(n.name || 'Unnamed') + '</span>' + (numberOf(n) ? '<span class="tm-pn">' + esc(numberOf(n)) + '</span>' : '') + '</span>' + ownChip(n) +
         '<span class="tm-sub">' + plural(r.parts, 'Part') + (r.designs ? ' · ' + pct(r.pct) + '%' : '') + '</span>' + (r.openTotal ? sevs(r.open) : '') + '</button>' +
         ownOpen(n) +
         (list.length ? '<button class="icon-btn tm-fold' + (ui.closed[id] ? ' closed' : '') + '" data-act="toggle-node" data-id="' + esc(id) + '" title="' + (ui.closed[id] ? 'Expand' : 'Collapse') + '" aria-expanded="' + !ui.closed[id] + '" aria-label="' + (ui.closed[id] ? 'Expand ' : 'Collapse ') + esc(n.name) + '">' + ICON.chev + '</button>' : '') +
@@ -1363,9 +1363,9 @@
       (s ? '<span>' + esc(s.stage || '') + '</span>' : st.entry ? '<span>' + esc(st.entry.stage || '') + '</span>' : stateChip(st)) + '</span>';
   }
 
-  // An assembly's number under its name: its own, else its review's.
-  function asmNumber(n) {
-    var st = P.isLinkedAssembly(n) ? P.linkStatus(n, index) : null;
+  // The number under an assembly's or a reviewed Part's name in the Map: its own, else its review's.
+  function numberOf(n, st) {
+    if (st === undefined) st = P.linkStatus(n, index);
     return n.number || (st && st.entry && st.entry.number) || '';
   }
   // A link beside a linked assembly's head that opens its review (in the same tab, like every tool link).
@@ -1388,8 +1388,9 @@
       return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + partArt(n) + '</div>' +
         '<div class="map-body"><div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div><div class="map-meta"><span>' + esc(mpnOf(n) || n.number || (st.state === 'manual' ? 'No review tool yet' : '')) + '</span>' + srcChip(n.source) + '</div></div></button>';
     }
+    var num = numberOf(n, st);
     return '<button class="' + cls + '" data-act="select-node" data-id="' + esc(n.id) + '" draggable="true" data-drag-node="' + esc(n.id) + '"><div class="map-art">' + art(n, true, st.entry) + '</div>' +
-      '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + '</div>' +
+      '<div class="map-name">' + esc(n.name || 'Unnamed') + qty + (num ? '<span class="map-pn">' + esc(num) + '</span>' : '') + '</div>' +
       (s && !s.harness ? '<div class="bar"><i style="width:' + pct(s.pct) + '%"></i></div>' : '') +
       '<div class="map-meta">' + (s ? '<span>' + esc(designStat(s)) + '</span>' + (s.harness ? '' : sevs((s.issues || {}).open || {})) : stateChip(st)) + srcChip(n.source) + '</div></button>';
   }
