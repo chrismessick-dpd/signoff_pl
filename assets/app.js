@@ -51,6 +51,9 @@
   var index = S.plReader.cleanIndex(load('index', null));   // designs read from EE/ME (reader.js)
   var lastSync = load('lastSync', null);  // { at, errors }
   var access = load('access', { login: '', tag: '', repo: '', state: '' });   // see pl.js, Access
+  // Repository invitations from settings.owner waiting for this account, as of the last sync
+  // ({ id, repo, owner }). A shared project's repo can't be listed until its invitation is accepted.
+  var invitations = load('invitations', []);
   // Requirements comes from reqs.js and plreqs.js; without them PL runs as before.
   var VIEWS = [{ id: 'system', label: 'System' }].concat(S.plReqsView && S.plReqs ? [{ id: 'reqs', label: 'Requirements' }] : [], [{ id: 'bom', label: 'BOM' }, { id: 'issues', label: 'Issues' }]);
   var VIEW_IDS = VIEWS.map(function (v) { return v.id; });
@@ -102,6 +105,34 @@
       pl: { dataRepo: settings.dataRepo, prefix: C.repos.prefix || 'review-pl-' }, peopleRepo: C.repos.peopleRepo });
   }
   function denied() { var t = getToken(); return !!t && access.state === 'none' && access.tag === P.tokenTag(t) && access.repo === dataRepo(); }
+
+  // Waiting invitations with an Accept button, as Signoff EE shows them. `act` is the button's
+  // attribute: data-act on the page, data-sheet inside Settings. Each repo also links to its
+  // invitation on GitHub, for a token that can't accept invitations itself.
+  function inviteCard(act) {
+    if (DEMO || !getToken() || !invitations.length) return '';
+    return '<div class="invite-card"><b>' + plural(invitations.length, 'invitation') + ' from ' + esc(settings.owner) + '</b><span>' +
+      invitations.map(function (i) {
+        return '<a href="https://github.com/' + esc(i.repo) + '/invitations" target="_blank" rel="noopener" title="Open this invitation on GitHub">' + esc(String(i.repo).split('/')[1]) + '</a>';
+      }).join(', ') + '</span><button class="btn btn-primary" ' + (act || 'data-act="accept-invites"') + '>Accept</button></div>';
+  }
+  function acceptInvites() {
+    var list = invitations.slice(), token = getToken();
+    if (!list.length || !token || DEMO) return;
+    var acc = new S.GitHubAccount(token), joined = [], failed = [];
+    Promise.all(list.map(function (i) {
+      return acc.acceptInvitation(i.id).then(function () { joined.push(i.repo); }, function (err) { failed.push({ repo: i.repo, err: err }); });
+    })).then(function () {
+      invitations = invitations.filter(function (i) { return joined.indexOf(i.repo) < 0; });
+      save('invitations', invitations);
+      if (failed.length) {
+        var f = failed[0];
+        toast('Couldn’t accept ' + f.repo.split('/')[1] + ': ' + f.err.message + (f.err.status === 403 || f.err.status === 404
+          ? '. This token can’t accept invitations (a fine-grained one can’t): click the repo name to accept it on GitHub, or use a classic token with the repo scope.' : ''));
+      } else toast('Joined ' + joined.map(function (r) { return r.split('/')[1]; }).join(', '));
+      if (joined.length) sync(); else render();
+    });
+  }
 
   // ── Small helpers ────────────────────────────────────────
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -228,6 +259,8 @@
       html += '<div class="side-archived"><div class="side-head"><span class="side-label">Archived</span></div>' +
         archived.map(function (p) { return '<button class="proj" data-act="open-project" data-slug="' + esc(p.slug) + '"><span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span></span></button>'; }).join('') + '</div>';
     }
+    // A contractor with a project already open may be invited to another (the locked page shows it otherwise).
+    if (allowed()) html = inviteCard() + html;
     $('#project-list').innerHTML = html;
     // A contractor has no data repo to put a new project in, and People & access is for FTEs.
     $('.side-head [data-act="new-project"]').hidden = !(DEMO || isFte());
@@ -331,10 +364,13 @@
   function lockedPage() {
     var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
     var head = !getToken() ? ['Sign in to Signoff PL', 'Add your GitHub token in Settings. PL shows the projects once it confirms the token can open ' + repo + ' (Dovetail FTEs) or a project shared with you.']
+      : denied() && invitations.length ? ['Accept your invitation', 'You’re signed in as <b>@' + esc(access.login) + '</b>. A project has been shared with you, and GitHub is waiting for you to accept the invitation. PL syncs again once you do.']
       : denied() ? ['No projects for this account', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + ' and is on no shared PL project. An FTE adds you from People in Signoff EE, or shares a project with you from Signoff PL. Accept GitHub’s invitation, then sync again.']
       : syncing ? ['Syncing with GitHub', 'Checking that your token can open ' + repo + '. The projects show here as soon as the sync finishes.']
       : ['Not checked yet', 'PL shows the projects once a sync confirms your token can open ' + repo + '.'];
+    var card = inviteCard();
     return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
+      (card ? '<div class="invite-wrap">' + card + '</div>' : '') +
       (getToken() ? syncButton(denied() ? 'Sync again' : 'Sync', 'btn-primary') + '</button> <button class="btn" data-act="settings">Settings</button>'
         : '<button class="btn btn-primary" data-act="settings">Settings</button>') +
       (denied() && kept ? '<p class="note" style="margin-top:16px">' + plural(kept, 'unsynced project') + ' from an earlier sign-in ' + (kept === 1 ? 'stays' : 'stay') + ' in this browser, hidden. ' + (kept === 1 ? 'It’s' : 'They’re') + ' pushed the next time an FTE syncs here.</p>' : '') +
@@ -2286,8 +2322,18 @@
         return '<button type="button" class="' + (settings.theme === t[0] ? 'on' : '') + '" data-theme="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div></div>' +
       (DEMO ? '<p class="note">Git sync is off in demo mode. <a href="' + esc(location.pathname) + '">Open the full tool</a>.</p>' :
+        '<div class="field-label" style="margin-top:20px;font-size:13px;color:var(--text);font-weight:600">GitHub</div>' +
+        (access.login && token && access.tag === P.tokenTag(token) ? '<p class="note" style="margin:0 0 12px">Signed in as <b>@' + esc(access.login) + '</b> · ' +
+          (access.state === 'fte' ? 'FTE: you see every PL project' : access.state === 'contractor' ? 'Client or contractor: you see the projects shared with you' :
+            access.state === 'none' ? 'no PL project shared with you yet' : 'not synced yet') + '</p>' : '') +
+        inviteCard('data-sheet="accept"') +
+        '<details class="guide"' + (token ? '' : ' open') + '><summary>New to GitHub? Set up in four steps</summary><ol>' +
+        '<li>Create a free account at <a href="https://github.com/signup" target="_blank" rel="noopener">github.com/signup</a>.</li>' +
+        '<li>Send your username to your Dovetail contact.</li>' +
+        '<li><a href="https://github.com/settings/tokens/new?scopes=repo&amp;description=Dovetail%20Signoff" target="_blank" rel="noopener">Create a token</a> (the link fills in the settings; pick an expiry and click <i>Generate token</i>).</li>' +
+        '<li>Paste the token below and click <b>Save &amp; sync</b>. Signoff shows any invitations waiting for you, with an Accept button.</li></ol></details>' +
         '<div class="field"><label for="s-token">Access token</label><input class="input" id="s-token" type="password" value="' + esc(token) + '" placeholder="ghp_… or github_pat_…" autocomplete="off">' +
-        '<p class="note">Shared with the other Signoff tools in this browser and sent only to api.github.com. It needs to reach the PL data repo and every Signoff EE and ME repository.</p></div>' +
+        '<p class="note">Shared with the other Signoff tools in this browser and sent only to api.github.com. Clients and contractors use a classic token with the <b>repo</b> scope. An FTE’s token needs to reach the PL data repo and every Signoff EE, ME, and FW repository; sharing creates new repositories, which a fine-grained token limited to selected repositories can’t reach.</p></div>' +
         '<label class="check"><input type="checkbox" id="s-remember"' + (remembered ? ' checked' : '') + '> Remember the token after closing the browser</label>' +
         '<details class="guide" style="margin-top:14px"><summary>Repositories</summary>' +
         '<div class="row2" style="margin-top:10px"><div class="field"><label for="s-owner">Account or organization</label><input class="input" id="s-owner" value="' + esc(settings.owner) + '"></div>' +
@@ -2303,12 +2349,13 @@
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') { applyTheme(settings.theme); return closeSheet(); }
       if (b.dataset.sheet === 'signout') return signOut();
+      if (b.dataset.sheet === 'accept') { applyTheme(settings.theme); closeSheet(); acceptInvites(); return; }
       settings.user = val(w, '#s-user'); settings.theme = theme;
       if (!DEMO) {
         settings.owner = val(w, '#s-owner') || C.repos.owner; settings.branch = val(w, '#s-branch') || 'main'; settings.dataRepo = val(w, '#s-data') || C.repos.dataRepo;
         var was = getToken();
         setToken(w.querySelector('#s-token').value, w.querySelector('#s-remember').checked);
-        if (getToken() !== was) clearPictures();
+        if (getToken() !== was) { clearPictures(); invitations = []; save('invitations', invitations); }
       }
       save('settings', settings); saveSharedTheme(theme);
       closeSheet(); render();
@@ -2528,6 +2575,13 @@
         projects = P.lockOut(projects, dirty); caches = {}; homes = {}; roster = M.emptyRoster(); index = null; clearPictures();
       })
       .then(function () {
+        // Invitations from this owner waiting to be accepted (Signoff EE's step 4). A token that
+        // can't list them (a fine-grained one) shows none.
+        return sh.account.invitations().then(function (inv) {
+          invitations = inv.filter(function (i) { return i.owner && i.owner.toLowerCase() === settings.owner.toLowerCase(); });
+        }, function () { invitations = []; }).then(function () { save('invitations', invitations); });
+      })
+      .then(function () {
         save('access', access);
         if (access.state !== 'fte' && access.state !== 'contractor') return;
         return new S.PLReader({ owner: settings.owner, branch: settings.branch, tools: C.tools, token: token }).refresh(index)
@@ -2549,7 +2603,9 @@
         save('repoCache', caches); save('homes', homes); save('roster', roster); save('index', index); save('lastSync', lastSync); persist();
         if (!projects[ui.slug]) ui.slug = firstSlug();
         render();
-        if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ' and is on no shared PL project.');
+        if (access.state === 'none' && invitations.length) toast(plural(invitations.length, 'invitation') + ' waiting for @' + access.login + ': accept to open what’s shared with you.');
+        else if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ' and is on no shared PL project.');
+        else if (invitations.length && !errors.length) toast(plural(invitations.length, 'invitation') + ' waiting: Accept is in the sidebar.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
         checkForUpdate();
@@ -2632,7 +2688,7 @@
     if (!el && blankClick(e)) { closeDetails(); return; }
     if (!el || el.closest('#sheet')) return;
     var act = el.dataset.act, id = el.dataset.id;
-    if (!allowed() && ['nav', 'theme', 'settings', 'sync'].indexOf(act) < 0) return;
+    if (!allowed() && ['nav', 'theme', 'settings', 'sync', 'accept-invites'].indexOf(act) < 0) return;
     switch (act) {
       case 'nav': toggleSidebar(); break;
       case 'theme':
@@ -2640,6 +2696,7 @@
         save('settings', settings); saveSharedTheme(settings.theme); applyTheme(settings.theme); break;
       case 'settings': settingsSheet(); break;
       case 'sync': sync(); break;
+      case 'accept-invites': acceptInvites(); break;
       case 'new-project': projectSheet(null); break;
       case 'open-project': ui.slug = el.dataset.slug; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
       case 'view': ui.view = el.dataset.view; saveUi(); renderPage(); break;

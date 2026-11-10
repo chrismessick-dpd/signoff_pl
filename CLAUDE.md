@@ -337,6 +337,22 @@ the open questions):
   edit; revoke; the roster proof). Loom: 19.
 - **Not tried live.** The first live share creates real repos; Chris should try a test product first.
 
+## Invitations and the token guide (2026-11-10, Chris)
+
+Chris shared a real project with a test account. GitHub sent the invitation, but PL had no way to show or
+accept it, and its Settings had no token help, so the account only saw "No projects". PL now does what
+Signoff EE does:
+- **Sync** lists the account's repository invitations from `settings.owner` (`GitHubAccount.invitations`,
+  stored as `invitations`) after the projects step, even when the token reaches nothing.
+- **`inviteCard`** (engine `.invite-card`) shows them with Accept on the locked page (headed *Accept your
+  invitation*), at the top of the sidebar for a signed-in contractor or FTE, and in Settings. Each repo
+  name links to `github.com/<repo>/invitations`. Accept (`acceptInvites`) accepts each one and syncs. A 403
+  or 404 (a fine-grained token can't accept invitations) says to accept on GitHub or use a classic token.
+- **Settings** has a *Signed in as* line, EE's *New to GitHub? Set up in four steps* (open with no token;
+  the *Create a token* link fills in a classic token with `repo`), and a note on which token to use.
+- Changing the token clears the list. Tried in the page with a placeholder token and stubbed responses
+  (accept, then a sync; a 403); not tried against GitHub.
+
 ## People & access (2026-11-08, Chris)
 
 PL's own tab in the suite's People & access sheet (`signoff/assets/people.js` takes a host tab with a

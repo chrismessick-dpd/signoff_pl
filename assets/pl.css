@@ -488,3 +488,8 @@ img.pv.pv-dark { display: none !important; }
   :root img.pv.pv-light.pv-light.pv-light[src] { display: block !important; }
   :root img.pv.pv-dark.pv-dark.pv-dark.pv-dark { display: none !important; }
 }
+
+/* Invitations waiting on the locked page (inviteCard in app.js); the card itself is the engine's. */
+.invite-wrap { display: flex; justify-content: center; margin: 0 0 18px; }
+.invite-wrap .invite-card { text-align: left; min-width: 260px; max-width: 46ch; margin: 0; }
+.invite-card a { color: var(--accent); }
