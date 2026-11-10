@@ -1521,7 +1521,7 @@
   // top-level gists, and how much of it isn't tied to requirements yet.
   function specHtml(sp) {
     if (!sp || !sp.gists || !sp.gists.length) return '';
-    var gaps = [sp.untraced ? sp.untraced + ' untraced' : '', sp.undescribed ? plural(sp.undescribed, 'requirement') + ' not described' : '', sp.flagged ? sp.flagged + ' flagged for a requirement' : ''].filter(Boolean);
+    var gaps = [sp.untraced ? sp.untraced + ' unlinked' : '', sp.undescribed ? plural(sp.undescribed, 'requirement') + ' not described' : '', sp.flagged ? sp.flagged + ' flagged for a requirement' : '', sp.notes ? plural(sp.notes, 'review note') : ''].filter(Boolean);
     return '<div class="map-ins-spec"><div class="ins-eyebrow">What it does</div>' + sp.gists.filter(function (g) { return g.gist || !g.depth; }).map(function (g) {
       return '<div class="map-spec' + (g.depth ? ' sub' : '') + '"><b>' + esc(g.title) + '</b>' + (g.gist ? '<span>' + esc(g.gist) + '</span>' : '') + '</div>';
     }).join('') + (sp.more ? '<p class="note">and ' + esc(plural(sp.more, 'more section')) + ' in the review</p>' : '') +

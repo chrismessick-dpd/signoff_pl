@@ -386,6 +386,7 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var many = []; for (var gi = 0; gi < 45; gi++) many.push({ title: 'Part ' + gi, gist: 'Works.', depth: 1 });
   var spm = Signoff.plReader.cleanSummary({ spec: { gists: many, more: 7 } }).spec;
   ok(spm.gists.length === 40 && spm.more === 7 && sps.more === undefined, 'summary.spec keeps up to 40 gists and how many more the review left out');
+  ok(Signoff.plReader.cleanSummary({ spec: { gists: [], notes: 49 } }).spec.notes === 49 && sps.notes === 0, 'summary.spec keeps the review-note count');
   ok(!('spec' in Signoff.plReader.cleanSummary({ name: 'x' })), 'a summary without a description gets no spec');
   ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
 

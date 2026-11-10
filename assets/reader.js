@@ -94,7 +94,7 @@
       // Up to 40 gists (the engine's SPEC_GISTS); more counts the ones the review left out.
       out.spec = { gists: (Array.isArray(sp.gists) ? sp.gists : []).filter(function (g) { return g && typeof g === 'object'; }).slice(0, 40).map(function (g) {
         return { title: str(g.title).slice(0, 120), gist: str(g.gist).slice(0, 300), depth: g.depth === 1 ? 1 : 0 };
-      }), sections: num(sp.sections), untraced: num(sp.untraced), undescribed: num(sp.undescribed), flagged: num(sp.flagged) };
+      }), sections: num(sp.sections), untraced: num(sp.untraced), undescribed: num(sp.undescribed), flagged: num(sp.flagged), notes: num(sp.notes) };
       if (num(sp.more)) out.spec.more = num(sp.more);
     }
     if (Array.isArray(s.open)) {
@@ -186,8 +186,8 @@
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
   // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind; 8: pct 100 with nothing to review;
-  // 9: summary.spec keeps 40 gists and more).
-  var CACHE_V = 9;
+  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes).
+  var CACHE_V = 10;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {
