@@ -1524,7 +1524,8 @@
     var gaps = [sp.untraced ? sp.untraced + ' untraced' : '', sp.undescribed ? plural(sp.undescribed, 'requirement') + ' not described' : '', sp.flagged ? sp.flagged + ' flagged for a requirement' : ''].filter(Boolean);
     return '<div class="map-ins-spec"><div class="ins-eyebrow">What it does</div>' + sp.gists.filter(function (g) { return g.gist || !g.depth; }).map(function (g) {
       return '<div class="map-spec' + (g.depth ? ' sub' : '') + '"><b>' + esc(g.title) + '</b>' + (g.gist ? '<span>' + esc(g.gist) + '</span>' : '') + '</div>';
-    }).join('') + (gaps.length ? '<p class="note">' + esc(gaps.join(' · ')) + '</p>' : '') + '</div>';
+    }).join('') + (sp.more ? '<p class="note">and ' + esc(plural(sp.more, 'more section')) + ' in the review</p>' : '') +
+      (gaps.length ? '<p class="note">' + esc(gaps.join(' · ')) + '</p>' : '') + '</div>';
   }
 
   // The selected Part's detail, beside the map (over it on narrow screens).

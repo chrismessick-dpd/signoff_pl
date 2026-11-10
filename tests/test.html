@@ -383,6 +383,9 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   ok(!('revisions' in Signoff.plReader.cleanSummary({ name: 'x' })), 'a summary without revisions gets none');
   var sps = Signoff.plReader.cleanSummary({ spec: { gists: [{ title: 'Firmware', gist: 'Runs it.', depth: 0 }, { title: { x: 1 }, depth: 5 }, 'junk'], untraced: 3, flagged: '2', sections: 'x' } }).spec;
   ok(sps.gists.length === 2 && sps.gists[0].gist === 'Runs it.' && sps.gists[1].title === '' && sps.gists[1].depth === 0 && sps.untraced === 3 && sps.flagged === 2 && sps.sections === 0, 'summary.spec is cleaned (gists, depth, counts)');
+  var many = []; for (var gi = 0; gi < 45; gi++) many.push({ title: 'Part ' + gi, gist: 'Works.', depth: 1 });
+  var spm = Signoff.plReader.cleanSummary({ spec: { gists: many, more: 7 } }).spec;
+  ok(spm.gists.length === 40 && spm.more === 7 && sps.more === undefined, 'summary.spec keeps up to 40 gists and how many more the review left out');
   ok(!('spec' in Signoff.plReader.cleanSummary({ name: 'x' })), 'a summary without a description gets no spec');
   ok(Object.keys(demo.index.entries).every(function (k) { var a = demo.index.entries[k].summary.at; return a && a <= new Date().toISOString(); }), 'demo edit times are in the past');
 

@@ -59,6 +59,9 @@ Notes on behavior:
   - Purchased Parts, and Parts whose source has no Signoff tool, are left out of progress.
   - Mass is the sum of `massG × qty` (grams).
   - A missing summary means "not summarized yet", never 0%.
+- **`CACHE_V` 9** (2026-11-09, branch `scribe-fixes`): `summary.spec` keeps up to 40 gists and `more`
+  (the inspector's *What it does* says "and N more sections"). The `me-send` branch takes 10 when it
+  merges after this.
 
 ## Before committing
 
