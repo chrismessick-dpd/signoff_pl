@@ -129,6 +129,27 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
 - **Test hooks.** `Signoff.app.scene` (`get`, `draw`, `commit`, `stackOn`, `centerOn`,
   `featureAt`, `startSnap`) drives it from the console. Clicking by coordinates is fragile.
 
+## The Part's 3D view and the large view (2026-11-09)
+
+Chris found the inspector's 3D drag backward: a drag to the right swung the eye right, so the part
+turned against the pointer. `model3d.orbit` now turns it the way the pointer goes, as if held (up and
+down already worked that way), for the inspector's `viewer` and Exploded alike. The same day:
+- **`viewer`** pans (Shift-, right-, or middle-drag), zooms about the pointer, and redraws when its
+  canvas changes size, so a canvas laid out late isn't left blank until a drag (the first open sometimes
+  was). It returns a handle (`get`, `set`, `view`, `fit`, `reset`, `turn`, `zoomBy`, `destroy`), kept on
+  the inspector's canvas as `cv.m3d`.
+- **Pixel budget.** A big canvas draws within `budget()`: quick frames of about 1 MP while it moves, and a
+  still frame of up to 8 MP (supersampled when that fits). That's about 25 ms and at most 150 ms at
+  60k triangles, measured from this window up to 4K.
+- **The large view** (`openModelView`, the ⤢ button on a Part's picture whenever it has a model) shows
+  the model nearly filling the window, for reviews. It has Iso, Front, Back, Left, Right, Top, and Bottom,
+  Fit, full screen (F), arrow keys, and + − 0. It hangs off `<body>`, so page renders leave it alone,
+  takes every plain key while open, and opens at the inspector's angle; Esc hands the angle back. A tool
+  update waits until it's closed (`pageIdle`), so a push doesn't reload PL during a review. Not tried
+  yet: full screen (it needs a real click) and touch, which can only turn it (no pinch to zoom).
+- `render()`'s defaults didn't change, so stored pictures and Partcheck's `pl_demo` output are the same.
+  Partcheck's `me-send` vendor copy of `model3d.js` hasn't been synced.
+
 ## System tab and tree Map (2026-11-01)
 
 Chris merged Overview and Structure into one **System** tab: the structure views on top, the old

@@ -136,7 +136,10 @@
     more: '<svg viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/></svg>',
     moon: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M16.2 12.4A6.6 6.6 0 017.6 3.8a6.6 6.6 0 108.6 8.6z"/></svg>',
     sun: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.4"/><path d="M10 2v1.8M10 16.2V18M2 10h1.8M16.2 10H18M4.3 4.3l1.3 1.3M14.4 14.4l1.3 1.3M15.7 4.3l-1.3 1.3M5.6 14.4l-1.3 1.3"/></svg>',
-    tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>'
+    tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
+    expand: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9.2 6.8M2.5 13.5l4.3-4.3"/></svg>',
+    full: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
+    unfull: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg>'
   };
 
   // Numbers shown here come from review files other people can write; pct() keeps them numbers.
@@ -623,8 +626,117 @@
     (root || document).querySelectorAll('canvas.m3d[data-mesh]').forEach(function (cv) {
       var sha = cv.dataset.mesh;
       cv.removeAttribute('data-mesh');
-      loadMesh(sha).then(function (mesh) { if (cv.isConnected) S.model3d.viewer(cv, mesh); }, function () { toast('Couldn’t load the 3D model'); });
+      loadMesh(sha).then(function (mesh) { if (cv.isConnected) cv.m3d = S.model3d.viewer(cv, mesh); }, function () { toast('Couldn’t load the 3D model'); });
     });
+  }
+
+  // ── The large 3D view ────────────────────────────────────
+  // A Part's model nearly filling the window, to show the CAD in a review (Chris, 2026-11-09): every
+  // standard view, pan, zoom, keys, and full screen. It hangs off <body>, so the page re-rendering
+  // underneath (pictures arriving, a sync) leaves it alone. It opens at the inspector's angle and
+  // hands its own back on close. Over sheets (60), under menus (70) and toasts (90).
+  var BIG_VIEWS = [['iso', 'Iso', -45, 30], ['front', 'Front', 0, 0], ['back', 'Back', 180, 0], ['left', 'Left', 90, 0],
+    ['right', 'Right', -90, 0], ['top', 'Top', 0, 90], ['bottom', 'Bottom', 0, -90]].map(function (v) { return { key: v[0], label: v[1], az: v[2] * Math.PI / 180, el: v[3] * Math.PI / 180 }; });
+  var bigView = null;
+  function smallViewer(id) {
+    var cv = ui.sel === id && document.querySelector('#page .map-ins canvas.m3d');
+    return (cv && cv.m3d) || null;
+  }
+  function openModelView(id) {
+    var p = current(), n = p && p.nodes[id], mdl = n && modelOf(n);
+    if (!mdl) return;
+    closeModelView();
+    var e = P.partStatus(n, index).entry || {}, sub = [e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision].filter(Boolean).map(esc).join(' · ');
+    var wrap = document.createElement('div');
+    wrap.className = 'm3x-wrap'; wrap.id = 'm3x';
+    wrap.innerHTML = '<div class="m3x" role="dialog" aria-modal="true" aria-label="' + esc((n.name || 'Part') + ' in 3D') + '">' +
+      '<div class="m3x-head"><div class="m3x-title"><h2>' + esc(n.name || 'Unnamed') + '</h2><p>' + sub + (sub ? ' · ' : '') + modelLine(mdl) + '</p></div>' +
+      '<div class="seg m3x-views" role="group" aria-label="View">' + BIG_VIEWS.map(function (v) { return '<button data-m3x="view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
+      '<button class="btn" data-m3x="fit" title="Center it and fit it to the window (0)">Fit</button>' +
+      (document.fullscreenEnabled ? '<button class="icon-btn" data-m3x="full" title="Full screen (F)" aria-label="Full screen">' + ICON.full + '</button>' : '') +
+      '<button class="icon-btn m3x-close" data-m3x="close" title="Close (Esc)" aria-label="Close">×</button></div>' +
+      '<div class="m3x-stage"><canvas class="m3x-canvas" tabindex="0" aria-label="' + esc(n.name || 'Part') + ' in 3D: drag to turn, Shift-drag or right-drag to pan, scroll to zoom, arrow keys to turn"></canvas>' +
+      '<div class="xs-load"><span class="spin" aria-hidden="true"></span>Loading 3D…</div></div>' +
+      '<p class="m3x-hint">Drag to turn, Shift-drag or right-drag to pan, and scroll to zoom. The arrow keys turn it too, 0 fits it, F goes full screen, and a double-click resets the view.</p></div>';
+    document.body.appendChild(wrap);
+    var cv = wrap.querySelector('canvas'), b = bigView = { id: id, wrap: wrap, h: null, from: document.activeElement };
+    // Which view button is lit: the one picked, until the part is turned by hand.
+    function light(key) { wrap.querySelectorAll('[data-m3x="view"]').forEach(function (x) { x.classList.toggle('on', x.dataset.key === key); }); }
+    b.light = light;
+    b.onFull = function () {
+      var btn = wrap.querySelector('[data-m3x="full"]'), on = document.fullscreenElement === wrap;
+      if (btn) { btn.innerHTML = on ? ICON.unfull : ICON.full; btn.title = on ? 'Leave full screen (F or Esc)' : 'Full screen (F)'; btn.setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen'); }
+    };
+    document.addEventListener('fullscreenchange', b.onFull);
+    window.addEventListener('keydown', bigKeys, true);
+    wrap.addEventListener('mousedown', function (ev) { if (ev.target === wrap) closeModelView(); });
+    wrap.addEventListener('wheel', function (ev) { if (ev.target !== cv) ev.preventDefault(); }, { passive: false });
+    cv.addEventListener('pointerdown', function () { light(''); });
+    wrap.addEventListener('click', function (ev) {
+      var x = ev.target.closest('[data-m3x]');
+      if (!x) return;
+      var act = x.dataset.m3x, v = BIG_VIEWS.filter(function (o) { return o.key === x.dataset.key; })[0];
+      if (act === 'close') closeModelView();
+      else if (act === 'full') toggleBigFull();
+      else if (act === 'fit' && b.h) b.h.fit();
+      else if (act === 'view' && v && b.h) { b.h.view(v.az, v.el); light(v.key); }
+    });
+    cv.focus({ preventScroll: true });
+    loadMesh(mdl.mesh.sha).then(function (mesh) {
+      if (bigView !== b) return;
+      wrap.querySelector('.xs-load').remove();
+      b.h = S.model3d.viewer(cv, mesh);
+      // Start where the inspector is: its 3D angle, else the stored picture it shows (Iso, Top, …).
+      var small = smallViewer(id), pic = ui.sel === id && BIG_VIEWS.filter(function (o) { return o.key === ui.pic; })[0];
+      if (small) b.h.set(small.get());
+      else if (pic) { b.h.view(pic.az, pic.el); light(pic.key); }
+      else light('iso');
+    }, function () { if (bigView === b) closeModelView(); toast('Couldn’t load the 3D model'); });
+  }
+  function closeModelView() {
+    var b = bigView;
+    if (!b) return;
+    bigView = null;
+    window.removeEventListener('keydown', bigKeys, true);
+    document.removeEventListener('fullscreenchange', b.onFull);
+    if (document.fullscreenElement === b.wrap) document.exitFullscreen().catch(function () {});
+    if (b.h) {
+      var small = smallViewer(b.id);
+      if (small) small.set(b.h.get());
+      b.h.destroy();
+    }
+    b.wrap.remove();
+    var back = document.querySelector('[data-act="m3d-open"][data-id="' + CSS.escape(b.id) + '"]') || (b.from && b.from.isConnected ? b.from : null);
+    if (back && back.focus) back.focus({ preventScroll: true });
+  }
+  function toggleBigFull() {
+    if (!bigView) return;
+    if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+    else bigView.wrap.requestFullscreen().catch(function () { toast('Full screen isn’t available here'); });
+  }
+  // While it's open, keys are its own: none reach PL's shortcuts behind it (Esc closes it, not the
+  // inspector). Ctrl and Cmd shortcuts still pass, and Tab stays inside it.
+  function bigKeys(e) {
+    var b = bigView;
+    if (!b || e.ctrlKey || e.metaKey) return;
+    e.stopPropagation();
+    if (e.altKey) return;
+    var h = b.h, k = e.key, T = 15 * Math.PI / 180, onButton = e.target.closest && e.target.closest('button');
+    if (k === 'Escape') closeModelView();
+    else if (k === 'Tab') {
+      var all = Array.prototype.slice.call(b.wrap.querySelectorAll('button, canvas[tabindex]')), i = all.indexOf(document.activeElement);
+      if (i < 0 || (e.shiftKey ? i === 0 : i === all.length - 1)) { all[e.shiftKey ? all.length - 1 : 0].focus(); e.preventDefault(); }
+      return;
+    }
+    else if (k === 'f' || k === 'F') toggleBigFull();
+    else if (!h || ((k === 'Enter' || k === ' ') && onButton)) return;
+    else if (k === 'ArrowLeft' || k === 'ArrowRight') { h.turn(k === 'ArrowLeft' ? -T : T, 0); b.light(''); }
+    else if (k === 'ArrowUp' || k === 'ArrowDown') { h.turn(0, k === 'ArrowUp' ? -T : T); b.light(''); }
+    else if (k === '+' || k === '=') h.zoomBy(1.25);
+    else if (k === '-' || k === '_') h.zoomBy(0.8);
+    else if (k === '0') h.fit();
+    else return;
+    e.preventDefault();
   }
   function downloadStep(id) {
     var m = modelOf(current().nodes[id]);
@@ -944,8 +1056,8 @@
       var dx = xy[0] - d.x0, dy = xy[1] - d.y0;
       if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
       if (d.kind === 'orbit') {
-        ui.cam.az = d.az - dx * 0.01;
-        ui.cam.el = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d.el + dy * 0.01));
+        var turned = M3.orbit(d.az, d.el, dx, dy);   // the product follows the pointer, as in the inspector
+        ui.cam.az = turned.az; ui.cam.el = turned.el;
       } else if (d.kind === 'pan') {
         var w = sc.res.unproject(dx * sc.scale, dy * sc.scale);
         ui.cam.c = [d.c[0] - w[0], d.c[1] - w[1], d.c[2] - w[2]];
@@ -1423,10 +1535,12 @@
     var e = st.entry || {}, s = st.summary;
     var pv = previewFor(n, st.entry), mdl = modelOf(n), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
     var turn = mdl && ui.pic === '3d';
-    html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '" aria-label="3D view: drag to turn, scroll to zoom"></canvas>' : art(n, true, e, side)) +
+    html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '" aria-label="3D view: drag to turn, right-drag to pan, scroll to zoom"></canvas>' : art(n, true, e, side)) +
       (pv && (sides(pv).length > 1 || mdl) ? '<div class="seg map-ins-flip">' + sides(pv).map(function (i) {
         return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
-      }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, scroll to zoom">3D</button>' : '') + '</div>' : '') + '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
+      }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, right-drag to pan, scroll to zoom">3D</button>' : '') + '</div>' : '') +
+      (mdl ? '<button class="icon-btn map-ins-expand" data-act="m3d-open" data-id="' + esc(id) + '" title="Open the 3D view large, to show it in a review" aria-label="Open the 3D view large">' + ICON.expand + '</button>' : '') +
+      '</div><h2>' + esc(n.name || 'Unnamed') + '</h2>' +
       '<p class="map-ins-sub">' + esc([e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision, (s && s.stage) || e.stage, n.qty > 1 && '×' + n.qty, n.massG != null && n.massG !== '' && fmtMass(Number(n.massG)) + ' each'].filter(Boolean).join(' · ')) + '</p>';
     if (s && s.harness) {
       html += harnessHtml(s);
@@ -2483,6 +2597,7 @@
       case 'xs-view': case 'xs-fit': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
+      case 'm3d-open': openModelView(id); break;
       case 'get-step': e.preventDefault(); downloadStep(id); break;
       case 'bom-mode': ui.bomMode = el.dataset.mode; ui.bomSort = null; saveUi(); renderPage(); break;
       case 'bom-sort': (function () {
@@ -2582,7 +2697,7 @@
   // A page left open keeps running the version it loaded. Now and then (on opening, every few
   // minutes, when the tab comes back into view, after a sync) it asks this site which version it
   // serves now. If that's another one, it reloads into it as soon as nothing is being typed
-  // or edited (no sheet open, where a STEP is read), and the new page says "Tool updated". If the site serves the same version, or
+  // or edited (no sheet open, where a STEP is read) and the large 3D view is closed, and the new page says "Tool updated". If the site serves the same version, or
   // can't be reached, the page stays as it is. A version it already reloaded for is never tried
   // twice, so a stale cache can't make it loop.
   var UPDATE_KEY = 'signoff.toolUpdate';   // sessionStorage: { tried: hash, from: hash }
@@ -2596,7 +2711,7 @@
   function pageIdle() {
     var a = document.activeElement;
     var typing = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
-    return !syncing && !typing && !$('#sheet') && !$('#menu') && !document.hidden;
+    return !syncing && !typing && !$('#sheet') && !$('#menu') && !bigView && !document.hidden;   // bigView: the large 3D view, shown in a review
   }
   function reloadWhenIdle() {
     if (!updateWaiting) return;

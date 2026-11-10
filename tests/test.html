@@ -624,6 +624,21 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var img = M3.render(small, { w: 64, h: 48, az: M3.VIEWS[0].az, el: M3.VIEWS[0].el }), lit = 0;
   for (var pi = 3; pi < img.data.length; pi += 4) if (img.data[pi]) lit++;
   ok(img.width === 64 && lit > 200 && img.data[3] === 0, 'render draws the part on a transparent background', lit + ' pixels');
+  // Turning follows the pointer (2026-11-09): the point of the part nearest the eye moves with the drag.
+  var iso = M3.VIEWS[0], eyeAt = function (az, el) { return M3.renderScene([], { az: az, el: el, fit: 100 }, 10, 10).cam.f.map(function (v) { return v * 50; }); };
+  var nearPt = eyeAt(iso.az, iso.el), seen = function (st) { return M3.renderScene([], { az: st.az, el: st.el, fit: 100 }, 200, 200).project(nearPt); };
+  var p0 = seen(iso), pRight = seen(M3.orbit(iso.az, iso.el, 20, 0)), pDown = seen(M3.orbit(iso.az, iso.el, 0, 20));
+  ok(pRight[0] - p0[0] > 5 && Math.abs(pRight[1] - p0[1]) < (pRight[0] - p0[0]) / 4, 'dragging right turns the part’s near side right', JSON.stringify([p0, pRight]));
+  ok(pDown[1] - p0[1] > 5 && Math.abs(pDown[0] - p0[0]) < (pDown[1] - p0[1]) / 4, 'dragging down turns the part’s near side down (its top comes toward you)', JSON.stringify([p0, pDown]));
+  eq(M3.orbit(0, 1.5, 0, 500).el, Math.PI / 2, 'turning stops looking straight down');
+  var bq = M3.budget(381, 239, false), bs = M3.budget(381, 239, true), bigQ = M3.budget(4600, 2500, false), bigS = M3.budget(4600, 2500, true);
+  ok(bq.k === 1 && bq.ss === 1 && bs.k === 1 && bs.ss === 2, 'the inspector’s small view draws at full size, supersampled when still', JSON.stringify([bq, bs]));
+  ok(Math.abs(4600 * 2500 * bigQ.k * bigQ.k - 1e6) < 1e3 && 4600 * 2500 * bigS.k * bigS.k * bigS.ss * bigS.ss <= 8e6 + 1e3, 'a big canvas draws within the pixel budget', JSON.stringify([bigQ, bigS]));
+  var sb = M3.bbox(small.pos), sfit = Math.hypot(sb.size[0], sb.size[1], sb.size[2]), smid = [0, 1, 2].map(function (i) { return (sb.lo[i] + sb.hi[i]) / 2; });
+  var litX = function (im) { var s = 0, n = 0; for (var q = 3; q < im.data.length; q += 4) if (im.data[q]) { s += ((q - 3) / 4) % im.width; n++; } return s / n; };
+  var front = { w: 80, h: 60, az: 0, el: 0, fit: sfit, box: sb, ss: 1 };
+  var centered = M3.render(small, front), panned = M3.render(small, Object.assign({}, front, { c: [smid[0] - 20, smid[1], smid[2]] }));
+  ok(litX(panned) - litX(centered) > 5, 'a viewer’s center point pans the part (centered further left, the part shows further right)', litX(centered) + ' → ' + litX(panned));
 
   // ── Arranging in 3D ──
   var near = function (a, b) { return a.every(function (v, i) { return Math.abs(v - b[i]) < 1e-6; }); };
