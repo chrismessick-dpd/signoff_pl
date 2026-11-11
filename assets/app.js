@@ -2845,6 +2845,8 @@
   // Applied on narrow windows too (suite.css only hides it above 860 px), so widening the window
   // later shows the sidebar as it was left.
   if (ui.sideCollapsed) $('#app').classList.add('side-collapsed');
+  // The Dovetail Signoff links fold to a row of icons, as in every tool (signoff/assets/sidefoot.js).
+  if (window.SignoffFoot) window.SignoffFoot.fold($('#side-tools'));
   if (DEMO) {
     var banner = $('#demo-banner');
     banner.hidden = false;
