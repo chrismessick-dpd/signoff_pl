@@ -278,16 +278,20 @@
     markSyncButtons();
     var dot = $('#sync-dot'), title = $('#sync-title'), sub = $('#sync-sub');
     var n = Object.keys(dirty).length;
+    sub.classList.remove('sync-who');
+    // Line 1 is the sync state (and when it last synced); line 2 the GitHub account, when it's known (Chris, 2026-11-10).
+    var who = access.login && getToken() ? '@' + access.login : '';
+    function line2(fallback) { sub.textContent = who || fallback; if (who) sub.classList.add('sync-who'); }
     if (DEMO) { dot.dataset.tone = 'idle'; title.textContent = 'Demo mode'; sub.textContent = 'Changes stay in this browser'; return; }
-    if (state === 'busy' || syncing) { dot.dataset.tone = 'busy'; title.textContent = 'Syncing…'; sub.textContent = settings.owner; return; }
+    if (state === 'busy' || syncing) { dot.dataset.tone = 'busy'; title.textContent = 'Syncing…'; line2(settings.owner); return; }
     if (!getToken()) { dot.dataset.tone = 'idle'; title.textContent = 'Signed out'; sub.textContent = 'Add your GitHub token'; return; }
     if (denied()) { dot.dataset.tone = 'warn'; title.textContent = 'No access'; sub.textContent = '@' + access.login + ' has no projects'; return; }
     if (!allowed()) { dot.dataset.tone = 'idle'; title.textContent = 'Not checked yet'; sub.textContent = 'Click to sync'; return; }
-    if (n) { dot.dataset.tone = 'warn'; title.textContent = plural(n, 'unsynced change'); sub.textContent = 'Click to sync'; return; }
+    if (n) { dot.dataset.tone = 'warn'; title.textContent = plural(n, 'unsynced change'); line2('Click to sync'); return; }
     var errs = lastSync && lastSync.errors && lastSync.errors.length;
     dot.dataset.tone = errs ? 'warn' : lastSync ? 'ok' : 'idle';
-    title.textContent = errs ? 'Synced with problems' : lastSync ? 'Synced' : 'Ready';
-    sub.textContent = errs ? lastSync.errors[0].message : lastSync ? relTime(lastSync.at) : 'Click to sync';
+    title.textContent = errs ? 'Synced with problems' : lastSync ? 'Synced ' + relTime(lastSync.at) : 'Ready';
+    if (errs) sub.textContent = lastSync.errors[0].message; else line2('Click to sync');
   }
 
   // A Sync button: while a sync runs its arrows turn and it says Syncing… (suite.css .is-syncing).
