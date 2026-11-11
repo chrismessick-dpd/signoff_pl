@@ -2348,14 +2348,16 @@
         return '<button type="button" class="' + (settings.theme === t[0] ? 'on' : '') + '" data-theme="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div></div>' +
       (DEMO ? '<p class="note">Git sync is off in demo mode. <a href="' + esc(location.pathname) + '">Open the full tool</a>.</p>' :
-        '<div class="field-label" style="margin-top:20px;font-size:13px;color:var(--text);font-weight:600">GitHub</div>' +
+        '<div class="field-label" style="margin-top:20px;font-size:13px;color:var(--text);font-weight:600">Signoff Repository Access</div>' +
         (viaSignIn || (access.login && token && access.tag === P.tokenTag(token)) ? '<p class="note" style="margin:0 0 12px">Signed in ' + (viaSignIn ? 'with GitHub ' : '') + 'as <b>@' + esc(viaSignIn ? auth.login : access.login) + '</b> · ' +
           (access.state === 'fte' ? 'FTE: you see every PL project' : access.state === 'contractor' ? 'Client or contractor: you see the projects shared with you' :
             access.state === 'none' ? 'no PL project shared with you yet' : 'not synced yet') + '</p>' : '') +
         inviteCard('data-sheet="accept"') +
-        (viaSignIn ? '' : auth ? '<button type="button" class="btn btn-primary" data-sheet="signin" style="margin:4px 0 6px">Sign in with GitHub</button>' +
+        // The token is the second way in: a gray button beside Sign in that drops its panel down.
+        (viaSignIn ? '' : auth ? '<div class="signin-row"><button type="button" class="btn btn-primary" data-sheet="signin">Sign in with GitHub</button>' +
+          '<button type="button" class="btn token-toggle" data-sheet="token" aria-expanded="' + !!token + '" aria-controls="s-token-panel">Use a token instead</button></div>' +
           '<p class="note" style="margin:0 0 12px">Uses your GitHub login, with its two-factor step. No token to create or keep track of.</p>' +
-          '<details class="guide"' + (token ? ' open' : '') + '><summary>Use a token instead</summary><div style="margin-top:10px">' + tokenFields() + '</div></details>' : tokenFields()) +
+          '<div class="token-panel" id="s-token-panel"' + (token ? '' : ' hidden') + '>' + tokenFields() + '</div>' : tokenFields()) +
         '<details class="guide" style="margin-top:14px"><summary>Repositories</summary>' +
         '<div class="row2" style="margin-top:10px"><div class="field"><label for="s-owner">Account or organization</label><input class="input" id="s-owner" value="' + esc(settings.owner) + '"></div>' +
         '<div class="field"><label for="s-branch">Branch</label><input class="input" id="s-branch" value="' + esc(settings.branch) + '"></div></div>' +
@@ -2370,6 +2372,13 @@
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') { applyTheme(settings.theme); return closeSheet(); }
       if (b.dataset.sheet === 'signout') return signOut();
+      if (b.dataset.sheet === 'token') {
+        var panel = w.querySelector('#s-token-panel'); if (!panel) return;
+        var opening = panel.hidden;
+        panel.hidden = !opening; b.setAttribute('aria-expanded', String(opening));
+        var tf = opening && panel.querySelector('#s-token'); if (tf && !tf.value) tf.focus();
+        return;
+      }
       if (b.dataset.sheet === 'signin') {
         // Keep the name typed so far; the token comes back from GitHub.
         settings.user = val(w, '#s-user') || settings.user; settings.theme = theme; save('settings', settings); saveSharedTheme(theme);
