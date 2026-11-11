@@ -367,7 +367,7 @@
   // Shown instead of the projects until a sync confirms an FTE's token (see allowed()).
   function lockedPage() {
     var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
-    var head = !getToken() ? ['Sign in to Signoff PL', 'Add your GitHub token in Settings. PL shows the projects once it confirms the token can open ' + repo + ' (Dovetail FTEs) or a project shared with you.']
+    var head = !getToken() ? ['Sign in to Signoff PL', (signIn() ? 'Sign in with your GitHub account.' : 'Add your GitHub token in Settings.') + ' PL shows the projects once it confirms the token can open ' + repo + ' (Dovetail FTEs) or a project shared with you.']
       : denied() && invitations.length ? ['Accept your invitation', 'You’re signed in as <b>@' + esc(access.login) + '</b>. A project has been shared with you, and GitHub is waiting for you to accept the invitation. PL syncs again once you do.']
       : denied() ? ['No projects for this account', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + ' and is on no shared PL project. An FTE adds you from People in Signoff EE, or shares a project with you from Signoff PL. Accept GitHub’s invitation, then sync again.']
       : syncing ? ['Syncing with GitHub', 'Checking that your token can open ' + repo + '. The projects show here as soon as the sync finishes.']
@@ -376,6 +376,7 @@
     return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
       (card ? '<div class="invite-wrap">' + card + '</div>' : '') +
       (getToken() ? syncButton(denied() ? 'Sync again' : 'Sync', 'btn-primary') + '</button> <button class="btn" data-act="settings">Settings</button>'
+        : signIn() ? '<button class="btn btn-primary" data-act="signin">Sign in with GitHub</button> <button class="btn" data-act="settings">Use a token</button>'
         : '<button class="btn btn-primary" data-act="settings">Settings</button>') +
       (denied() && kept ? '<p class="note" style="margin-top:16px">' + plural(kept, 'unsynced project') + ' from an earlier sign-in ' + (kept === 1 ? 'stays' : 'stay') + ' in this browser, hidden. ' + (kept === 1 ? 'It’s' : 'They’re') + ' pushed the next time an FTE syncs here.</p>' : '') +
       '</div></div>';
@@ -2316,9 +2317,30 @@
     touch(p);
   }
 
+  // Sign in with GitHub (the engine's auth.js), where this site has a GitHub App; null where it hasn't,
+  // and the token field is then the only way in.
+  function signIn() {
+    var A = !DEMO && window.SignoffAuth;
+    if (!A) return null;
+    var s = A.status();
+    return s.available || s.signedIn ? s : null;
+  }
+  function startSignIn() { return window.SignoffAuth.signIn(location.href); }
+
   function settingsSheet() {
     var token = getToken(), remembered = false;
     try { remembered = !!localStorage.getItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+    var auth = signIn(), viaSignIn = !!(auth && auth.signedIn);
+    function tokenFields() {
+      return '<details class="guide"' + (token || auth ? '' : ' open') + '><summary>New to GitHub? Set up in four steps</summary><ol>' +
+        '<li>Create a free account at <a href="https://github.com/signup" target="_blank" rel="noopener">github.com/signup</a>.</li>' +
+        '<li>Send your username to your Dovetail contact.</li>' +
+        '<li><a href="https://github.com/settings/tokens/new?scopes=repo&amp;description=Dovetail%20Signoff" target="_blank" rel="noopener">Create a token</a> (the link fills in the settings; pick an expiry and click <i>Generate token</i>).</li>' +
+        '<li>Paste the token below and click <b>Save &amp; sync</b>. Signoff shows any invitations waiting for you, with an Accept button.</li></ol></details>' +
+        '<div class="field"><label for="s-token">Access token</label><input class="input" id="s-token" type="password" value="' + esc(token) + '" placeholder="ghp_… or github_pat_…" autocomplete="off">' +
+        '<p class="note">Shared with the other Signoff tools in this browser and sent only to api.github.com. Clients and contractors use a classic token with the <b>repo</b> scope. An FTE’s token needs to reach the PL data repo and every Signoff EE, ME, and FW repository; sharing creates new repositories, which a fine-grained token limited to selected repositories can’t reach.</p></div>' +
+        '<label class="check"><input type="checkbox" id="s-remember"' + (remembered ? ' checked' : '') + '> Remember the token after closing the browser</label>';
+    }
     var w = sheet('<div class="sheet-head"><h2>Settings</h2><p>PL projects sync through a private GitHub repository. The designs they link to are read from Signoff EE and ME’s repositories.</p></div>' +
       '<div class="sheet-body">' +
       '<div class="field"><label for="s-user">Your name</label><input class="input" id="s-user" value="' + esc(settings.user) + '" placeholder="First Last"></div>' +
@@ -2327,24 +2349,19 @@
       }).join('') + '</div></div>' +
       (DEMO ? '<p class="note">Git sync is off in demo mode. <a href="' + esc(location.pathname) + '">Open the full tool</a>.</p>' :
         '<div class="field-label" style="margin-top:20px;font-size:13px;color:var(--text);font-weight:600">GitHub</div>' +
-        (access.login && token && access.tag === P.tokenTag(token) ? '<p class="note" style="margin:0 0 12px">Signed in as <b>@' + esc(access.login) + '</b> · ' +
+        (viaSignIn || (access.login && token && access.tag === P.tokenTag(token)) ? '<p class="note" style="margin:0 0 12px">Signed in ' + (viaSignIn ? 'with GitHub ' : '') + 'as <b>@' + esc(viaSignIn ? auth.login : access.login) + '</b> · ' +
           (access.state === 'fte' ? 'FTE: you see every PL project' : access.state === 'contractor' ? 'Client or contractor: you see the projects shared with you' :
             access.state === 'none' ? 'no PL project shared with you yet' : 'not synced yet') + '</p>' : '') +
         inviteCard('data-sheet="accept"') +
-        '<details class="guide"' + (token ? '' : ' open') + '><summary>New to GitHub? Set up in four steps</summary><ol>' +
-        '<li>Create a free account at <a href="https://github.com/signup" target="_blank" rel="noopener">github.com/signup</a>.</li>' +
-        '<li>Send your username to your Dovetail contact.</li>' +
-        '<li><a href="https://github.com/settings/tokens/new?scopes=repo&amp;description=Dovetail%20Signoff" target="_blank" rel="noopener">Create a token</a> (the link fills in the settings; pick an expiry and click <i>Generate token</i>).</li>' +
-        '<li>Paste the token below and click <b>Save &amp; sync</b>. Signoff shows any invitations waiting for you, with an Accept button.</li></ol></details>' +
-        '<div class="field"><label for="s-token">Access token</label><input class="input" id="s-token" type="password" value="' + esc(token) + '" placeholder="ghp_… or github_pat_…" autocomplete="off">' +
-        '<p class="note">Shared with the other Signoff tools in this browser and sent only to api.github.com. Clients and contractors use a classic token with the <b>repo</b> scope. An FTE’s token needs to reach the PL data repo and every Signoff EE, ME, and FW repository; sharing creates new repositories, which a fine-grained token limited to selected repositories can’t reach.</p></div>' +
-        '<label class="check"><input type="checkbox" id="s-remember"' + (remembered ? ' checked' : '') + '> Remember the token after closing the browser</label>' +
+        (viaSignIn ? '' : auth ? '<button type="button" class="btn btn-primary" data-sheet="signin" style="margin:4px 0 6px">Sign in with GitHub</button>' +
+          '<p class="note" style="margin:0 0 12px">Uses your GitHub login, with its two-factor step. No token to create or keep track of.</p>' +
+          '<details class="guide"' + (token ? ' open' : '') + '><summary>Use a token instead</summary><div style="margin-top:10px">' + tokenFields() + '</div></details>' : tokenFields()) +
         '<details class="guide" style="margin-top:14px"><summary>Repositories</summary>' +
         '<div class="row2" style="margin-top:10px"><div class="field"><label for="s-owner">Account or organization</label><input class="input" id="s-owner" value="' + esc(settings.owner) + '"></div>' +
         '<div class="field"><label for="s-branch">Branch</label><input class="input" id="s-branch" value="' + esc(settings.branch) + '"></div></div>' +
         '<div class="field"><label for="s-data">PL data repo</label><input class="input" id="s-data" value="' + esc(settings.dataRepo) + '"></div>' +
         '<p class="note">Designs are read from ' + C.tools.map(function (t) { return esc(t.dataRepo) + (t.prefix ? ' and ' + esc(t.prefix) + '…' : ''); }).join(', ') + ' (set in assets/config.js).</p></details>') +
-      '</div><div class="sheet-foot">' + (DEMO || !token ? '' : '<button class="btn" data-sheet="signout" title="Remove the token and every Signoff and Fabcheck copy kept in this browser">Sign out</button>') +
+      '</div><div class="sheet-foot">' + (DEMO || !token ? '' : '<button class="btn" data-sheet="signout" title="' + (viaSignIn ? 'Sign out of GitHub here, and remove' : 'Remove the token and') + ' every Signoff and Fabcheck copy kept in this browser">Sign out</button>') +
       '<span class="spacer"></span><button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="ok">' + (DEMO ? 'Done' : 'Save & sync') + '</button></div>');
     var theme = settings.theme;
     w.addEventListener('click', function (e) {
@@ -2353,12 +2370,18 @@
       var b = e.target.closest('[data-sheet]'); if (!b) return;
       if (b.dataset.sheet === 'cancel') { applyTheme(settings.theme); return closeSheet(); }
       if (b.dataset.sheet === 'signout') return signOut();
+      if (b.dataset.sheet === 'signin') {
+        // Keep the name typed so far; the token comes back from GitHub.
+        settings.user = val(w, '#s-user') || settings.user; settings.theme = theme; save('settings', settings); saveSharedTheme(theme);
+        b.disabled = true;
+        return startSignIn().catch(function (err) { b.disabled = false; toast(err.message); });
+      }
       if (b.dataset.sheet === 'accept') { applyTheme(settings.theme); closeSheet(); acceptInvites(); return; }
       settings.user = val(w, '#s-user'); settings.theme = theme;
       if (!DEMO) {
         settings.owner = val(w, '#s-owner') || C.repos.owner; settings.branch = val(w, '#s-branch') || 'main'; settings.dataRepo = val(w, '#s-data') || C.repos.dataRepo;
-        var was = getToken();
-        setToken(w.querySelector('#s-token').value, w.querySelector('#s-remember').checked);
+        var was = getToken(), tokField = w.querySelector('#s-token');
+        if (tokField) setToken(tokField.value, w.querySelector('#s-remember').checked);   // none while signed in with GitHub
         if (getToken() !== was) { clearPictures(); invitations = []; save('invitations', invitations); }
       }
       save('settings', settings); saveSharedTheme(theme);
@@ -2383,15 +2406,19 @@
     if (unsynced) ask = plural(unsynced, 'project, review, or list has', 'projects, reviews, or lists have') + ' changes that aren’t on GitHub yet and would be lost. Sync first unless you mean to throw them away.\n\n' + ask;
     if (!confirm(ask)) return;
     var theme = settings.theme;
-    try {
-      sessionStorage.removeItem(TOKEN_KEY);
-      Object.keys(localStorage).forEach(function (k) {
-        if (k === TOKEN_KEY || SUITE_NS.some(function (ns) { return k.indexOf(ns) === 0; })) localStorage.removeItem(k);
-      });
-    } catch (e) { /* storage blocked */ }
-    clearPictures();
-    var up = upDbOpen; upDbOpen = null;
-    (up || Promise.resolve(null)).then(function (db) { try { if (db) db.close(); } catch (e) { /* closed */ } }).then(function () {
+    // A sign-in is revoked on GitHub first; the reload waits for it, or the request is cut off.
+    var A = window.SignoffAuth;
+    (A ? A.signOut() : Promise.resolve()).catch(function () { /* cleared below anyway */ }).then(function () {
+      try {
+        sessionStorage.removeItem(TOKEN_KEY);
+        Object.keys(localStorage).forEach(function (k) {
+          if (k === TOKEN_KEY || k === 'signoff.login' || k.indexOf('signoff.auth') === 0 || SUITE_NS.some(function (ns) { return k.indexOf(ns) === 0; })) localStorage.removeItem(k);
+        });
+      } catch (e) { /* storage blocked */ }
+      clearPictures();
+      var up = upDbOpen; upDbOpen = null;
+      return up;
+    }).then(function (db) { try { if (db) db.close(); } catch (e) { /* closed */ } }).then(function () {
       try { SUITE_DBS.forEach(function (db) { indexedDB.deleteDatabase(db); }); } catch (e) { /* no IndexedDB */ }
       saveSharedTheme(theme);
       location.reload();
@@ -2651,8 +2678,14 @@
     if (btn) { var dark = isDark(theme); btn.innerHTML = dark ? ICON.sun : ICON.moon; btn.title = dark ? 'Light mode' : 'Dark mode'; }
   }
   if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', function () { applyTheme(settings.theme); });
+  var shownTag = getToken() ? P.tokenTag(getToken()) : '';
   window.addEventListener('storage', function (e) {
-    if (e.key === TOKEN_KEY) { render(); return; }   // signed in or out in another Signoff tool
+    // Signed in or out in another Signoff tool. A sign-in's refresh changes the token but not its tag.
+    if (e.key === TOKEN_KEY || e.key === 'signoff.login') {
+      var tag = getToken() ? P.tokenTag(getToken()) : '';
+      if (tag !== shownTag) { shownTag = tag; render(); }
+      return;
+    }
     var t = e.key === THEME_KEY && sharedSettings().theme;
     if (t && t !== settings.theme) { settings.theme = t; applyTheme(t); }
   });
@@ -2699,6 +2732,7 @@
         settings.theme = isDark(settings.theme) ? 'light' : 'dark';
         save('settings', settings); saveSharedTheme(settings.theme); applyTheme(settings.theme); break;
       case 'settings': settingsSheet(); break;
+      case 'signin': el.disabled = true; startSignIn().catch(function (err) { el.disabled = false; toast(err.message); }); break;
       case 'sync': sync(); break;
       case 'accept-invites': acceptInvites(); break;
       case 'new-project': projectSheet(null); break;
