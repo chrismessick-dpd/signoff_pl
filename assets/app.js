@@ -2886,7 +2886,9 @@
   function pageIdle() {
     var a = document.activeElement;
     var typing = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
-    return !syncing && !typing && !$('#sheet') && !$('#menu') && !bigView && !document.hidden;   // bigView: the large 3D view, shown in a review
+    // bigView: the large 3D view, shown in a review. People & access holds staged edits until Apply, and a
+    // ticket being written lives only on the page, so neither reloads under the person.
+    return !syncing && !typing && !$('#sheet') && !$('#menu') && !bigView && !document.querySelector('.tk-wrap, .tk-new, #people-pop') && !document.hidden;
   }
   function reloadWhenIdle() {
     if (!updateWaiting) return;
