@@ -109,13 +109,15 @@
   // Waiting invitations with an Accept button, as Signoff EE shows them. `act` is the button's
   // attribute: data-act on the page, data-sheet inside Settings. Each repo also links to its
   // invitation on GitHub, for a token that can't accept invitations itself.
+  // The suite's shared card (signoff/assets/invites.js) lists private repos too; this one is the fallback.
   function inviteCard(act) {
-    if (DEMO || !getToken() || !invitations.length) return '';
+    if (DEMO || !getToken() || !invitations.length || window.SignoffInvites) return '';
     return '<div class="invite-card"><b>' + plural(invitations.length, 'invitation') + ' from ' + esc(settings.owner) + '</b><span>' +
       invitations.map(function (i) {
         return '<a href="https://github.com/' + esc(i.repo) + '/invitations" target="_blank" rel="noopener" title="Open this invitation on GitHub">' + esc(String(i.repo).split('/')[1]) + '</a>';
       }).join(', ') + '</span><button class="btn btn-primary" ' + (act || 'data-act="accept-invites"') + '>Accept</button></div>';
   }
+  function waitingInvites() { return window.SignoffInvites ? window.SignoffInvites.count() : invitations.length; }
   function acceptInvites() {
     var list = invitations.slice(), token = getToken();
     if (!list.length || !token || DEMO) return;
@@ -316,7 +318,7 @@
   function renderToolbar() {
     var p = current();
     $('#toolbar-title').textContent = p ? p.meta.name : '';
-    if (!p) { $('#view-seg').innerHTML = ''; $('#toolbar-actions').innerHTML = ''; return; }
+    if (!p) { $('#view-seg').innerHTML = ''; $('#toolbar-actions').innerHTML = ticketsOn() ? moreButton() : ''; return; }
     var r = P.rollup(p, index)[''];
     $('#view-seg').innerHTML = VIEWS.map(function (v) {
       var need = v.id === 'reqs' && S.plReqsView ? reqsView().badge(p) : 0;
@@ -326,8 +328,12 @@
     $('#toolbar-actions').innerHTML = (DEMO ? '' : syncButton('Sync', '', 'Sync PL projects and read the designs again (Ctrl+S)') +
       (Object.keys(dirty).length ? '<span class="badge">' + Object.keys(dirty).length + '</span>' : '') + '</button>') +
       '<button class="btn btn-primary" data-act="add-node" title="Add a Part or assembly">' + ICON.plus + '<span class="btn-label">Add</span></button>' +
-      '<button class="icon-btn" data-act="project-menu" title="More" aria-label="More">' + ICON.more + '</button>';
+      moreButton();
   }
+  // Tickets (signoff/assets/tickets.js): Open ticket… and Tickets in the ⋯ menu, for FTEs, on every page.
+  function ticketsOn() { return !!(window.SignoffTickets && window.SignoffTickets.can()); }
+  function moreButton() { return '<button class="icon-btn" data-act="project-menu" title="More" aria-label="More">' + ICON.more + '</button>'; }
+  function ticketEntries() { return ticketsOn() ? [['ticket', 'Open ticket…'], ['tickets', 'Tickets']] : []; }
 
   // ── Pages ────────────────────────────────────────────────
   // The Requirements tab lives in reqs.js; it gets what it needs from here.
@@ -368,11 +374,14 @@
   function lockedPage() {
     var repo = '<b>' + esc(settings.owner + '/' + settings.dataRepo) + '</b>', kept = Object.keys(projects).length;
     var head = !getToken() ? ['Sign in to Signoff PL', (signIn() ? 'Sign in with your GitHub account.' : 'Add your GitHub token in Settings.') + ' PL shows the projects once it confirms the token can open ' + repo + ' (Dovetail FTEs) or a project shared with you.']
-      : denied() && invitations.length ? ['Accept your invitation', 'You’re signed in as <b>@' + esc(access.login) + '</b>. A project has been shared with you, and GitHub is waiting for you to accept the invitation. PL syncs again once you do.']
+      : denied() && waitingInvites() ? ['Accept your invitation', 'You’re signed in as <b>@' + esc(access.login) + '</b>. A project has been shared with you, and GitHub is waiting for you to accept the invitation. PL syncs again once you do.']
       : denied() ? ['No projects for this account', 'You’re signed in as <b>@' + esc(access.login) + '</b>, which can’t open ' + repo + ' and is on no shared PL project. An FTE adds you from People in Signoff EE, or shares a project with you from Signoff PL. Accept GitHub’s invitation, then sync again.']
       : syncing ? ['Syncing with GitHub', 'Checking that your token can open ' + repo + '. The projects show here as soon as the sync finishes.']
       : ['Not checked yet', 'PL shows the projects once a sync confirms your token can open ' + repo + '.'];
     var card = inviteCard();
+    // With the suite's shared card loaded (its spot is the sidebar), the locked page offers its Accept all too.
+    if (!card && window.SignoffInvites && waitingInvites()) card = '<div class="invite-card"><b>' + plural(waitingInvites(), 'invitation') + ' from ' + esc(settings.owner) + '</b><span>' +
+      window.SignoffInvites.list().map(function (i) { return esc(String(i.repo).split('/')[1]); }).join(', ') + '</span><button class="btn btn-primary" data-act="invites-accept-all">' + (waitingInvites() > 1 ? 'Accept all' : 'Accept') + '</button></div>';
     return '<div class="page"><div class="empty"><div class="empty-art">' + ICON.tree + '</div><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' +
       (card ? '<div class="invite-wrap">' + card + '</div>' : '') +
       (getToken() ? syncButton(denied() ? 'Sync again' : 'Sync', 'btn-primary') + '</button> <button class="btn" data-act="settings">Settings</button>'
@@ -2643,9 +2652,11 @@
         save('repoCache', caches); save('homes', homes); save('roster', roster); save('index', index); save('lastSync', lastSync); persist();
         if (!projects[ui.slug]) ui.slug = firstSlug();
         render();
-        if (access.state === 'none' && invitations.length) toast(plural(invitations.length, 'invitation') + ' waiting for @' + access.login + ': accept to open what’s shared with you.');
+        // The locked page offers what the shared card finds, so draw it again once the card has looked.
+        if (window.SignoffInvites) window.SignoffInvites.refresh().then(function () { if (!allowed()) render(); });
+        if (access.state === 'none' && waitingInvites()) toast(plural(waitingInvites(), 'invitation') + ' waiting for @' + access.login + ': accept to open what’s shared with you.');
         else if (access.state === 'none') toast('@' + access.login + ' can’t open ' + settings.owner + '/' + settings.dataRepo + ' and is on no shared PL project.');
-        else if (invitations.length && !errors.length) toast(plural(invitations.length, 'invitation') + ' waiting: Accept is in the sidebar.');
+        else if (waitingInvites() && !errors.length) toast(plural(waitingInvites(), 'invitation') + ' waiting: Accept is in the sidebar.');
         else if (errors.length) toast(errors[0].message + (errors.length > 1 ? ' (+' + (errors.length - 1) + ' more)' : ''));
         else toast((pushed ? 'Synced — ' + plural(pushed, 'change') + ' pushed' : 'Up to date') + ' · ' + plural(Object.keys(index.entries).length, 'design') + ' read');
         checkForUpdate();
@@ -2744,6 +2755,7 @@
       case 'signin': el.disabled = true; startSignIn().catch(function (err) { el.disabled = false; toast(err.message); }); break;
       case 'sync': sync(); break;
       case 'accept-invites': acceptInvites(); break;
+      case 'invites-accept-all': if (window.SignoffInvites) window.SignoffInvites.acceptAll(); break;
       case 'new-project': projectSheet(null); break;
       case 'open-project': ui.slug = el.dataset.slug; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
       case 'view': ui.view = el.dataset.view; saveUi(); renderPage(); break;
@@ -2781,7 +2793,9 @@
       case 'move-up': e.stopPropagation(); move(id, -1); break;
       case 'move-down': e.stopPropagation(); move(id, 1); break;
       case 'project-menu':
-        menu(el, [['edit', 'Project details…']].concat(isFte() ? [['share', 'Share…']] : [], [['export', 'Export project (JSON)']], DEMO ? [['reset', 'Reset demo', true]] : [], ['-', ['archive', current().meta.archived ? 'Unarchive project' : 'Archive project'], ['delete', 'Delete project…', true]])).then(function (c) {
+        menu(el, !current() ? ticketEntries() : [['edit', 'Project details…']].concat(isFte() ? [['share', 'Share…']] : [], [['export', 'Export project (JSON)']], DEMO ? [['reset', 'Reset demo', true]] : [], ['-', ['archive', current().meta.archived ? 'Unarchive project' : 'Archive project'], ['delete', 'Delete project…', true]], ticketsOn() ? ['-'].concat(ticketEntries()) : [])).then(function (c) {
+          if (c === 'ticket') { window.SignoffTickets.newTicket(); return; }
+          if (c === 'tickets') { window.SignoffTickets.open(); return; }
           var p = current();
           if (c === 'edit') projectSheet(p);
           if (c === 'share') shareSheet(p);
@@ -2905,6 +2919,8 @@
   if (!projects[ui.slug]) ui.slug = firstSlug();
   render();
   if (!DEMO && getToken()) sync();
+  // Accepted from the suite's invitations card: sync to pick up what was just joined.
+  window.addEventListener('signoff:invites-accepted', function () { if (!DEMO && getToken()) sync(); });
 
   // Hooks for driving the 3D view from the console or a test (clicking by coordinates is fragile).
   S.app = { sync: sync, render: render, attachModel: attachModel,
