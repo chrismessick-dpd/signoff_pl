@@ -123,9 +123,13 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
 - **Snapping.** `features()` finds corners, edge chains, hole circles, and flat faces. `alignMove()`
   holds the snap rules and is unit-tested. Picking prefers visible features, but a part hidden only
   by the one being moved still counts.
-- **Placements.** `node.place` is written only for the Part that moved, never for every Part, so
-  concurrent edits survive merge. Unplaced Parts keep their slot in the auto stack. The one
-  exception is **In plane** (2026-11-14, Chris: a button at the right of the slider; save the
+- **Placements.** `node.place` is written for the Part that moved. **The grid is the default**
+  (2026-11-14, Chris; the stack, Back to stack, and CAD position are gone): with nothing placed,
+  `arrangeScene` lays every Part out as In plane would; with some placed, the unplaced ones are packed
+  the same way in rows in front of them (toward −Y, from the placed parts' left edge, one grid gap
+  away), so new Parts land beside an arrangement. Moving any part also writes `place` for every part
+  still in the automatic grid, at the spot it's drawn (`commitPlace`, `writePlace`), so nothing
+  repacks or jumps. Another exception is **In plane** (2026-11-14, Chris: a button at the right of the slider; save the
   positions, not a view): `planeLayout` packs every part's X-Y footprint in rows (about square,
   structure order, gap 8% of the largest part, at least 5 mm, bottoms at z = 0, turns kept, centered
   on the origin) and `inPlane` writes `place` for all of them in one change, after a confirm when
@@ -133,14 +137,18 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   from which each part is then put in its real position and turn.
 - **Four views and the expanded stage (2026-11-14, Chris).** *Four views* (bottom bar, beside In
   plane) splits the stage into Top (X Y), 3D, Front (X Z), and Right (Y Z), laid out third angle so X
-  lines up down the left column and Z across the bottom row: the flat views share one center and scale
-  (`ui.cam2`, set by `fitCam`; fits follow the slider's spread). Dragging a part in a flat view moves it
+  lines up down the left column and Z across the bottom row. Each flat view zooms and pans on its own
+  (`ui.flatCams[key]`, `fitFlat`, fitted on its own two axes); **Link views** (a box in the bottom bar,
+  saved in `ui.xsLink`) gives the three one center and scale, lined up, and a pan or zoom in one moves
+  all three (`linkedCams`). The reset button beside expand (`xs-reset`) fits every view and turns the 3D
+  back to Iso; a double-click on empty space fits just that view. Fits follow the slider's spread. Dragging a part in a flat view moves it
   in that plane only (`FLAT[key].fixed` never changes) and selects it; empty space pans, scroll zooms,
   arrows nudge in the plane, R turns about the axis looked along (`bindFlat`, `drawFlat`). Opening Four
   views fills the window (Chris chose the window, not browser full screen); the corner button
   (`xs-full`) expands or collapses either layout, and Esc collapses. While expanded the arrange panel
   docks at the right (`.xs-docked`; it floats on screens under 1100 px). Neither state is saved across
   reloads. `sceneFocus` keeps the keys with the view that had them across the redraw a nudge causes.
+  Pushed with In plane: `664c4ca`, `c9db225`; the default grid, per-view cameras, and Link views after. Tried in the demo with synthetic events, not a real mouse.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

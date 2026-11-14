@@ -146,9 +146,9 @@ Nothing is read from GitHub.
     buttons are Iso, Top, Front, and Right. **Fit** frames everything.
   - **Exploding:** the slider pulls the parts apart: layers by their order from the top, and a
     little outward.
-  - **Where parts start:** a Part you haven't moved is stacked in structure order, first on top.
-    **CAD position** puts a model where its STEP put it, so parts exported from one CAD assembly
-    line up by themselves. **Back to stack** forgets a placement.
+  - **Where parts start:** Parts you haven't moved are laid flat in the In plane grid. Once some are
+    placed, new ones are packed in the same grid in front of them. Moving any part saves the grid
+    parts where they are, so nothing shifts.
   - **In plane** (right of the slider) lays every part flat on the X-Y floor in a grid, in
     structure order, turns kept, and saves each part's place (it asks first when some were already
     placed). Parts then move and snap from there.
@@ -156,7 +156,9 @@ Nothing is read from GitHub.
     each other. Drag a part in a flat view to move it in that plane only; drag empty space to pan,
     scroll to zoom, arrows nudge in the plane, and R turns it about the axis you're looking along.
     Four views fills the window; the corner button expands or collapses the stage in either layout,
-    and Esc collapses it. The arrange panel stays docked at the right while it's expanded.
+    and Esc collapses it. The arrange panel stays docked at the right while it's expanded. Each flat
+    view zooms and pans on its own; tick **Link views** to move all three together, lined up. The
+    reset button beside expand fits every view.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.
@@ -234,7 +236,7 @@ A PL project is one JSON document in the PL data repo (`projects/<id>.json`):
 
 **Placement.** `place` is where the 3D view puts a Part. It's a move in mm from the Part's own
 coordinates, after a turn in degrees about X, then Y, then Z, around the middle of its bounding
-box. All zeros means the CAD position; no `place` means the automatic stack. `boardMm` is a board's
+box. All zeros means the CAD position; no `place` means the automatic grid. `boardMm` is a board's
 size typed in PL (width, height, thickness). It wins over the size Fabcheck stores (`board` in its
 preview `index.json`). `pl.js` `cleanPlace` and `cleanBoard` check both.
 

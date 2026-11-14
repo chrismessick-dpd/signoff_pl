@@ -379,7 +379,7 @@
 
   // ── Arranging (the 3D Exploded view) ─────────────────────
   // node.place = { x, y, z (mm), rx, ry, rz (degrees) } moves a Part from where its own
-  // coordinates put it: all zeros is its CAD position. A Part without one is stacked
+  // coordinates put it: all zeros is its CAD position. A Part without one is laid out in a grid
   // automatically. node.boardMm = [w, h, t] is a board's size when Fabcheck hasn't stored one.
   function cleanPlace(p) {
     if (!p || typeof p !== 'object') return null;

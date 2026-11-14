@@ -92,7 +92,7 @@
   }
   claimAll();
   function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
-    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep }); }
+    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep, xsLink: !!ui.xsLink }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -172,6 +172,7 @@
     tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
     expand: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9.2 6.8M2.5 13.5l4.3-4.3"/></svg>',
     full: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
+    reset: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8"/><path d="M2.6 2.4v2.9h2.9"/><circle cx="8" cy="8" r="1.3"/></svg>',
     unfull: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg>'
   };
 
@@ -921,9 +922,8 @@
   // ── Exploded: the product in 3D ──────────────────────────
   // A Part with an attached model shows as that model; a board as a slab carrying its Fabcheck
   // pictures, once its size is known (Fabcheck stores it, or it's typed in here). Nothing PL doesn't
-  // have is drawn: the rest are named below the view. Each Part sits where node.place puts it (all
-  // zeros is its CAD position); Parts never moved are stacked in structure order, first on top. The
-  // slider pulls the parts apart from the middle. Click a part to arrange it in the panel.
+  // have is drawn: the rest are named below the view. Each Part sits where node.place puts it;
+  // Parts never moved are laid flat in a grid (arrangeScene). The slider pulls the parts apart from the middle. Click a part to arrange it in the panel.
   var M3 = S.model3d, DEG = Math.PI / 180;
   // The flat views of Four views. h and v are the world axes across and up the view; fixed is the
   // one a drag there never changes.
@@ -984,22 +984,37 @@
       }, function () { return null; });
     })).then(function (objs) { return objs.filter(Boolean); });
   }
-  // Placed Parts go where their place says. The others stack downward from z = 0 in structure
-  // order, each centered; placed Parts keep their slot in the stack, so moving one doesn't shift
-  // the rest.
+  // Placed Parts go where their place says. The others are laid flat in the In plane grid
+  // (2026-11-14, Chris: the grid is the base everything is arranged from): all of them when none
+  // is placed, else in rows of the same grid in front of the placed ones (toward −Y, as the grid's
+  // own rows run), from their left edge. Moving one of them saves the others where they're drawn
+  // (commitPlace), so nothing jumps.
   function arrangeScene(objs) {
-    var top = 0;
+    var free = [];
     objs.forEach(function (o) {
       var pl = P.cleanPlace(o.s.n.place);
       o.placed = !!pl;
       o.rot = pl ? [pl.rx, pl.ry, pl.rz] : [0, 0, 0];
       o.R = M3.rotation(o.rot[0], o.rot[1], o.rot[2]);
-      o.T = [0, 0, 0];
-      var b = M3.placedBox(o);
-      if (pl) o.T = [pl.x, pl.y, pl.z];
-      else o.T = [-b.c[0], -b.c[1], top - b.hi[2]];
-      top -= b.size[2];
+      o.T = pl ? [pl.x, pl.y, pl.z] : [0, 0, 0];
+      if (!pl) free.push(o);
     });
+    if (!free.length) return;
+    var Ts = planeLayout(free), placed = objs.filter(function (o) { return o.placed; });
+    free.forEach(function (o, i) { o.T = Ts[i]; });
+    if (!placed.length) return;
+    var a = unionBox(placed), g = unionBox(free), gap = gridGap(objs.map(function (o) { return boxOf(o); }));
+    var dx = a.lo[0] - g.lo[0], dy = a.lo[1] - gap - g.hi[1];
+    free.forEach(function (o) { o.T = [o.T[0] + dx, o.T[1] + dy, o.T[2]]; });
+  }
+  function unionBox(objs) {
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    objs.forEach(function (o) { var b = boxOf(o); for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i]); hi[i] = Math.max(hi[i], b.hi[i]); } });
+    return { lo: lo, hi: hi };
+  }
+  function gridGap(boxes) {
+    var big = boxes.length ? Math.max.apply(null, boxes.map(function (b) { return Math.max(b.size[0], b.size[1]); })) : 0;
+    return Math.max(5, big * 0.08);
   }
   function boxOf(o, T) { return M3.placedBox({ mesh: o.mesh, R: o.R, pivot: o.pivot, T: T || o.T }); }
   function explodeOffsets(objs, k) {
@@ -1014,21 +1029,41 @@
     var mid = (boxes.length - 1) / 2;
     return boxes.map(function (b, i) { return [(b.c[0] - c[0]) * k * 0.5, (b.c[1] - c[1]) * k * 0.5, (mid - rank[i]) * step * k]; });
   }
-  function fitCam(objs, keepView) {
-    // Fitted to the parts as drawn, pulled apart by the slider.
+  // The parts as drawn, pulled apart by the slider.
+  function drawnBounds(objs) {
     var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], offs = explodeOffsets(objs, (ui.spread == null ? 60 : ui.spread) / 60);
     objs.forEach(function (o, j) {
       var b = boxOf(o);
       for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i] + offs[j][i]); hi[i] = Math.max(hi[i], b.hi[i] + offs[j][i]); }
     });
     if (!objs.length) { lo = [-50, -50, -50]; hi = [50, 50, 50]; }
-    var old = keepView && ui.cam, c = [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; });
-    ui.cam = { az: old ? old.az : M3.VIEWS[0].az, el: old ? old.el : M3.VIEWS[0].el, zoom: 1,
-      n: objs.length, c: c, fit: Math.max(20, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.15) };
-    // The flat views share one center and scale, so X lines up between Top and Front, and Z between
-    // Front and Right.
-    ui.cam2 = { c: c.slice(), zoom: 1, fit: Math.max(20, Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.12) };
+    return { lo: lo, hi: hi, c: [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; }) };
   }
+  // keepView: keep the 3D angle. only3d: leave the flat views as they are.
+  function fitCam(objs, keepView, only3d) {
+    var b = drawnBounds(objs), lo = b.lo, hi = b.hi, old = keepView && ui.cam;
+    ui.cam = { az: old ? old.az : M3.VIEWS[0].az, el: old ? old.el : M3.VIEWS[0].el, zoom: 1,
+      n: objs.length, c: b.c, fit: Math.max(20, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.15) };
+    if (!only3d || !ui.flatCams) fitFlats(b);
+  }
+  function fitFlats(b) {
+    ui.flatCams = {};
+    Object.keys(FLAT).forEach(function (k) { fitFlat(k, b); });
+  }
+  // Each flat view zooms and pans on its own (Chris, 2026-11-14); a fit centers it on the parts
+  // across its own two axes.
+  function fitFlat(key, b) {
+    var v = FLAT[key];
+    ui.flatCams = ui.flatCams || {};
+    ui.flatCams[key] = { c: b.c.slice(), zoom: 1, fit: Math.max(20, Math.max(b.hi[v.h] - b.lo[v.h], b.hi[v.v] - b.lo[v.v]) * 1.12) };
+    // Linked (the Link views box), the three share one center and scale, so X lines up between Top
+    // and Front and Z between Front and Right, and a pan or zoom in one moves all three.
+    if (ui.xsLink) {
+      var fit = Math.max(20, Math.max(b.hi[0] - b.lo[0], b.hi[1] - b.lo[1], b.hi[2] - b.lo[2]) * 1.12);
+      Object.keys(FLAT).forEach(function (k) { ui.flatCams[k] = { c: b.c.slice(), zoom: 1, fit: fit }; });
+    }
+  }
+  function linkedCams(key) { return ui.xsLink ? Object.keys(FLAT).map(function (k) { return ui.flatCams[k]; }) : [ui.flatCams[key]]; }
 
   var scene = null, snapState = null;   // snapState: { step: 1 | 2, from } while snapping the selected part
   var sceneFocus = '';                  // '3d' or a flat view's key while one of the stage's canvases has the keys
@@ -1050,14 +1085,16 @@
     };
     var stage = quad ? '<div class="xs-stage xs-quad">' + pane('top') + '<div class="xs-pane xs-pane-3d">' + main3d + '<div class="xs-tag">3D</div></div>' + pane('front') + pane('right')
       : '<div class="xs-stage">' + main3d;
-    stage += '<button class="icon-btn xs-expand" data-act="xs-full" title="' + (full ? 'Back to the page (Esc)' : 'Fill the window') + '" aria-label="' + (full ? 'Collapse' : 'Expand') + '">' + (full ? ICON.unfull : ICON.full) + '</button></div>';
+    stage += '<div class="xs-corner"><button class="icon-btn" data-act="xs-reset" title="Reset ' + (quad ? 'all four views' : 'the view') + ': fit the parts, 3D back to Iso" aria-label="Reset view">' + ICON.reset + '</button>' +
+      '<button class="icon-btn" data-act="xs-full" title="' + (full ? 'Back to the page (Esc)' : 'Fill the window') + '" aria-label="' + (full ? 'Collapse' : 'Expand') + '">' + (full ? ICON.unfull : ICON.full) + '</button></div></div>';
     return '<div class="xs card' + (full ? ' xs-full' + (docked ? ' with-panel' : '') : '') + '">' + stage +
       '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
       '<button class="btn" data-act="xs-fit">Fit</button>' +
       '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span>' +
       '<button class="btn xs-quad-btn' + (quad ? ' on' : '') + '" data-act="xs-quad" aria-pressed="' + quad + '" title="Top, Front, and Right beside the 3D view; drag a part in any of them to move it in that plane">Four views</button>' +
+      (quad ? '<label class="xs-link" title="On: a pan or zoom in one flat view moves the other two, which stay lined up. Off: each zooms and pans on its own."><input type="checkbox" id="xs-link"' + (ui.xsLink ? ' checked' : '') + '> Link views</label>' : '') +
       '<button class="btn" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
-      '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are stacked in structure order.' +
+      '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are laid out flat in a grid.' +
       (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
       (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
   }
@@ -1077,7 +1114,7 @@
       if (load) load.remove();
       scene.objs = objs;
       arrangeScene(objs);
-      if (!ui.cam || !ui.cam2 || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
+      if (!ui.cam || !ui.flatCams || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
       bindScene(scene);
       flats.forEach(function (f) { bindFlat(scene, f); });
       // A nudge or a turn redraws the page; keep the keys going to the view that had them.
@@ -1115,9 +1152,10 @@
   // A flat view: the same placed parts, seen straight along one axis, with the axes through the origin.
   function drawFlat(f, objs, sel, fine) {
     var w = f.cv.clientWidth, h = f.cv.clientHeight, dpr = fine ? Math.min(2, window.devicePixelRatio || 1) : 1;
-    if (!w || !h || !ui.cam2) return;
+    var cm = ui.flatCams && ui.flatCams[f.key];
+    if (!w || !h || !cm) return;
     var W = Math.round(w * dpr), H = Math.round(h * dpr);
-    f.res = M3.renderScene(objs, { az: f.v.az, el: f.v.el, zoom: ui.cam2.zoom, fit: ui.cam2.fit, c: ui.cam2.c }, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
+    f.res = M3.renderScene(objs, { az: f.v.az, el: f.v.el, zoom: cm.zoom, fit: cm.fit, c: cm.c }, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
     f.scale = W / w;
     f.cv.width = W; f.cv.height = H;
     var g = f.cv.getContext('2d'), o = f.res.project([0, 0, 0]);
@@ -1145,7 +1183,7 @@
         sc.drag = { kind: 'move', flat: f, o: o, x0: xy[0], y0: xy[1], T0: o.T.slice(), picked: picked, moved: false };
         if (picked) drawScene(false);
       } else {
-        sc.drag = { kind: 'pan2', flat: f, x0: xy[0], y0: xy[1], c: ui.cam2.c.slice(), hit: o ? o.id : '', moved: false };
+        sc.drag = { kind: 'pan2', flat: f, x0: xy[0], y0: xy[1], cs: linkedCams(f.key).map(function (cm) { return cm.c.slice(); }), hit: o ? o.id : '', moved: false };
       }
       cv.setPointerCapture(e.pointerId);
     });
@@ -1156,7 +1194,7 @@
       if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
       if (!d.moved) return;
       var mv = inPlaneMove(f.res.unproject(dx * f.scale, dy * f.scale));
-      if (d.kind === 'pan2') ui.cam2.c = [d.c[0] - mv[0], d.c[1] - mv[1], d.c[2] - mv[2]];
+      if (d.kind === 'pan2') linkedCams(f.key).forEach(function (cm, j) { var c = d.cs[j]; cm.c = [c[0] - mv[0], c[1] - mv[1], c[2] - mv[2]]; });
       else {
         var grid = e.altKey ? 0.01 : 0.5;
         d.o.liveT = d.T0.map(function (v, i) { return i === f.v.fixed ? v : Math.round((v + mv[i]) / grid) * grid; });
@@ -1175,12 +1213,13 @@
     });
     cv.addEventListener('wheel', function (e) {
       e.preventDefault();
-      ui.cam2.zoom = Math.max(0.2, Math.min(40, ui.cam2.zoom * Math.exp(-e.deltaY * 0.0015)));
+      var z = Math.max(0.2, Math.min(40, ui.flatCams[f.key].zoom * Math.exp(-e.deltaY * 0.0015)));
+      linkedCams(f.key).forEach(function (cm) { cm.zoom = z; });
       sceneLater();
     }, { passive: false });
     cv.addEventListener('dblclick', function (e) {
       var xy = at(e);
-      if (f.res && !f.res.pick(xy[0] * f.scale, xy[1] * f.scale)) { fitCam(sc.objs, true); drawScene(true); }
+      if (f.res && !f.res.pick(xy[0] * f.scale, xy[1] * f.scale)) { fitFlat(f.key, drawnBounds(sc.objs)); drawScene(true); }
     });
     cv.addEventListener('keydown', function (e) {
       var o = sceneObjAt(ui.sel);
@@ -1197,10 +1236,18 @@
     sceneIdle = setTimeout(function () { drawScene(true); }, 260);
   }
 
-  // Saves where a part is: its translation now, and its turn (degrees about X, Y, Z).
+  // Saves where a part is: its translation now, and its turn (degrees about X, Y, Z). Parts still
+  // in the automatic grid are saved where they're drawn in the same change, so moving one never
+  // repacks the rest.
   function commitPlace(o, T, rot) {
-    var r = rot || o.rot, round = function (v) { return Math.round(v * 100) / 100; };
-    setNode(o.id, { place: { x: round(T[0]), y: round(T[1]), z: round(T[2]), rx: ((r[0] % 360) + 360) % 360, ry: ((r[1] % 360) + 360) % 360, rz: ((r[2] % 360) + 360) % 360 } });
+    var p = current();
+    writePlace(p, o, T, rot || o.rot);
+    if (scene) scene.objs.forEach(function (x) { if (x !== o && !x.placed) writePlace(p, x, x.T, x.rot); });
+    touch(p);
+  }
+  function writePlace(p, o, T, r) {
+    var round = function (v) { return Math.round(v * 100) / 100 || 0; }, deg = function (v) { return ((v % 360) + 360) % 360; };
+    p.nodes[o.id] = M.stamp(Object.assign({}, p.nodes[o.id], { place: { x: round(T[0]), y: round(T[1]), z: round(T[2]), rx: deg(r[0]), ry: deg(r[1]), rz: deg(r[2]) } }), me());
   }
   function assembled() {
     if (ui.spread !== 0) { ui.spread = 0; var sl = $('#xs-spread'); if (sl) sl.value = 0; }
@@ -1258,7 +1305,7 @@
       ui.cam.zoom = Math.max(0.2, Math.min(40, ui.cam.zoom * Math.exp(-e.deltaY * 0.0015)));
       sceneLater();
     }, { passive: false });
-    cv.addEventListener('dblclick', function (e) { if (!snapState && !sc.res.pick(at(e)[0] * sc.scale, at(e)[1] * sc.scale)) { fitCam(sc.objs, true); drawScene(true); } });
+    cv.addEventListener('dblclick', function (e) { if (!snapState && !sc.res.pick(at(e)[0] * sc.scale, at(e)[1] * sc.scale)) { fitCam(sc.objs, true, true); drawScene(true); } });
     // Arrows nudge the selected part 1 mm in X and Y (10 with Shift), Page Up and Down in Z; R turns it.
     cv.addEventListener('keydown', function (e) {
       var o = sceneObjAt(ui.sel);
@@ -1290,7 +1337,7 @@
     var boxes = objs.map(function (o) { return boxOf(o, [0, 0, 0]); });
     if (!boxes.length) return [];
     var big = Math.max.apply(null, boxes.map(function (b) { return Math.max(b.size[0], b.size[1]); }));
-    var gap = Math.max(5, big * 0.08), area = 0;
+    var gap = gridGap(boxes), area = 0;
     boxes.forEach(function (b) { area += (b.size[0] + gap) * (b.size[1] + gap); });
     var width = Math.max(big, Math.sqrt(area) * 1.15), rows = [], row = null;
     boxes.forEach(function (b, i) {
@@ -1310,11 +1357,8 @@
     if (!scene || !scene.objs.length) return;
     var placed = scene.objs.filter(function (o) { return o.placed; }).length;
     if (placed && !confirm('Lay every part out flat in a grid? ' + plural(placed, 'part you’ve placed moves', 'parts you’ve placed move') + ' too; turns are kept.')) return;
-    var Ts = planeLayout(scene.objs), p = current(), round = function (v) { return Math.round(v * 100) / 100; };
-    scene.objs.forEach(function (o, i) {
-      var r = o.rot.map(function (v) { return ((v % 360) + 360) % 360; });
-      p.nodes[o.id] = M.stamp(Object.assign({}, p.nodes[o.id], { place: { x: round(Ts[i][0]), y: round(Ts[i][1]), z: round(Ts[i][2]), rx: r[0], ry: r[1], rz: r[2] } }), me());
-    });
+    var Ts = planeLayout(scene.objs), p = current();
+    scene.objs.forEach(function (o, i) { writePlace(p, o, Ts[i], o.rot); });
     assembled();
     ui.cam = Object.assign(ui.cam || {}, { az: M3.VIEWS[0].az, el: M3.VIEWS[0].el, n: -1 });   // refit once the new places draw
     touch(p);
@@ -1468,9 +1512,7 @@
         html += '<div class="field-label">Line up with</div><div class="xs-line"><select class="input" id="xs-target">' + others.map(function (s) { return '<option value="' + esc(s.id) + '"' + (ui.xsTarget === s.id ? ' selected' : '') + '>' + esc(s.n.name || 'Unnamed') + '</option>'; }).join('') + '</select>' +
           '<button class="btn" data-act="xs-stack" title="Put this part on top of it, centered">Stack on</button><button class="btn" data-act="xs-center" title="Center this part over it in X and Y">Center on</button></div>';
       }
-      html += '<div class="map-ins-acts">' + (pl ? '<button class="btn" data-act="xs-auto" title="Forget where it was put; stack it with the others">Back to stack</button>' : '') +
-        (list.parts[0].kind === 'model' ? '<button class="btn" data-act="xs-cad" title="Where its STEP puts it: parts exported from one CAD assembly line up">CAD position</button>' : '') + '</div>' +
-        '<p class="note">Drag the part to move it (from above in X and Y, from the side up and down; Alt for no grid). Arrows nudge 1 mm, Shift 10 mm, Page Up/Down in Z, R turns it.</p>';
+      html += '<p class="note">Drag the part to move it (from above in X and Y, from the side up and down; Alt for no grid). Arrows nudge 1 mm, Shift 10 mm, Page Up/Down in Z, R turns it.</p>';
     } else if (!board) {
       html += '<p class="map-ins-text">' + (MODEL_SOURCES[n.source] ? 'No 3D yet. Attach its STEP to show it here.' : 'No 3D for this kind of Part.') + '</p>';
     }
@@ -1495,6 +1537,7 @@
       if (e.target.value !== '' && isFinite(v)) { T[Number(e.target.dataset.xyz)] = v; assembled(); commitPlace(o, T); }
     }
     if (e.target.id === 'xs-target') ui.xsTarget = e.target.value;
+    if (e.target.id === 'xs-link') { ui.xsLink = e.target.checked; saveUi(); if (scene) { fitFlats(drawnBounds(scene.objs)); drawScene(true); } }
   });
   function sceneAction(act, el) {
     var o = sceneObjAt(ui.sel), sel = $('#xs-target'), target = sel && sceneObjAt(sel.value);
@@ -1507,12 +1550,11 @@
       // Four views fills the window as it opens; the corner button expands and collapses either view.
       case 'xs-quad': ui.xsQuad = !ui.xsQuad; if (ui.xsQuad) ui.xsFull = true; renderPage(); break;
       case 'xs-full': ui.xsFull = !ui.xsFull; renderPage(); break;
+      case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
       case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
       case 'xs-stack': if (o && target) { assembled(); stackOn(o, target); } break;
       case 'xs-center': if (o && target) { assembled(); centerOn(o, target); } break;
-      case 'xs-auto': if (o) setNode(o.id, { place: null }); break;
-      case 'xs-cad': if (o) setNode(o.id, { place: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 } }); break;
       case 'xs-snap': if (o) { snapState = { step: 1 }; renderPage(); } break;
       case 'xs-snap-cancel': snapState = null; renderPage(); break;
       case 'xs-size':
@@ -3101,7 +3143,7 @@
       case 'edit-node': nodeSheet(id); break;
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
