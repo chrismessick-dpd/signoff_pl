@@ -1080,7 +1080,7 @@
     // column and Z across the bottom row; the 3D view top right.
     var pane = function (key) {
       var f = FLAT[key];
-      return '<div class="xs-pane"><canvas class="xs-flat" data-flat="' + key + '" tabindex="0" aria-label="' + f.label + ' view: drag a part to move it in ' + f.axes + ', drag empty space to pan, scroll to zoom"></canvas>' +
+      return '<div class="xs-pane"><canvas class="xs-flat" data-flat="' + key + '" tabindex="0" aria-label="' + f.label + ' view: drag a part to move it in ' + f.axes + ', drag empty space to pan, scroll to zoom"></canvas><canvas class="xs-over" aria-hidden="true"></canvas>' +
         '<div class="xs-tag">' + f.label + ' <span>' + f.axes + '</span></div><div class="xs-hint" hidden></div></div>';
     };
     var stage = quad ? '<div class="xs-stage xs-quad">' + pane('top') + '<div class="xs-pane xs-pane-3d">' + main3d + '<div class="xs-tag">3D</div></div>' + pane('front') + pane('right')
@@ -1105,7 +1105,7 @@
     if (!cv) { scene = null; return; }
     var p = current(), t = P.tree(p), token = {};
     var flats = Array.prototype.map.call(root.querySelectorAll('canvas.xs-flat'), function (c) {
-      return { key: c.dataset.flat, v: FLAT[c.dataset.flat], cv: c, hint: c.parentNode.querySelector('.xs-hint'), res: null, scale: 1 };
+      return { key: c.dataset.flat, v: FLAT[c.dataset.flat], cv: c, over: c.parentNode.querySelector('canvas.xs-over'), hint: c.parentNode.querySelector('.xs-hint'), res: null, scale: 1 };
     });
     scene = { token: token, cv: cv, over: root.querySelector('canvas.xs-over'), hint: cv.parentNode.querySelector('.xs-hint'), flats: flats, objs: [], res: null, drag: null, hover: null };
     sceneObjects(sceneList(t, P.flatten(t))).then(function (objs) {
@@ -1146,8 +1146,8 @@
     sc.placed = objs; sc.scale = W / w;
     sc.cv.width = W; sc.cv.height = H;
     sc.cv.getContext('2d').putImageData(sc.res.image, 0, 0);
-    drawOverlay();
     sc.flats.forEach(function (f) { drawFlat(f, objs, sel, fine); });
+    drawOverlay();
   }
   // A flat view: the same placed parts, seen straight along one axis, with the axes through the origin.
   function drawFlat(f, objs, sel, fine) {
@@ -1161,7 +1161,57 @@
     var g = f.cv.getContext('2d'), o = f.res.project([0, 0, 0]);
     g.putImageData(f.res.image, 0, 0);
     g.save(); g.globalAlpha = 0.35; g.strokeStyle = getComputedStyle(f.cv).color || '#888'; g.lineWidth = dpr; g.setLineDash([6 * dpr, 5 * dpr]);
-    g.beginPath(); g.moveTo(0, o[1] * dpr); g.lineTo(W, o[1] * dpr); g.moveTo(o[0] * dpr, 0); g.lineTo(o[0] * dpr, H); g.stroke(); g.restore();
+    g.beginPath(); g.moveTo(0, o[1]); g.lineTo(W, o[1]); g.moveTo(o[0], 0); g.lineTo(o[0], H); g.stroke(); g.restore();
+    drawRing(f, g, objs, sel);
+  }
+  // The turn ring (2026-11-14, Chris): a very light gray circle around the selected part in each flat
+  // view, with a dot to drag that turns the part in that view's plane (Top about Z, Front about Y,
+  // Right about X). Its size comes from the part's own extent, so it holds still while it turns.
+  // f.ring is kept in CSS px for the pointer.
+  var RING_DOT = 6;
+  function drawRing(f, g, objs, sel) {
+    f.ring = null;
+    if (sel < 0 || !f.res || snapState) return;
+    var o = scene.objs[sel], po = objs[sel];
+    if (!o.rad) { var bb = M3.bbox(o.mesh.pos); o.rad = Math.hypot(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) / 2; }
+    var c = f.res.project(M3.place(po, o.pivot)), e = f.res.project(M3.place(po, o.pivot).map(function (v, i) { return v + (i === f.v.h ? 1 : 0); }));
+    var k = f.scale, r = Math.max(18 * k, Math.abs(e[0] - c[0]) * o.rad + 10 * k);
+    var spin = scene.drag && scene.drag.kind === 'spin' && scene.drag.flat === f ? scene.drag : null;
+    // The dot rests at 12 o'clock, else the first of 3, 6, and 9 inside the view.
+    var W = f.cv.width, H = f.cv.height, m = (RING_DOT + 2) * k, a = spin ? spin.a : [-90, 0, 90, 180].map(function (d) { return d * DEG; }).filter(function (t) {
+      var x = c[0] + r * Math.cos(t), y = c[1] + r * Math.sin(t);
+      return x >= m && y >= m && x <= W - m && y <= H - m;
+    })[0];
+    if (a == null) a = -Math.PI / 2;
+    var dot = [c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)];
+    var dark = isDark(settings.theme);
+    g.save();
+    g.lineWidth = 1.5 * k; g.strokeStyle = dark ? 'rgba(225, 228, 232, 0.55)' : 'rgba(150, 155, 160, 0.55)';
+    g.beginPath(); g.arc(c[0], c[1], r, 0, Math.PI * 2); g.stroke();
+    if (spin) { g.setLineDash([4 * k, 4 * k]); g.beginPath(); g.moveTo(c[0], c[1]); g.lineTo(dot[0], dot[1]); g.stroke(); g.setLineDash([]); }
+    g.fillStyle = dark ? '#e6e8eb' : '#f4f5f6'; g.strokeStyle = dark ? 'rgba(0, 0, 0, 0.55)' : 'rgba(90, 95, 100, 0.8)'; g.lineWidth = 1.2 * k;
+    g.beginPath(); g.arc(dot[0], dot[1], RING_DOT * k, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.restore();
+    f.ring = { o: o, c: [c[0] / k, c[1] / k], r: r / k, dot: [dot[0] / k, dot[1] / k] };
+  }
+  // Turning by the ring: θ (radians, counterclockwise as seen) about the axis toward the eye, applied
+  // after the part's turn so far, stored back as degrees about X, then Y, then Z (model3d.rotation).
+  function axisTurn(n, t) {
+    var c = Math.cos(t), s = Math.sin(t), C = 1 - c, x = n[0], y = n[1], z = n[2];
+    return [c + x * x * C, x * y * C - z * s, x * z * C + y * s, y * x * C + z * s, c + y * y * C, y * z * C - x * s, z * x * C - y * s, z * y * C + x * s, c + z * z * C];
+  }
+  function mul3(A, B) {
+    var out = [];
+    for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) out.push(A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]);
+    return out;
+  }
+  function eulerOf(R) {
+    var clean = function (r) { var d = r / DEG; d = Math.round(d * 100) / 100; return Math.abs(d - Math.round(d)) < 0.02 ? Math.round(d) : d; };
+    if (Math.abs(R[6]) > 0.99999) {   // looking straight along the turned X: only the sum of X and Z turns counts
+      var b = R[6] < 0 ? Math.PI / 2 : -Math.PI / 2;
+      return [0, clean(b), clean(Math.atan2(-R[1], R[4]))];
+    }
+    return [clean(Math.atan2(R[7], R[8])), clean(Math.asin(-R[6])), clean(Math.atan2(R[3], R[0]))];
   }
   // Drag a part in a flat view to move it in that view's plane (the other axis is never touched);
   // drag empty space to pan, scroll to zoom, double-click empty space to fit. A click picks a part.
@@ -1170,12 +1220,21 @@
     var cv = f.cv;
     function at(e) { var r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
     function inPlaneMove(mv) { mv[f.v.fixed] = 0; return mv; }
+    function onDot(xy) { return f.ring && Math.hypot(xy[0] - f.ring.dot[0], xy[1] - f.ring.dot[1]) <= RING_DOT + 5; }
     function say(T) { showHint(T ? 'XYZ'[f.v.h] + ' ' + (Math.round(T[f.v.h] * 10) / 10).toLocaleString() + ', ' + 'XYZ'[f.v.v] + ' ' + (Math.round(T[f.v.v] * 10) / 10).toLocaleString() + ' mm' : '', f.hint); }
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     cv.addEventListener('pointerdown', function (e) {
       if (!f.res) return;
       cv.focus();
       var xy = at(e), hit = f.res.pick(xy[0] * f.scale, xy[1] * f.scale), o = hit && sc.objs[hit.obj];
+      if (snapState && e.button === 0 && !e.shiftKey) { snapHover(xy, flatView(f)); if (sc.hover && !sc.hover.none) snapPick(sc.hover); return; }
+      if (e.button === 0 && onDot(xy)) {
+        var rg = f.ring;
+        assembled();
+        sc.drag = { kind: 'spin', flat: f, o: rg.o, a0: Math.atan2(xy[1] - rg.c[1], xy[0] - rg.c[0]), a: Math.atan2(xy[1] - rg.c[1], xy[0] - rg.c[0]), R0: rg.o.R, rot0: rg.o.rot.slice(), moved: false };
+        cv.setPointerCapture(e.pointerId);
+        return;
+      }
       if (e.button === 0 && !e.shiftKey && o) {
         var picked = ui.sel !== o.id;
         if (picked) { ui.sel = o.id; ui.pic = ''; snapState = null; }
@@ -1189,7 +1248,23 @@
     });
     cv.addEventListener('pointermove', function (e) {
       var d = sc.drag;
-      if (!d || d.flat !== f) return;
+      if (!d) { if (snapState) { cv.style.cursor = 'crosshair'; snapHover(at(e), flatView(f)); } else cv.style.cursor = onDot(at(e)) ? 'grab' : ''; return; }
+      if (d.flat !== f) return;
+      if (d.kind === 'spin') {
+        var p = at(e), rg = f.ring || d;
+        // Seen on screen y runs down, so the screen angle grows clockwise; turning counterclockwise as
+        // seen is a positive turn about the axis toward the eye. 15° steps; Alt for any angle.
+        var raw = Math.atan2(p[1] - (rg.c ? rg.c[1] : 0), p[0] - (rg.c ? rg.c[0] : 0)), step = 15 * DEG;
+        var t = -(raw - d.a0);
+        t = Math.atan2(Math.sin(t), Math.cos(t));
+        if (!e.altKey) t = Math.round(t / step) * step;
+        d.a = d.a0 - t; d.moved = d.moved || Math.abs(t) > 1e-9; d.t = t;
+        d.o.R = mul3(axisTurn(f.res.cam.f, t), d.R0);
+        d.o.liveRot = eulerOf(d.o.R);
+        showHint('Turn ' + (Math.round(t * f.res.cam.f[f.v.fixed] / DEG * 10) / 10).toLocaleString() + '° about ' + 'XYZ'[f.v.fixed], f.hint);
+        sceneLater();
+        return;
+      }
       var xy = at(e), dx = xy[0] - d.x0, dy = xy[1] - d.y0;
       if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
       if (!d.moved) return;
@@ -1206,6 +1281,12 @@
       var d = sc.drag;
       if (!d || d.flat !== f) return;
       sc.drag = null;
+      if (d.kind === 'spin') {
+        showHint('', f.hint);
+        if (d.moved && d.t) { saveUi(); commitPlace(d.o, d.o.T, d.o.liveRot); }
+        else { d.o.R = d.R0; drawScene(true); }
+        return;
+      }
       if (d.kind === 'move' && d.moved) { say(null); saveUi(); if (d.o.liveT) commitPlace(d.o, d.o.liveT); return; }
       if (d.kind === 'pan2' && !d.moved) ui.sel = '';
       if (d.picked || !d.moved) { saveUi(); renderPage(); return; }
@@ -1322,14 +1403,6 @@
     rot[axis] += 90;
     commitPlace(o, o.T, rot);
   }
-  function stackOn(o, target) {
-    var b = boxOf(o), tb = boxOf(target);
-    commitPlace(o, [o.T[0] + tb.c[0] - b.c[0], o.T[1] + tb.c[1] - b.c[1], o.T[2] + tb.hi[2] - b.lo[2]]);
-  }
-  function centerOn(o, target) {
-    var b = boxOf(o), tb = boxOf(target);
-    commitPlace(o, [o.T[0] + tb.c[0] - b.c[0], o.T[1] + tb.c[1] - b.c[1], o.T[2]]);
-  }
   // In plane: every part laid out flat on the X-Y floor (z = 0 under each), turns kept, in rows
   // of about a square overall, in structure order, read left to right and front row first from
   // Top. Returns each part's translation; inPlane() saves them all in one change.
@@ -1378,18 +1451,25 @@
     var vx = b[0] - a[0], vy = b[1] - a[1], l = vx * vx + vy * vy, t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l)) : 0;
     return Math.hypot(p[0] - a[0] - vx * t, p[1] - a[1] - vy * t);
   }
-  // The feature under the cursor on scene object oi (x, y in render pixels).
-  function featureAt(oi, tri, x, y) {
-    var sc = scene, o = sc.objs[oi], po = sc.placed[oi], F = featsOf(o.mesh), s = sc.scale, best = null, bestD = 9 * s;
+  // Every view a snap can be picked in (2026-11-14, Chris: snapping works in the flat views too): the
+  // 3D view and each flat view, as { res, scale, cv, over, hint, fit }.
+  function view3d() { var sc = scene; return { res: sc.res, scale: sc.scale, cv: sc.cv, over: sc.over, hint: sc.hint, fit: ui.cam.fit }; }
+  function flatView(f) { return { res: f.res, scale: f.scale, cv: f.cv, over: f.over, hint: f.hint, fit: ui.flatCams[f.key].fit }; }
+  function allViews() { return scene ? [view3d()].concat(scene.flats.filter(function (f) { return f.res; }).map(flatView)) : []; }
+  // The feature under the cursor on scene object oi (x, y in render pixels of view v, the 3D view
+  // by default).
+  function featureAt(oi, tri, x, y, v) {
+    v = v || view3d();
+    var sc = scene, o = sc.objs[oi], po = sc.placed[oi], F = featsOf(o.mesh), s = v.scale, best = null, bestD = 9 * s;
     // Picked on screen as drawn (perhaps exploded); kept in assembled coordinates, since exploding
     // only shifts each part, so a snap made in the exploded view lands right when assembled.
     var asm = { R: o.R, pivot: o.pivot, T: o.T };
     function W(p) { return M3.place(asm, p); }
-    function S2(p) { return sc.res.project(M3.place(po, p)); }
+    function S2(p) { return v.res.project(M3.place(po, p)); }
     // Seen, or hidden only by the part being moved (which may cover the spot it should go).
-    var tol = (ui.cam.fit || 100) * 0.01;
+    var tol = (v.fit || 100) * 0.01;
     function seen(q) {
-      var h = sc.res.pick(Math.min(Math.max(q[0], 0), sc.cv.width - 1), Math.min(Math.max(q[1], 0), sc.cv.height - 1));
+      var h = v.res.pick(Math.min(Math.max(q[0], 0), v.cv.width - 1), Math.min(Math.max(q[1], 0), v.cv.height - 1));
       return !h || h.obj === oi || q[2] >= h.depth - tol || (snapState && snapState.step === 2 && sc.objs[h.obj].id === ui.sel);
     }
     F.corners.forEach(function (v) {
@@ -1422,20 +1502,21 @@
     return null;
   }
   function fmtLen(mm) { return (Math.round(mm * 100) / 100).toLocaleString() + ' mm'; }
-  function snapHover(xy) {
-    var sc = scene, x = xy[0] * sc.scale, y = xy[1] * sc.scale, found = null;
+  function snapHover(xy, v) {
+    v = v || view3d();
+    var sc = scene, x = xy[0] * v.scale, y = xy[1] * v.scale, found = null;
     var want = function (oi) { var id = sc.objs[oi].id; return snapState.step === 1 ? id === ui.sel : id !== ui.sel; };
     // The part under the cursor first. Failing that (the cursor is on the outline, or on the part
     // being moved, which may hide the spot it should go), the nearest corner or edge of any part
     // that can be picked.
-    var h = sc.res.pick(x, y);
+    var h = v.res.pick(x, y);
     sc.objs.forEach(function (o, oi) {
       if (!want(oi)) return;
-      var f = featureAt(oi, h && h.obj === oi ? h.tri : -1, x, y);
+      var f = featureAt(oi, h && h.obj === oi ? h.tri : -1, x, y, v);
       if (f && (!found || (found.none && !f.none) || f.rank < found.rank || (f.rank === found.rank && f.dist < found.dist))) found = f;
     });
     sc.hover = found;
-    showHint(found ? found.label : '');
+    allViews().forEach(function (w) { showHint(w.hint === v.hint && found ? found.label : '', w.hint); });
     drawOverlay();
   }
   function snapPick(f) {
@@ -1452,20 +1533,25 @@
     el.textContent = !snapState ? '' : snapState.step === 1 ? 'Step 1 of 2: pick a corner, edge, hole, or flat face on ' + (n ? n.s.n.name : 'this part') + '.'
       : 'Step 2 of 2: pick where it goes on another part (' + snapState.from.label.toLowerCase() + ' picked).';
   }
-  // Draws the hovered feature (accent) and, while placing it, the one picked first (orange).
+  // Draws the hovered feature (accent) and, while placing it, the one picked first (orange), in
+  // every view.
   function drawOverlay() {
+    if (!scene || !scene.res) return;
+    allViews().forEach(drawOverlayIn);
+  }
+  function drawOverlayIn(v) {
     var sc = scene;
-    if (!sc || !sc.over || !sc.res) return;
-    var ov = sc.over, g = ov.getContext('2d');
-    ov.width = sc.cv.width; ov.height = sc.cv.height;
+    if (!v.over || !v.res) return;
+    var ov = v.over, g = ov.getContext('2d'), k = v.scale;
+    ov.width = v.cv.width; ov.height = v.cv.height;
     g.clearRect(0, 0, ov.width, ov.height);
     [[snapState && snapState.from, '#e07800'], [sc.hover, '#00a3b4']].forEach(function (pair) {
       var f = pair[0];
       if (!f || f.none || !sc.placed[f.obj]) return;
       var o = sc.objs[f.obj], po = sc.placed[f.obj], F = featsOf(o.mesh);
-      var P2 = function (p) { var q = sc.res.project(M3.place(po, p)); return [q[0], q[1]]; };
-      g.strokeStyle = g.fillStyle = pair[1]; g.lineWidth = 3 * sc.scale; g.lineCap = 'round';
-      if (f.draw.dot) { var q = P2(f.draw.dot); g.beginPath(); g.arc(q[0], q[1], 5 * sc.scale, 0, 7); g.fill(); }
+      var P2 = function (p) { var q = v.res.project(M3.place(po, p)); return [q[0], q[1]]; };
+      g.strokeStyle = g.fillStyle = pair[1]; g.lineWidth = 3 * k; g.lineCap = 'round';
+      if (f.draw.dot) { var q = P2(f.draw.dot); g.beginPath(); g.arc(q[0], q[1], 5 * k, 0, 7); g.fill(); }
       if (f.draw.group != null || f.draw.circle != null) {
         g.beginPath();
         F.segs.forEach(function (e) {
@@ -1476,8 +1562,8 @@
         g.stroke();
       }
       if (f.draw.center) {
-        var c = P2(f.draw.center), r = 7 * sc.scale;
-        g.lineWidth = 1.5 * sc.scale; g.beginPath(); g.moveTo(c[0] - r, c[1]); g.lineTo(c[0] + r, c[1]); g.moveTo(c[0], c[1] - r); g.lineTo(c[0], c[1] + r); g.stroke();
+        var c = P2(f.draw.center), r = 7 * k;
+        g.lineWidth = 1.5 * k; g.beginPath(); g.moveTo(c[0] - r, c[1]); g.lineTo(c[0] + r, c[1]); g.moveTo(c[0], c[1] - r); g.lineTo(c[0], c[1] + r); g.stroke();
       }
       if (f.draw.face != null) {
         g.globalAlpha = 0.35; g.beginPath();
@@ -1507,11 +1593,6 @@
         '<div class="field-label">Snap</div>' +
         (snapState ? '<p class="xs-snap-step"></p><button class="btn" data-act="xs-snap-cancel">Cancel</button>'
           : '<button class="btn btn-primary" data-act="xs-snap">Snap to another part…</button><p class="note">Pick a corner, edge, hole, or flat face here, then one on another part. Faces become flush, edges and hole axes line up, corners meet.</p>');
-      var others = sceneList(t, P.flatten(t)).parts.filter(function (s) { return s.id !== id; });
-      if (others.length) {
-        html += '<div class="field-label">Line up with</div><div class="xs-line"><select class="input" id="xs-target">' + others.map(function (s) { return '<option value="' + esc(s.id) + '"' + (ui.xsTarget === s.id ? ' selected' : '') + '>' + esc(s.n.name || 'Unnamed') + '</option>'; }).join('') + '</select>' +
-          '<button class="btn" data-act="xs-stack" title="Put this part on top of it, centered">Stack on</button><button class="btn" data-act="xs-center" title="Center this part over it in X and Y">Center on</button></div>';
-      }
       html += '<p class="note">Drag the part to move it (from above in X and Y, from the side up and down; Alt for no grid). Arrows nudge 1 mm, Shift 10 mm, Page Up/Down in Z, R turns it.</p>';
     } else if (!board) {
       html += '<p class="map-ins-text">' + (MODEL_SOURCES[n.source] ? 'No 3D yet. Attach its STEP to show it here.' : 'No 3D for this kind of Part.') + '</p>';
@@ -1536,11 +1617,10 @@
       var T = o.T.slice(), v = Number(e.target.value);
       if (e.target.value !== '' && isFinite(v)) { T[Number(e.target.dataset.xyz)] = v; assembled(); commitPlace(o, T); }
     }
-    if (e.target.id === 'xs-target') ui.xsTarget = e.target.value;
     if (e.target.id === 'xs-link') { ui.xsLink = e.target.checked; saveUi(); if (scene) { fitFlats(drawnBounds(scene.objs)); drawScene(true); } }
   });
   function sceneAction(act, el) {
-    var o = sceneObjAt(ui.sel), sel = $('#xs-target'), target = sel && sceneObjAt(sel.value);
+    var o = sceneObjAt(ui.sel);
     switch (act) {
       case 'xs-view':
         var v = M3.VIEWS.filter(function (x) { return x.key === el.dataset.key; })[0];
@@ -1553,8 +1633,6 @@
       case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
       case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
-      case 'xs-stack': if (o && target) { assembled(); stackOn(o, target); } break;
-      case 'xs-center': if (o && target) { assembled(); centerOn(o, target); } break;
       case 'xs-snap': if (o) { snapState = { step: 1 }; renderPage(); } break;
       case 'xs-snap-cancel': snapState = null; renderPage(); break;
       case 'xs-size':
@@ -3143,7 +3221,7 @@
       case 'edit-node': nodeSheet(id); break;
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
@@ -3307,6 +3385,6 @@
 
   // Hooks for driving the 3D view from the console or a test (clicking by coordinates is fragile).
   S.app = { sync: sync, render: render, attachModel: attachModel,
-    scene: { get: function () { return scene; }, draw: drawScene, commit: commitPlace, stackOn: stackOn, centerOn: centerOn, planeLayout: planeLayout, inPlane: inPlane, featureAt: featureAt, snapPick: snapPick,
+    scene: { get: function () { return scene; }, draw: drawScene, commit: commitPlace, planeLayout: planeLayout, inPlane: inPlane, featureAt: featureAt, snapPick: snapPick,
       startSnap: function () { snapState = { step: 1 }; renderPage(); } } };
 })(window.Signoff = window.Signoff || {});

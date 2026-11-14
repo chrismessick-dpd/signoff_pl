@@ -148,13 +148,23 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   (`xs-full`) expands or collapses either layout, and Esc collapses. While expanded the arrange panel
   docks at the right (`.xs-docked`; it floats on screens under 1100 px). Neither state is saved across
   reloads. `sceneFocus` keeps the keys with the view that had them across the redraw a nudge causes.
-  Pushed with In plane: `664c4ca`, `c9db225`; the default grid, per-view cameras, and Link views after. Tried in the demo with synthetic events, not a real mouse.
+  Pushed with In plane: `664c4ca`, `c9db225`; the default grid, per-view cameras, and Link views `3ede1b9`.
+- **Turn ring and snapping in the flat views (2026-11-14, Chris).** Stack on, Center on, and *Line up
+  with* are gone. Each flat view draws a very light gray circle around the selected part (`drawRing`;
+  radius from the mesh's own extent, so it holds still while turning) with a dot (`RING_DOT`; at 12
+  o'clock, else the first of 3, 6, and 9 inside the view). Dragging the dot turns the part about the
+  axis toward the eye (Chris chose the flat views only, and 15° steps with Alt for any angle):
+  `axisTurn` composes it ahead of the part's turn so far (`mul3`), and `eulerOf` stores it back as
+  `rx`, `ry`, `rz` for `model3d.rotation`, so `place` can hold any angle now, not only 90° steps. Snap
+  works in any view: `featureAt` and `snapHover` take a view (`view3d`, `flatView`, `allViews`), each
+  flat pane has its own `xs-over` canvas, and `drawOverlay` draws the picked and hovered features in all
+  four. Tried in the demo with synthetic events, not a real mouse.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that
   way.
-- **Test hooks.** `Signoff.app.scene` (`get`, `draw`, `commit`, `stackOn`, `centerOn`,
-  `featureAt`, `startSnap`) drives it from the console. Clicking by coordinates is fragile.
+- **Test hooks.** `Signoff.app.scene` (`get`, `draw`, `commit`, `planeLayout`,
+  `inPlane`, `featureAt`, `snapPick`, `startSnap`) drives it from the console. Clicking by coordinates is fragile.
 
 ## The Part's 3D view and the large view (2026-11-09)
 

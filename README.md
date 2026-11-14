@@ -166,8 +166,9 @@ Nothing is read from GitHub.
       - Arrows nudge 1 mm (10 with Shift), and Page Up and Page Down move it in Z.
       - Moving shows the parts assembled.
     - **Turn:** turn it 90° about X, Y, or Z, or press R for Z.
-    - **Line up with** another part: **Stack on** puts it on top, centered; **Center on** centers it
-      in X and Y.
+    - **Turn ring:** in Top, Front, and Right a light gray circle surrounds the selected part. Drag
+      its dot to turn the part in that view's plane (Top about Z, Front about Y, Right about X), in
+      15° steps; hold Alt for any angle. The part turns about its own center.
     - **Snap:** pick a corner, edge, hole, or flat face on this part, then one on another part. This
       part moves (it never turns):
       - corners meet;
