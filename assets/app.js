@@ -172,6 +172,8 @@
     tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
     expand: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9.2 6.8M2.5 13.5l4.3-4.3"/></svg>',
     full: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
+    back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L2.5 6l3 3"/><path d="M2.5 6h7a3.5 3.5 0 0 1 0 7H7"/></svg>',
+    fwd: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3l3 3-3 3"/><path d="M13.5 6h-7a3.5 3.5 0 0 0 0 7H9"/></svg>',
     reset: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8"/><path d="M2.6 2.4v2.9h2.9"/><circle cx="8" cy="8" r="1.3"/></svg>',
     unfull: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg>'
   };
@@ -332,6 +334,7 @@
     }).join('');
     $('#toolbar-actions').innerHTML = (DEMO ? '' : syncButton('Sync', '', 'Sync PL projects and read the designs again (Ctrl+S)') +
       (Object.keys(dirty).length ? '<span class="badge">' + Object.keys(dirty).length + '</span>' : '') + '</button>') +
+      (Object.keys(dirty).length ? '<button class="btn" data-act="discard" title="' + (DEMO ? 'Start the demo over' : 'Throw away what hasn’t synced and take each project as it is on GitHub') + '">Discard changes</button>' : '') +
       '<button class="btn btn-primary" data-act="add-node" title="Add a Part or assembly">' + ICON.plus + '<span class="btn-label">Add</span></button>' +
       moreButton();
   }
@@ -1085,7 +1088,10 @@
     };
     var stage = quad ? '<div class="xs-stage xs-quad">' + pane('top') + '<div class="xs-pane xs-pane-3d">' + main3d + '<div class="xs-tag">3D</div></div>' + pane('front') + pane('right')
       : '<div class="xs-stage">' + main3d;
-    stage += '<div class="xs-corner"><button class="icon-btn" data-act="xs-reset" title="Reset ' + (quad ? 'all four views' : 'the view') + ': fit the parts, 3D back to Iso" aria-label="Reset view">' + ICON.reset + '</button>' +
+    var hist = histOf(p);
+    stage += '<div class="xs-corner"><button class="icon-btn" data-act="xs-back" title="Back: undo the last move or turn (Ctrl+Z)" aria-label="Back"' + (hist.back.length ? '' : ' disabled') + '>' + ICON.back + '</button>' +
+      '<button class="icon-btn" data-act="xs-fwd" title="Forward: redo it (Ctrl+Shift+Z)" aria-label="Forward"' + (hist.fwd.length ? '' : ' disabled') + '>' + ICON.fwd + '</button>' +
+      '<button class="icon-btn" data-act="xs-reset" title="Reset the view' + (quad ? 's' : '') + ': zoom and pan to fit, 3D back to Iso. Parts stay where they are." aria-label="Reset view">' + ICON.reset + '</button>' +
       '<button class="icon-btn" data-act="xs-full" title="' + (full ? 'Back to the page (Esc)' : 'Fill the window') + '" aria-label="' + (full ? 'Collapse' : 'Expand') + '">' + (full ? ICON.unfull : ICON.full) + '</button></div></div>';
     return '<div class="xs card' + (full ? ' xs-full' + (docked ? ' with-panel' : '') : '') + '">' + stage +
       '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
@@ -1322,8 +1328,47 @@
   // repacks the rest.
   function commitPlace(o, T, rot) {
     var p = current();
-    writePlace(p, o, T, rot || o.rot);
-    if (scene) scene.objs.forEach(function (x) { if (x !== o && !x.placed) writePlace(p, x, x.T, x.rot); });
+    placeStep(p, function () {
+      writePlace(p, o, T, rot || o.rot);
+      if (scene) scene.objs.forEach(function (x) { if (x !== o && !x.placed) writePlace(p, x, x.T, x.rot); });
+    });
+    touch(p);
+  }
+  // ── Back and forward for arranging (2026-11-14, Chris) ──
+  // Every change to where parts sit (a move, turn, nudge, snap, typed X, Y, or Z, or In plane) is a
+  // step: each Part's place before and after. Back writes the places from before as a new edit, so it
+  // syncs like any other; Forward writes them again. A step whose Parts a sync has changed since is
+  // refused, as Scribe's are. Kept per project for this page only.
+  var placeHist = {};
+  function histOf(p) { return placeHist[p.id] || (placeHist[p.id] = { back: [], fwd: [] }); }
+  function placeKey(n) { var pl = n && P.cleanPlace(n.place); return pl ? JSON.stringify(pl) : ''; }
+  function placeStep(p, write) {
+    var ids = scene ? scene.objs.map(function (o) { return o.id; }) : Object.keys(p.nodes), before = {};
+    ids.forEach(function (id) { before[id] = placeKey(p.nodes[id]); });
+    write();
+    var step = { before: {}, after: {} }, any = false;
+    ids.forEach(function (id) {
+      var now = placeKey(p.nodes[id]);
+      if (now !== before[id]) { step.before[id] = before[id]; step.after[id] = now; any = true; }
+    });
+    if (!any) return;
+    var h = histOf(p);
+    h.back.push(step); h.fwd = [];
+    if (h.back.length > 200) h.back.shift();
+  }
+  function placeUndo(forward) {
+    var p = current();
+    if (!p) return;
+    var h = histOf(p), from = forward ? h.fwd : h.back, to = forward ? h.back : h.fwd, step = from.pop();
+    if (!step) return;
+    var want = forward ? step.before : step.after, put = forward ? step.after : step.before;
+    var moved = Object.keys(want).filter(function (id) { return !p.nodes[id] || placeKey(p.nodes[id]) !== want[id]; });
+    if (moved.length) { h.back = []; h.fwd = []; toast('Can’t go ' + (forward ? 'forward' : 'back') + ': a sync changed those parts since.'); renderPage(); return; }
+    Object.keys(put).forEach(function (id) {
+      p.nodes[id] = M.stamp(Object.assign({}, p.nodes[id], { place: put[id] ? JSON.parse(put[id]) : null }), me());
+    });
+    to.push(step);
+    assembled();
     touch(p);
   }
   function writePlace(p, o, T, r) {
@@ -1431,7 +1476,7 @@
     var placed = scene.objs.filter(function (o) { return o.placed; }).length;
     if (placed && !confirm('Lay every part out flat in a grid? ' + plural(placed, 'part you’ve placed moves', 'parts you’ve placed move') + ' too; turns are kept.')) return;
     var Ts = planeLayout(scene.objs), p = current();
-    scene.objs.forEach(function (o, i) { writePlace(p, o, Ts[i], o.rot); });
+    placeStep(p, function () { scene.objs.forEach(function (o, i) { writePlace(p, o, Ts[i], o.rot); }); });
     assembled();
     ui.cam = Object.assign(ui.cam || {}, { az: M3.VIEWS[0].az, el: M3.VIEWS[0].el, n: -1 });   // refit once the new places draw
     touch(p);
@@ -1631,6 +1676,8 @@
       case 'xs-quad': ui.xsQuad = !ui.xsQuad; if (ui.xsQuad) ui.xsFull = true; renderPage(); break;
       case 'xs-full': ui.xsFull = !ui.xsFull; renderPage(); break;
       case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
+      case 'xs-back': placeUndo(false); break;
+      case 'xs-fwd': placeUndo(true); break;
       case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
       case 'xs-snap': if (o) { snapState = { step: 1 }; renderPage(); } break;
@@ -3029,6 +3076,43 @@
   //    A token that opens the data repo is an FTE's; one that reaches only review-pl-* repos is a
   //    contractor's; one that reaches nothing locks PL, which drops the projects it holds (P.lockOut).
   // 3. Designs: read again from EE, ME, FW, and Loom.
+  // Discard changes (2026-11-14, Chris): every project with unsynced edits goes back to its file on
+  // GitHub, read fresh from its home repository; one never synced is removed. Nothing is written.
+  // The demo has no GitHub copy, so there it starts the demo over.
+  function discardChanges() {
+    var ids = Object.keys(dirty);
+    if (!ids.length || syncing) return;
+    var byId = {}; Object.keys(projects).forEach(function (k) { byId[projects[k].id] = k; });
+    var names = ids.map(function (id) { return byId[id] ? projects[byId[id]].meta.name : id; });
+    if (DEMO) { if (confirm('Discard your changes to the demo? It starts over as it first opened.')) resetDemo(); return; }
+    if (!confirm('Discard your unsynced changes to ' + names.join(', ') + '? Each goes back to what’s on GitHub now; a project never synced is removed. This can’t be undone.')) return;
+    var token = getToken();
+    if (!token) { settingsSheet(); return; }
+    syncing = true; renderSyncState('busy');
+    var started = Object.assign({}, dirty), errors = [], gone = 0;
+    Promise.all(ids.map(function (id) {
+      var slug = byId[id], p = slug && projects[slug], full = homeOf(p);
+      if (!p) return null;
+      var store = new S.GitHubStore({ owner: full.split('/')[0], repo: full.split('/')[1], branch: settings.branch, dataPath: '', token: token });
+      return store.readBytes('projects/' + id + '.json').then(function (bytes) {
+        if (dirty[id] !== started[id]) return;   // edited again while reading: keep it
+        if (!bytes) { delete projects[slug]; gone++; }
+        else {
+          var doc = JSON.parse(new TextDecoder().decode(bytes));
+          if (!doc || doc.id !== id) throw new Error('The file on GitHub isn’t this project');
+          if (!doc.slug) doc.slug = slug;
+          projects[slug] = doc;
+        }
+        delete dirty[id]; delete placeHist[id];
+      }).catch(function (err) { errors.push(names[ids.indexOf(id)] + ': ' + err.message); });
+    })).then(function () {
+      syncing = false;
+      persist();
+      if (!projects[ui.slug]) ui.slug = firstSlug();
+      render();
+      toast(errors.length ? 'Not discarded: ' + errors[0] : 'Changes discarded' + (gone ? '; ' + plural(gone, 'unsynced project') + ' removed' : ''));
+    });
+  }
   function sync() {
     if (DEMO) { toast('Demo mode keeps everything in this browser'); return; }
     if (syncing) return;
@@ -3221,7 +3305,8 @@
       case 'edit-node': nodeSheet(id); break;
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'discard': discardChanges(); break;
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
@@ -3280,6 +3365,11 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); sync(); return; }
     if (e.target.closest('input,textarea,select') || $('#sheet')) return;
+    // Back and forward for arranging, while Exploded is open.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && ui.view === 'system' && ui.layout === 'exploded' && scene) {
+      var kz = e.key.toLowerCase();
+      if (kz === 'z' || kz === 'y') { e.preventDefault(); placeUndo(kz === 'y' || e.shiftKey); return; }
+    }
     // Up and down step through the list shown: Requirements rows, or the System tiles (Map, Gallery, List).
     // The 3D view's canvas keeps its own arrows (it nudges the selected Part).
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&

@@ -313,6 +313,7 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .xs-corner { position: absolute; right: 10px; top: 10px; z-index: 2; display: flex; gap: 6px; }
 .xs-corner .icon-btn { width: 32px; height: 32px; background: var(--bg-elev); border: 1px solid var(--hair); box-shadow: var(--shadow); }
 .xs-corner svg { width: 16px; height: 16px; }
+.xs-corner .icon-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 /* Expanded: the stage fills the window (under sheets and menus); the arrange panel docks at the right */
 .xs.xs-full { position: fixed; inset: 0; z-index: 55; border-radius: 0; display: flex; flex-direction: column; margin: 0; }
 .xs.xs-full.with-panel { right: 360px; }

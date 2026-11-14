@@ -158,7 +158,11 @@ Nothing is read from GitHub.
     Four views fills the window; the corner button expands or collapses the stage in either layout,
     and Esc collapses it. The arrange panel stays docked at the right while it's expanded. Each flat
     view zooms and pans on its own; tick **Link views** to move all three together, lined up. The
-    reset button beside expand fits every view.
+    reset button beside expand fits every view; it never moves a part. **Back** and **Forward** beside
+    it (Ctrl+Z, Ctrl+Shift+Z) step through moves and turns.
+  - **Saving:** placements save in the browser as you make them and go to GitHub only when you Sync
+    (or press Ctrl+S). **Discard changes**, beside Sync while anything is unsynced, throws away what
+    hasn't synced and takes each project as it is on GitHub.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.

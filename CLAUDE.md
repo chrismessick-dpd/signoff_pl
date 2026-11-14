@@ -158,7 +158,18 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   `rx`, `ry`, `rz` for `model3d.rotation`, so `place` can hold any angle now, not only 90° steps. Snap
   works in any view: `featureAt` and `snapHover` take a view (`view3d`, `flatView`, `allViews`), each
   flat pane has its own `xs-over` canvas, and `drawOverlay` draws the picked and hovered features in all
-  four. Tried in the demo with synthetic events, not a real mouse.
+  four. Tried in the demo with synthetic events, not a real mouse. Pushed `dec787b`.
+- **Back, forward, reset view, and Discard changes (2026-11-14, Chris).** Placements are ordinary
+  edits: saved in the browser at once, synced only by Sync or Ctrl+S (PL has no auto-sync), and only
+  In plane lays parts out again. Beside reset view are Back and Forward (also Ctrl+Z, Ctrl+Shift+Z or
+  Ctrl+Y while Exploded is open): `placeStep` wraps every place write (`commitPlace`, `inPlane`) and
+  records each changed Part's place before and after; `placeUndo` writes the other side as a new edit,
+  refused (and the history dropped) when a Part no longer has the place the step expects, as after a
+  sync. Kept per project in memory (`placeHist`), lost on reload. Reset view only fits the cameras.
+  **Discard changes** sits beside Sync while anything is unsynced (`discardChanges`): after a confirm,
+  each dirty project is read fresh from `projects/<id>.json` in its home repo (`homeOf`) and replaces
+  the local copy; one not on GitHub (never synced) is removed; nothing is written. In the demo it starts
+  the demo over. Not tried against GitHub yet: only the demo path and back and forward were run.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that
