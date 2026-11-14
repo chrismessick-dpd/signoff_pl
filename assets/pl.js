@@ -393,6 +393,13 @@
   // node.color = '#rrggbb' draws the Part's model in one color in the 3D view instead of its STEP's
   // colors (2026-11-14, Chris). Anything else means the STEP's.
   function cleanColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : null; }
+  // meta.explodeOrigin = [x, y, z] (mm, assembled coordinates): the point Exploded spreads the
+  // Parts away from (2026-11-14, Chris). None means the old explosion (layers apart in Z).
+  function cleanOrigin(o) {
+    if (!Array.isArray(o) || o.length !== 3) return null;
+    var v = o.map(Number);
+    return v.every(function (x) { return isFinite(x) && Math.abs(x) <= 100000; }) ? v : null;
+  }
   function cleanBoard(b) {
     if (!b) return null;
     var a = Array.isArray(b) ? b : [b.w, b.h, b.t];
@@ -578,6 +585,6 @@
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
-    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanBoard: cleanBoard
+    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanOrigin: cleanOrigin, cleanBoard: cleanBoard
   };
 })(window.Signoff = window.Signoff || {});

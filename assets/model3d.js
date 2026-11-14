@@ -364,6 +364,11 @@
       unproject: function (dx, dy) {
         return [0, 1, 2].map(function (i) { return (cm.r[i] * dx - cm.u[i] * dy) * k; });
       },
+      // The world point under canvas px (x, y) at a pick()'s depth: the inverse of project.
+      point: function (x, y, depth) {
+        var a = view.cx + (x * ss - W / 2) / view.scale, b = view.cy - (y * ss - H / 2) / view.scale;
+        return [0, 1, 2].map(function (i) { return cm.r[i] * a + cm.u[i] * b + cm.f[i] * depth; });
+      },
       cam: cm
     };
   }

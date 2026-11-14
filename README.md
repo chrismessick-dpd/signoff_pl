@@ -165,6 +165,9 @@ Nothing is read from GitHub.
     hasn't synced and takes each project as it is on GitHub. Opening PL, or a tool update reloading it,
     never syncs while anything is unsynced. The view (slider, Four views, zoom and pan) and Back and
     Forward are kept across reloads too.
+  - **Explode origin:** *Set origin*, then click a spot on any part: the slider then spreads every part
+    away from that point along the line through its center, farther parts moving more. It's saved
+    with the project; *Clear origin* goes back to spreading in layers.
   - **Color:** a Part drawn from its model can have its own color (*Color* in the panel); *Use the
     STEP's colors* goes back to the file's colors. It syncs with the project.
   - **Parts list:** the top of the panel lists every part drawn in 3D under its assemblies. Click a
@@ -249,7 +252,8 @@ A PL project is one JSON document in the PL data repo (`projects/<id>.json`):
 **Placement.** `place` is where the 3D view puts a Part. It's a move in mm from the Part's own
 coordinates, after a turn in degrees about X, then Y, then Z, around the middle of its bounding
 box. All zeros means the CAD position; no `place` means the automatic grid. `color` ('#rrggbb', optional)
-draws the Part's model in that one color in Exploded instead of its STEP's colors. `boardMm` is a board's
+draws the Part's model in that one color in Exploded instead of its STEP's colors. A project's
+`meta.explodeOrigin` ([x, y, z] mm, optional) is the point Exploded spreads the Parts away from. `boardMm` is a board's
 size typed in PL (width, height, thickness). It wins over the size Fabcheck stores (`board` in its
 preview `index.json`). `pl.js` `cleanPlace` and `cleanBoard` check both.
 

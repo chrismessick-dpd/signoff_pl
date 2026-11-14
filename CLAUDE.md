@@ -197,7 +197,15 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   Exploded draws it as a full tint (`tintOf`, model3d's `tint` with alpha 1), live while the picker is
   open (`liveColor`). Stored pictures, the inspector's 3D view, and the large view still show the STEP's
   colors. History says "color set" or "color back to its STEP". Exploded's note no longer lists the
-  Parts with no 3D (Chris); it still names boards that need a size.
+  Parts with no 3D (Chris); it still names boards that need a size. Pushed `140c69c`.
+- **Explode origin (2026-11-14, Chris: explode radially from a point; farther parts move more; set by
+  clicking a part; saved with the project).** *Set origin* in the bottom bar, then a click on any part
+  in any view (`pickOrigin`): the surface point under the pointer (`res.point`, new in `model3d`'s
+  `renderScene`, the inverse of `project`), less that part's explode offset (`scene.offs`), becomes
+  `meta.explodeOrigin` (`P.cleanOrigin`), synced with the project. `explodeOffsets` then moves each
+  part by (its center − origin) × slider × 0.6, so the assembly scales up about the origin; with no
+  origin it's the old layered explosion. Every view marks the origin (`drawOriginIn`, on the overlay).
+  *Clear origin* removes it; Esc cancels picking.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

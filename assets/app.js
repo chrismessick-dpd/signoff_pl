@@ -1025,9 +1025,15 @@
     return Math.max(5, big * 0.08);
   }
   function boxOf(o, T) { return M3.placedBox({ mesh: o.mesh, R: o.R, pivot: o.pivot, T: T || o.T }); }
+  function explodeOrigin() { var p = current(); return p && P.cleanOrigin(p.meta.explodeOrigin); }
   function explodeOffsets(objs, k) {
     if (!k || objs.length < 2) return objs.map(function () { return [0, 0, 0]; });
-    var boxes = objs.map(function (o) { return boxOf(o, o.liveT); }), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    var boxes = objs.map(function (o) { return boxOf(o, o.liveT); }), O = explodeOrigin();
+    // With an origin set, every part moves away from it along the line from the origin through its
+    // center, by a share of that distance (scaling the assembly up about the origin): farther parts
+    // move more, a part at the origin stays.
+    if (O) return boxes.map(function (b) { return [0, 1, 2].map(function (i) { return (b.c[i] - O[i]) * k * 0.6; }); });
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     boxes.forEach(function (b) { for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i]); hi[i] = Math.max(hi[i], b.hi[i]); } });
     // Layers move apart in Z by their order from the top (thin boards need a set step, not their
     // own spacing), and a little outward in X and Y.
@@ -1104,6 +1110,8 @@
       '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span>' +
       '<button class="btn xs-quad-btn' + (quad ? ' on' : '') + '" data-act="xs-quad" aria-pressed="' + quad + '" title="Top, Front, and Right beside the 3D view; drag a part in any of them to move it in that plane">Four views</button>' +
       (quad ? '<label class="xs-link" title="On: a pan or zoom in one flat view moves the other two, which stay lined up. Off: each zooms and pans on its own."><input type="checkbox" id="xs-link"' + (ui.xsLink ? ' checked' : '') + '> Link views</label>' : '') +
+      (explodeOrigin() ? '<button class="btn xs-origin on" data-act="xs-origin-clear" title="Origin at ' + explodeOrigin().join(', ') + ' mm. Click to clear it; the parts then spread in layers again.">Clear origin</button>'
+        : '<button class="btn xs-origin' + (originPick ? ' on' : '') + '" data-act="xs-origin" title="Then click a spot on any part: the parts spread away from it">' + (originPick ? 'Click a part…' : 'Set origin') + '</button>') +
       '<button class="btn" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
       '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are laid out flat in a grid.' +
       (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') + '</p></div>';
@@ -1147,6 +1155,7 @@
     if (!w || !h) return;
     var W = Math.round(w * dpr), H = Math.round(h * dpr), k = sc.drag && sc.drag.kind === 'move' ? 0 : (ui.spread == null ? 60 : ui.spread) / 60;
     var offs = explodeOffsets(sc.objs, k), sel = -1;
+    sc.offs = offs;
     var objs = sc.objs.map(function (o, i) {
       if (o.id === ui.sel) sel = i;
       var T = o.liveT || o.T;
@@ -1238,6 +1247,7 @@
       if (!f.res) return;
       cv.focus();
       var xy = at(e), hit = f.res.pick(xy[0] * f.scale, xy[1] * f.scale), o = hit && sc.objs[hit.obj];
+      if (originPick && e.button === 0) { pickOrigin(flatView(f), xy); return; }
       if (snapState && e.button === 0 && !e.shiftKey) { snapHover(xy, flatView(f)); if (sc.hover && !sc.hover.none) snapPick(sc.hover); return; }
       if (e.button === 0 && onDot(xy)) {
         var rg = f.ring;
@@ -1400,6 +1410,7 @@
       if (!sc.res) return;
       cv.focus();
       var xy = at(e), hit = sc.res.pick(xy[0] * sc.scale, xy[1] * sc.scale), o = hit && sc.objs[hit.obj];
+      if (originPick && e.button === 0) { pickOrigin(view3d(), xy); return; }
       if (snapState && e.button === 0 && !e.shiftKey) { if (sc.hover && !sc.hover.none) snapPick(sc.hover); return; }
       if (e.button === 0 && !e.shiftKey && o && o.id === ui.sel) {
         assembled();
@@ -1529,6 +1540,33 @@
   function view3d() { var sc = scene; return { res: sc.res, scale: sc.scale, cv: sc.cv, over: sc.over, hint: sc.hint, fit: ui.cam.fit }; }
   function flatView(f) { return { res: f.res, scale: f.scale, cv: f.cv, over: f.over, hint: f.hint, fit: ui.flatCams[f.key].fit }; }
   function allViews() { return scene ? [view3d()].concat(scene.flats.filter(function (f) { return f.res; }).map(flatView)) : []; }
+  // ── Explode origin (2026-11-14, Chris) ──
+  // Set origin, then a click on any part in any view: the spot clicked, in assembled coordinates
+  // (the part's explode offset taken back off), becomes meta.explodeOrigin, saved and synced with the
+  // project. Clear origin goes back to the layered explosion.
+  var originPick = false;
+  function pickOrigin(v, xy) {
+    var h = v.res && v.res.pick(xy[0] * v.scale, xy[1] * v.scale);
+    if (!h) { toast('Click a spot on a part'); return; }
+    var w = v.res.point(xy[0] * v.scale, xy[1] * v.scale, h.depth), off = (scene.offs && scene.offs[h.obj]) || [0, 0, 0];
+    var p = current(), round = function (x) { return Math.round(x * 10) / 10 || 0; };
+    originPick = false;
+    p.meta.explodeOrigin = [0, 1, 2].map(function (i) { return round(w[i] - off[i]); });
+    toast('Origin set on ' + (scene.objs[h.obj].s.n.name || 'a part') + ': ' + p.meta.explodeOrigin.join(', ') + ' mm');
+    if (!ui.spread) { ui.spread = 60; saveUi(); }
+    touch(p);
+  }
+  // The origin's mark in a view: a ring with a cross, in the accent color.
+  function drawOriginIn(v, g) {
+    var O = explodeOrigin();
+    if (!O || !v.res) return;
+    var q = v.res.project(O), k = v.scale, r = 7 * k;
+    g.save(); g.strokeStyle = '#00a3b4'; g.fillStyle = 'rgba(0, 163, 180, 0.18)'; g.lineWidth = 2 * k;
+    g.beginPath(); g.arc(q[0], q[1], r, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(q[0] - r * 1.8, q[1]); g.lineTo(q[0] + r * 1.8, q[1]); g.moveTo(q[0], q[1] - r * 1.8); g.lineTo(q[0], q[1] + r * 1.8); g.stroke();
+    g.restore();
+  }
+
   // The feature under the cursor on scene object oi (x, y in render pixels of view v, the 3D view
   // by default).
   function featureAt(oi, tri, x, y, v) {
@@ -1618,6 +1656,7 @@
     var ov = v.over, g = ov.getContext('2d'), k = v.scale;
     ov.width = v.cv.width; ov.height = v.cv.height;
     g.clearRect(0, 0, ov.width, ov.height);
+    drawOriginIn(v, g);
     [[snapState && snapState.from, '#e07800'], [sc.hover, '#00a3b4']].forEach(function (pair) {
       var f = pair[0];
       if (!f || f.none || !sc.placed[f.obj]) return;
@@ -1755,6 +1794,8 @@
       case 'xs-full': ui.xsFull = !ui.xsFull; saveUi(); renderPage(); break;
       case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
       case 'xs-back': placeUndo(false); break;
+      case 'xs-origin': originPick = !originPick; snapState = null; renderPage(); if (originPick) toast('Click a spot on any part to set the origin'); break;
+      case 'xs-origin-clear': (function () { var p = current(); if (!p) return; delete p.meta.explodeOrigin; touch(p); })(); break;
       case 'xs-color-reset': if (ui.sel) setNode(ui.sel, { color: null }); break;
       case 'xs-fwd': placeUndo(true); break;
       case 'xs-plane': inPlane(); break;
@@ -3387,7 +3428,7 @@
       case 'discard': discardChanges(); break;
       case 'xs-eye': toggleHidden(id); break;
       case 'xs-eye-all': (function () { var p = current(); if (p && ui.hidden) delete ui.hidden[p.id]; saveUi(); renderPage(); })(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-color-reset': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-color-reset': case 'xs-origin': case 'xs-origin-clear': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
@@ -3440,6 +3481,7 @@
     if (e.key === 'Escape') {
       if (!$('#report').hidden) { $('#report').hidden = true; return; }
       if (snapState && !$('#sheet')) { snapState = null; renderPage(); return; }
+      if (originPick && !$('#sheet')) { originPick = false; renderPage(); return; }
       if (ui.xsFull && !$('#sheet') && !$('#menu') && $('.xs.xs-full')) { ui.xsFull = false; saveUi(); renderPage(); return; }
       if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'system') { ui.sel = ''; saveUi(); renderPage(); return; }
       closeSheet(); closeMenu(); return;
