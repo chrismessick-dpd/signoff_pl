@@ -162,7 +162,9 @@ Nothing is read from GitHub.
     it (Ctrl+Z, Ctrl+Shift+Z) step through moves and turns.
   - **Saving:** placements save in the browser as you make them and go to GitHub only when you Sync
     (or press Ctrl+S). **Discard changes**, beside Sync while anything is unsynced, throws away what
-    hasn't synced and takes each project as it is on GitHub.
+    hasn't synced and takes each project as it is on GitHub. Opening PL, or a tool update reloading it,
+    never syncs while anything is unsynced. The view (slider, Four views, zoom and pan) and Back and
+    Forward are kept across reloads too.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.

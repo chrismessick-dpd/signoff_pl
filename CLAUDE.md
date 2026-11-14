@@ -170,6 +170,17 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   each dirty project is read fresh from `projects/<id>.json` in its home repo (`homeOf`) and replaces
   the local copy; one not on GitHub (never synced) is removed; nothing is written. In the demo it starts
   the demo over. Not tried against GitHub yet: only the demo path and back and forward were run.
+  Pushed `d4ff719`.
+- **Nothing local is lost to a reload (2026-11-14, Chris).** Each of that day's four pushes reloaded his
+  hosted PL, and PL synced on every load, so each pushed his unsynced placements (four "PL update"
+  commits in his real project's shared repo, 17:39 to 18:16 UTC; the last held his edits up to 18:15:20, so no
+  placement was lost). What looked like a reset was the view: the slider back at Exploded (60), Four
+  views, the expanded window, and the cameras back to their defaults. Now: no sync on load while
+  anything is unsynced (one with nothing unsynced still syncs, to read GitHub); `saveUi` keeps
+  `spread`, `xsQuad`, `xsFull`, `cam`, and `flatCams` (the cameras carry the project id, `cam.pid`, and
+  refit for another project or part count), saved a moment after a turn, pan, or zoom stops
+  (`saveUiLater`) and on `pagehide`; back and forward (`placeHist`, 100 steps a project) are in storage
+  too; `pageIdle` waits out a drag, turn, or snap, and `reloadWhenIdle` saves before reloading.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

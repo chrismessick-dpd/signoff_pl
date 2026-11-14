@@ -92,7 +92,10 @@
   }
   claimAll();
   function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
-    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep, xsLink: !!ui.xsLink }); }
+    rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep, xsLink: !!ui.xsLink,
+    // Exploded's view (2026-11-14, Chris: a tool update's reload put the slider back to Exploded and
+    // the views back to fit, which looked like his arrangement was gone): kept across reloads.
+    spread: ui.spread, xsQuad: !!ui.xsQuad, xsFull: !!ui.xsFull, cam: ui.cam, flatCams: ui.flatCams }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -1120,7 +1123,7 @@
       if (load) load.remove();
       scene.objs = objs;
       arrangeScene(objs);
-      if (!ui.cam || !ui.flatCams || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
+      if (!ui.cam || !ui.flatCams || ui.cam.n !== objs.length || ui.cam.pid !== p.id) { fitCam(objs, !!ui.cam && ui.cam.pid === p.id); ui.cam.n = objs.length; ui.cam.pid = p.id; }
       bindScene(scene);
       flats.forEach(function (f) { bindFlat(scene, f); });
       // A nudge or a turn redraws the page; keep the keys going to the view that had them.
@@ -1318,6 +1321,7 @@
   }
   var sceneRaf = 0, sceneIdle = 0;
   function sceneLater() {
+    saveUiLater();
     cancelAnimationFrame(sceneRaf); clearTimeout(sceneIdle);
     sceneRaf = requestAnimationFrame(function () { drawScene(false); });
     sceneIdle = setTimeout(function () { drawScene(true); }, 260);
@@ -1339,7 +1343,7 @@
   // step: each Part's place before and after. Back writes the places from before as a new edit, so it
   // syncs like any other; Forward writes them again. A step whose Parts a sync has changed since is
   // refused, as Scribe's are. Kept per project for this page only.
-  var placeHist = {};
+  var placeHist = load('placeHist', {});   // kept across reloads, as the edits themselves are
   function histOf(p) { return placeHist[p.id] || (placeHist[p.id] = { back: [], fwd: [] }); }
   function placeKey(n) { var pl = n && P.cleanPlace(n.place); return pl ? JSON.stringify(pl) : ''; }
   function placeStep(p, write) {
@@ -1354,7 +1358,8 @@
     if (!any) return;
     var h = histOf(p);
     h.back.push(step); h.fwd = [];
-    if (h.back.length > 200) h.back.shift();
+    if (h.back.length > 100) h.back.shift();
+    save('placeHist', placeHist);
   }
   function placeUndo(forward) {
     var p = current();
@@ -1363,11 +1368,12 @@
     if (!step) return;
     var want = forward ? step.before : step.after, put = forward ? step.after : step.before;
     var moved = Object.keys(want).filter(function (id) { return !p.nodes[id] || placeKey(p.nodes[id]) !== want[id]; });
-    if (moved.length) { h.back = []; h.fwd = []; toast('Can’t go ' + (forward ? 'forward' : 'back') + ': a sync changed those parts since.'); renderPage(); return; }
+    if (moved.length) { h.back = []; h.fwd = []; save('placeHist', placeHist); toast('Can’t go ' + (forward ? 'forward' : 'back') + ': a sync changed those parts since.'); renderPage(); return; }
     Object.keys(put).forEach(function (id) {
       p.nodes[id] = M.stamp(Object.assign({}, p.nodes[id], { place: put[id] ? JSON.parse(put[id]) : null }), me());
     });
     to.push(step);
+    save('placeHist', placeHist);
     assembled();
     touch(p);
   }
@@ -1376,8 +1382,13 @@
     p.nodes[o.id] = M.stamp(Object.assign({}, p.nodes[o.id], { place: { x: round(T[0]), y: round(T[1]), z: round(T[2]), rx: deg(r[0]), ry: deg(r[1]), rz: deg(r[2]) } }), me());
   }
   function assembled() {
-    if (ui.spread !== 0) { ui.spread = 0; var sl = $('#xs-spread'); if (sl) sl.value = 0; }
+    if (ui.spread !== 0) { ui.spread = 0; var sl = $('#xs-spread'); if (sl) sl.value = 0; saveUi(); }
   }
+  // Turning, panning, and zooming the views happen many times a second; they're saved a moment after
+  // they stop, and when the page goes away.
+  var uiTimer = 0;
+  function saveUiLater() { clearTimeout(uiTimer); uiTimer = setTimeout(saveUi, 600); }
+  window.addEventListener('pagehide', function () { saveUi(); });
 
   function bindScene(sc) {
     var cv = sc.cv;
@@ -1654,6 +1665,7 @@
   document.addEventListener('input', function (e) {
     if (e.target.id !== 'xs-spread') return;
     ui.spread = Number(e.target.value);
+    saveUiLater();
     sceneLater();
   });
   document.addEventListener('change', function (e) {
@@ -1673,8 +1685,8 @@
         break;
       case 'xs-fit': if (scene) { fitCam(scene.objs, true); drawScene(true); } break;
       // Four views fills the window as it opens; the corner button expands and collapses either view.
-      case 'xs-quad': ui.xsQuad = !ui.xsQuad; if (ui.xsQuad) ui.xsFull = true; renderPage(); break;
-      case 'xs-full': ui.xsFull = !ui.xsFull; renderPage(); break;
+      case 'xs-quad': ui.xsQuad = !ui.xsQuad; if (ui.xsQuad) ui.xsFull = true; saveUi(); renderPage(); break;
+      case 'xs-full': ui.xsFull = !ui.xsFull; saveUi(); renderPage(); break;
       case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
       case 'xs-back': placeUndo(false); break;
       case 'xs-fwd': placeUndo(true); break;
@@ -3103,7 +3115,7 @@
           if (!doc.slug) doc.slug = slug;
           projects[slug] = doc;
         }
-        delete dirty[id]; delete placeHist[id];
+        delete dirty[id]; delete placeHist[id]; save('placeHist', placeHist);
       }).catch(function (err) { errors.push(names[ids.indexOf(id)] + ': ' + err.message); });
     })).then(function () {
       syncing = false;
@@ -3359,7 +3371,7 @@
     if (e.key === 'Escape') {
       if (!$('#report').hidden) { $('#report').hidden = true; return; }
       if (snapState && !$('#sheet')) { snapState = null; renderPage(); return; }
-      if (ui.xsFull && !$('#sheet') && !$('#menu') && $('.xs.xs-full')) { ui.xsFull = false; renderPage(); return; }
+      if (ui.xsFull && !$('#sheet') && !$('#menu') && $('.xs.xs-full')) { ui.xsFull = false; saveUi(); renderPage(); return; }
       if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'system') { ui.sel = ''; saveUi(); renderPage(); return; }
       closeSheet(); closeMenu(); return;
     }
@@ -3437,12 +3449,14 @@
     var typing = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
     // bigView: the large 3D view, shown in a review. People & access holds staged edits until Apply, and a
     // ticket being written lives only on the page, so neither reloads under the person.
-    return !syncing && !typing && !$('#sheet') && !$('#menu') && !bigView && !document.querySelector('.tk-wrap, .tk-new, #people-pop') && !document.hidden;
+    // A drag, turn, or snap in Exploded is under way only on the page.
+    return !syncing && !typing && !(scene && scene.drag) && !snapState && !$('#sheet') && !$('#menu') && !bigView && !document.querySelector('.tk-wrap, .tk-new, #people-pop') && !document.hidden;
   }
   function reloadWhenIdle() {
     if (!updateWaiting) return;
     if (!pageIdle()) { setTimeout(reloadWhenIdle, 3000); return; }
     if (updateMemo({ tried: updateWaiting, from: (window.SIGNOFF_VERSION || {}).hash }) === null) { updateWaiting = ''; return; }
+    saveUi(); persist();
     location.reload();
   }
   function checkForUpdate() {
@@ -3469,7 +3483,10 @@
 
   if (!projects[ui.slug]) ui.slug = firstSlug();
   render();
-  if (!DEMO && getToken()) sync();
+  // Syncing on load would push unsynced edits nobody asked to send (2026-11-14, Chris: edits go to
+  // GitHub only on Sync or Ctrl+S, and stay in the browser until then or Discard changes). A load
+  // with nothing unsynced still syncs, to read GitHub and the designs.
+  if (!DEMO && getToken() && !Object.keys(dirty).length) sync();
   // Accepted from the suite's invitations card: sync to pick up what was just joined.
   window.addEventListener('signoff:invites-accepted', function () { if (!DEMO && getToken()) sync(); });
 
