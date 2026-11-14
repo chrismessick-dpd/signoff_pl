@@ -152,6 +152,11 @@ Nothing is read from GitHub.
   - **In plane** (right of the slider) lays every part flat on the X-Y floor in a grid, in
     structure order, turns kept, and saves each part's place (it asks first when some were already
     placed). Parts then move and snap from there.
+  - **Four views** shows Top (X Y), Front (X Z), and Right (Y Z) beside the 3D view, lined up with
+    each other. Drag a part in a flat view to move it in that plane only; drag empty space to pan,
+    scroll to zoom, arrows nudge in the plane, and R turns it about the axis you're looking along.
+    Four views fills the window; the corner button expands or collapses the stage in either layout,
+    and Esc collapses it. The arrange panel stays docked at the right while it's expanded.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.

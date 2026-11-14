@@ -925,6 +925,13 @@
   // zeros is its CAD position); Parts never moved are stacked in structure order, first on top. The
   // slider pulls the parts apart from the middle. Click a part to arrange it in the panel.
   var M3 = S.model3d, DEG = Math.PI / 180;
+  // The flat views of Four views. h and v are the world axes across and up the view; fixed is the
+  // one a drag there never changes.
+  var FLAT = {
+    top: { label: 'Top', axes: 'X Y', az: 0, el: 90 * DEG, h: 0, v: 1, fixed: 2 },
+    front: { label: 'Front', axes: 'X Z', az: 0, el: 0, h: 0, v: 2, fixed: 1 },
+    right: { label: 'Right', axes: 'Y Z', az: -90 * DEG, el: 0, h: 1, v: 2, fixed: 0 }
+  };
   function boardSize(n, entry) { return P.cleanBoard(n.boardMm) || (entry && entry.preview && entry.preview.board) || null; }
   function sceneList(t, ids) {
     var parts = [], missing = [], sizeless = [];
@@ -1008,27 +1015,48 @@
     return boxes.map(function (b, i) { return [(b.c[0] - c[0]) * k * 0.5, (b.c[1] - c[1]) * k * 0.5, (mid - rank[i]) * step * k]; });
   }
   function fitCam(objs, keepView) {
-    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    objs.forEach(function (o) { var b = boxOf(o); for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i]); hi[i] = Math.max(hi[i], b.hi[i]); } });
+    // Fitted to the parts as drawn, pulled apart by the slider.
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], offs = explodeOffsets(objs, (ui.spread == null ? 60 : ui.spread) / 60);
+    objs.forEach(function (o, j) {
+      var b = boxOf(o);
+      for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.lo[i] + offs[j][i]); hi[i] = Math.max(hi[i], b.hi[i] + offs[j][i]); }
+    });
     if (!objs.length) { lo = [-50, -50, -50]; hi = [50, 50, 50]; }
-    var old = keepView && ui.cam;
+    var old = keepView && ui.cam, c = [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; });
     ui.cam = { az: old ? old.az : M3.VIEWS[0].az, el: old ? old.el : M3.VIEWS[0].el, zoom: 1,
-      n: objs.length, c: [0, 1, 2].map(function (i) { return (lo[i] + hi[i]) / 2; }), fit: Math.max(20, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.15) };
+      n: objs.length, c: c, fit: Math.max(20, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.15) };
+    // The flat views share one center and scale, so X lines up between Top and Front, and Z between
+    // Front and Right.
+    ui.cam2 = { c: c.slice(), zoom: 1, fit: Math.max(20, Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1.12) };
   }
 
   var scene = null, snapState = null;   // snapState: { step: 1 | 2, from } while snapping the selected part
+  var sceneFocus = '';                  // '3d' or a flat view's key while one of the stage's canvases has the keys
   function exploded(p, t, ids) {
     var list = sceneList(t, ids), spread = ui.spread == null ? 60 : ui.spread;
     var names = function (arr) { return arr.map(function (id) { return '<button class="xs-name" data-act="select-node" data-id="' + esc(id) + '">' + esc(t.nodes[id].name || 'Unnamed') + '</button>'; }).join(', '); };
     if (!list.parts.length && !list.sizeless.length) {
       return '<div class="card empty"><div class="empty-art">' + ICON.tree + '</div><h2>Nothing in 3D yet</h2><p>A board shows here once its Fabcheck run is stored with its review (Send to Signoff) and its size is known. A purchased or ME Part shows once you attach its STEP (Edit the Part).</p></div>';
     }
-    return '<div class="xs card"><div class="xs-stage"><canvas class="xs-canvas" tabindex="0" aria-label="The product in 3D: drag to turn, Shift-drag to pan, scroll to zoom, click a part to arrange it"></canvas><canvas class="xs-over" aria-hidden="true"></canvas>' +
-      '<div class="xs-hint" hidden></div><div class="xs-load"><span class="spin" aria-hidden="true"></span>Loading 3D…</div></div>' +
+    var quad = !!ui.xsQuad, full = !!ui.xsFull, docked = full && ui.sel && t.nodes[ui.sel] && t.nodes[ui.sel].kind === 'part';
+    var main3d = '<canvas class="xs-canvas" tabindex="0" aria-label="The product in 3D: drag to turn, Shift-drag to pan, scroll to zoom, click a part to arrange it"></canvas><canvas class="xs-over" aria-hidden="true"></canvas>' +
+      '<div class="xs-hint" hidden></div><div class="xs-load"><span class="spin" aria-hidden="true"></span>Loading 3D…</div>';
+    // Four views: Top above Front and Right beside it (third angle), so X lines up down the left
+    // column and Z across the bottom row; the 3D view top right.
+    var pane = function (key) {
+      var f = FLAT[key];
+      return '<div class="xs-pane"><canvas class="xs-flat" data-flat="' + key + '" tabindex="0" aria-label="' + f.label + ' view: drag a part to move it in ' + f.axes + ', drag empty space to pan, scroll to zoom"></canvas>' +
+        '<div class="xs-tag">' + f.label + ' <span>' + f.axes + '</span></div><div class="xs-hint" hidden></div></div>';
+    };
+    var stage = quad ? '<div class="xs-stage xs-quad">' + pane('top') + '<div class="xs-pane xs-pane-3d">' + main3d + '<div class="xs-tag">3D</div></div>' + pane('front') + pane('right')
+      : '<div class="xs-stage">' + main3d;
+    stage += '<button class="icon-btn xs-expand" data-act="xs-full" title="' + (full ? 'Back to the page (Esc)' : 'Fill the window') + '" aria-label="' + (full ? 'Collapse' : 'Expand') + '">' + (full ? ICON.unfull : ICON.full) + '</button></div>';
+    return '<div class="xs card' + (full ? ' xs-full' + (docked ? ' with-panel' : '') : '') + '">' + stage +
       '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
       '<button class="btn" data-act="xs-fit">Fit</button>' +
       '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span>' +
-      '<button class="btn xs-plane" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
+      '<button class="btn xs-quad-btn' + (quad ? ' on' : '') + '" data-act="xs-quad" aria-pressed="' + quad + '" title="Top, Front, and Right beside the 3D view; drag a part in any of them to move it in that plane">Four views</button>' +
+      '<button class="btn" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
       '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are stacked in structure order.' +
       (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
       (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
@@ -1039,15 +1067,26 @@
     var cv = root.querySelector('canvas.xs-canvas');
     if (!cv) { scene = null; return; }
     var p = current(), t = P.tree(p), token = {};
-    scene = { token: token, cv: cv, over: root.querySelector('canvas.xs-over'), hint: root.querySelector('.xs-hint'), objs: [], res: null, drag: null, hover: null };
+    var flats = Array.prototype.map.call(root.querySelectorAll('canvas.xs-flat'), function (c) {
+      return { key: c.dataset.flat, v: FLAT[c.dataset.flat], cv: c, hint: c.parentNode.querySelector('.xs-hint'), res: null, scale: 1 };
+    });
+    scene = { token: token, cv: cv, over: root.querySelector('canvas.xs-over'), hint: cv.parentNode.querySelector('.xs-hint'), flats: flats, objs: [], res: null, drag: null, hover: null };
     sceneObjects(sceneList(t, P.flatten(t))).then(function (objs) {
       if (!scene || scene.token !== token) return;
       var load = root.querySelector('.xs-load');
       if (load) load.remove();
       scene.objs = objs;
       arrangeScene(objs);
-      if (!ui.cam || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
+      if (!ui.cam || !ui.cam2 || ui.cam.n !== objs.length) { fitCam(objs, !!ui.cam); ui.cam.n = objs.length; }
       bindScene(scene);
+      flats.forEach(function (f) { bindFlat(scene, f); });
+      // A nudge or a turn redraws the page; keep the keys going to the view that had them.
+      [cv].concat(flats.map(function (f) { return f.cv; })).forEach(function (c) {
+        var key = c.dataset.flat || '3d';
+        ['focus', 'pointerdown', 'keydown'].forEach(function (ev) { c.addEventListener(ev, function () { sceneFocus = key; }, true); });
+        c.addEventListener('blur', function (e) { if (e.relatedTarget) sceneFocus = ''; });
+        if (sceneFocus === key && (document.activeElement === document.body || !document.activeElement)) c.focus({ preventScroll: true });
+      });
       drawScene(true);
       showSnapHint();
     });
@@ -1071,6 +1110,85 @@
     sc.cv.width = W; sc.cv.height = H;
     sc.cv.getContext('2d').putImageData(sc.res.image, 0, 0);
     drawOverlay();
+    sc.flats.forEach(function (f) { drawFlat(f, objs, sel, fine); });
+  }
+  // A flat view: the same placed parts, seen straight along one axis, with the axes through the origin.
+  function drawFlat(f, objs, sel, fine) {
+    var w = f.cv.clientWidth, h = f.cv.clientHeight, dpr = fine ? Math.min(2, window.devicePixelRatio || 1) : 1;
+    if (!w || !h || !ui.cam2) return;
+    var W = Math.round(w * dpr), H = Math.round(h * dpr);
+    f.res = M3.renderScene(objs, { az: f.v.az, el: f.v.el, zoom: ui.cam2.zoom, fit: ui.cam2.fit, c: ui.cam2.c }, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
+    f.scale = W / w;
+    f.cv.width = W; f.cv.height = H;
+    var g = f.cv.getContext('2d'), o = f.res.project([0, 0, 0]);
+    g.putImageData(f.res.image, 0, 0);
+    g.save(); g.globalAlpha = 0.35; g.strokeStyle = getComputedStyle(f.cv).color || '#888'; g.lineWidth = dpr; g.setLineDash([6 * dpr, 5 * dpr]);
+    g.beginPath(); g.moveTo(0, o[1] * dpr); g.lineTo(W, o[1] * dpr); g.moveTo(o[0] * dpr, 0); g.lineTo(o[0] * dpr, H); g.stroke(); g.restore();
+  }
+  // Drag a part in a flat view to move it in that view's plane (the other axis is never touched);
+  // drag empty space to pan, scroll to zoom, double-click empty space to fit. A click picks a part.
+  // Arrows nudge in the plane (Shift 10 mm), R turns about the axis you look along.
+  function bindFlat(sc, f) {
+    var cv = f.cv;
+    function at(e) { var r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    function inPlaneMove(mv) { mv[f.v.fixed] = 0; return mv; }
+    function say(T) { showHint(T ? 'XYZ'[f.v.h] + ' ' + (Math.round(T[f.v.h] * 10) / 10).toLocaleString() + ', ' + 'XYZ'[f.v.v] + ' ' + (Math.round(T[f.v.v] * 10) / 10).toLocaleString() + ' mm' : '', f.hint); }
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    cv.addEventListener('pointerdown', function (e) {
+      if (!f.res) return;
+      cv.focus();
+      var xy = at(e), hit = f.res.pick(xy[0] * f.scale, xy[1] * f.scale), o = hit && sc.objs[hit.obj];
+      if (e.button === 0 && !e.shiftKey && o) {
+        var picked = ui.sel !== o.id;
+        if (picked) { ui.sel = o.id; ui.pic = ''; snapState = null; }
+        assembled();
+        sc.drag = { kind: 'move', flat: f, o: o, x0: xy[0], y0: xy[1], T0: o.T.slice(), picked: picked, moved: false };
+        if (picked) drawScene(false);
+      } else {
+        sc.drag = { kind: 'pan2', flat: f, x0: xy[0], y0: xy[1], c: ui.cam2.c.slice(), hit: o ? o.id : '', moved: false };
+      }
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', function (e) {
+      var d = sc.drag;
+      if (!d || d.flat !== f) return;
+      var xy = at(e), dx = xy[0] - d.x0, dy = xy[1] - d.y0;
+      if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+      if (!d.moved) return;
+      var mv = inPlaneMove(f.res.unproject(dx * f.scale, dy * f.scale));
+      if (d.kind === 'pan2') ui.cam2.c = [d.c[0] - mv[0], d.c[1] - mv[1], d.c[2] - mv[2]];
+      else {
+        var grid = e.altKey ? 0.01 : 0.5;
+        d.o.liveT = d.T0.map(function (v, i) { return i === f.v.fixed ? v : Math.round((v + mv[i]) / grid) * grid; });
+        say(d.o.liveT);
+      }
+      sceneLater();
+    });
+    cv.addEventListener('pointerup', function () {
+      var d = sc.drag;
+      if (!d || d.flat !== f) return;
+      sc.drag = null;
+      if (d.kind === 'move' && d.moved) { say(null); saveUi(); if (d.o.liveT) commitPlace(d.o, d.o.liveT); return; }
+      if (d.kind === 'pan2' && !d.moved) ui.sel = '';
+      if (d.picked || !d.moved) { saveUi(); renderPage(); return; }
+      drawScene(true);
+    });
+    cv.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      ui.cam2.zoom = Math.max(0.2, Math.min(40, ui.cam2.zoom * Math.exp(-e.deltaY * 0.0015)));
+      sceneLater();
+    }, { passive: false });
+    cv.addEventListener('dblclick', function (e) {
+      var xy = at(e);
+      if (f.res && !f.res.pick(xy[0] * f.scale, xy[1] * f.scale)) { fitCam(sc.objs, true); drawScene(true); }
+    });
+    cv.addEventListener('keydown', function (e) {
+      var o = sceneObjAt(ui.sel);
+      if (!o) return;
+      var step = e.shiftKey ? 10 : 1, k = { ArrowLeft: [f.v.h, -step], ArrowRight: [f.v.h, step], ArrowUp: [f.v.v, step], ArrowDown: [f.v.v, -step] }[e.key];
+      if (k) { e.preventDefault(); assembled(); var T = o.T.slice(); T[k[0]] += k[1]; commitPlace(o, T); }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); turnPart(o, f.v.fixed); }
+    });
   }
   var sceneRaf = 0, sceneIdle = 0;
   function sceneLater() {
@@ -1150,7 +1268,7 @@
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); turnPart(o, 2); }
     });
   }
-  function showHint(text) { if (scene && scene.hint) { scene.hint.textContent = text; scene.hint.hidden = !text; } }
+  function showHint(text, el) { el = el || (scene && scene.hint); if (el) { el.textContent = text; el.hidden = !text; } }
 
   function turnPart(o, axis) {
     var rot = o.rot.slice();
@@ -1331,7 +1449,7 @@
 
   // The panel beside the 3D view: where the selected part is, and the tools that move it.
   function arrangePanel(p, t, id) {
-    var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
+    var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel' + (ui.xsFull ? ' xs-docked' : '') + '" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
     html += '<h2>' + esc(n.name || 'Unnamed') + '</h2><p class="map-ins-sub">' + esc([e && e.number || n.number || mpnOf(n), n.kind === 'assembly' ? 'Assembly' : ''].filter(Boolean).join(' · ')) + '</p>';
     if (n.kind !== 'part') return html + '<p class="map-ins-text">Assemblies aren’t drawn; arrange the Parts in them.</p></aside>';
     var list = sceneList(t, [id]), inScene = list.parts.length > 0, board = n.source === 'ee' && e && e.preview;
@@ -1386,6 +1504,9 @@
         if (v && ui.cam) { ui.cam.az = v.az; ui.cam.el = v.el; drawScene(true); }
         break;
       case 'xs-fit': if (scene) { fitCam(scene.objs, true); drawScene(true); } break;
+      // Four views fills the window as it opens; the corner button expands and collapses either view.
+      case 'xs-quad': ui.xsQuad = !ui.xsQuad; if (ui.xsQuad) ui.xsFull = true; renderPage(); break;
+      case 'xs-full': ui.xsFull = !ui.xsFull; renderPage(); break;
       case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
       case 'xs-stack': if (o && target) { assembled(); stackOn(o, target); } break;
@@ -2980,7 +3101,7 @@
       case 'edit-node': nodeSheet(id); break;
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
@@ -3028,10 +3149,12 @@
     }
   });
   $('#project-search').addEventListener('input', renderSidebar);
+  window.addEventListener('resize', function () { if (scene && scene.objs.length) sceneLater(); });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (!$('#report').hidden) { $('#report').hidden = true; return; }
       if (snapState && !$('#sheet')) { snapState = null; renderPage(); return; }
+      if (ui.xsFull && !$('#sheet') && !$('#menu') && $('.xs.xs-full')) { ui.xsFull = false; renderPage(); return; }
       if (!$('#sheet') && !$('#menu') && ui.sel && ui.view === 'system') { ui.sel = ''; saveUi(); renderPage(); return; }
       closeSheet(); closeMenu(); return;
     }
