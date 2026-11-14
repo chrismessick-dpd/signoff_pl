@@ -230,6 +230,7 @@
     L = L.map(function (c) { return c / ll; });
     var q = [0, 0, 0], p = [0, 0, 0];
     objs.forEach(function (o, oi) {
+      if (o.hidden) return;   // hidden in the view: not drawn, never picked, keeps its index
       var m = o.mesh, nv = m.pos.length / 3, sx = new Float32Array(nv), sy = new Float32Array(nv), sz = new Float32Array(nv);
       for (var v = 0; v < nv; v++) {
         p[0] = m.pos[v * 3]; p[1] = m.pos[v * 3 + 1]; p[2] = m.pos[v * 3 + 2]; place(o, p, q);

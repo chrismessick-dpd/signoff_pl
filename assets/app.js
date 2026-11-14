@@ -95,7 +95,7 @@
     rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep, xsLink: !!ui.xsLink,
     // Exploded's view (2026-11-14, Chris: a tool update's reload put the slider back to Exploded and
     // the views back to fit, which looked like his arrangement was gone): kept across reloads.
-    spread: ui.spread, xsQuad: !!ui.xsQuad, xsFull: !!ui.xsFull, cam: ui.cam, flatCams: ui.flatCams }); }
+    spread: ui.spread, hidden: ui.hidden, xsQuad: !!ui.xsQuad, xsFull: !!ui.xsFull, cam: ui.cam, flatCams: ui.flatCams }); }
   function me() { return settings.user || 'Anonymous'; }
   // Signoff PL is for FTEs. Projects show only while a sync has confirmed the token in use.
   function dataRepo() { return (settings.owner + '/' + settings.dataRepo).toLowerCase(); }
@@ -175,6 +175,8 @@
     tree: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.2"/><rect x="3" y="16" width="6" height="5" rx="1.2"/><rect x="15" y="16" width="6" height="5" rx="1.2"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
     expand: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9.2 6.8M2.5 13.5l4.3-4.3"/></svg>',
     full: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
+    eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+    eyeOff: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 3.7A6.4 6.4 0 0 1 8 3.5c4.1 0 6.5 4.5 6.5 4.5a11 11 0 0 1-1.7 2.2M10.2 11.9A6 6 0 0 1 8 12.5C3.9 12.5 1.5 8 1.5 8a11 11 0 0 1 2.4-2.9"/><path d="M2 2l12 12"/></svg>',
     back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L2.5 6l3 3"/><path d="M2.5 6h7a3.5 3.5 0 0 1 0 7H7"/></svg>',
     fwd: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3l3 3-3 3"/><path d="M13.5 6h-7a3.5 3.5 0 0 0 0 7H9"/></svg>',
     reset: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8"/><path d="M2.6 2.4v2.9h2.9"/><circle cx="8" cy="8" r="1.3"/></svg>',
@@ -1149,7 +1151,7 @@
     var objs = sc.objs.map(function (o, i) {
       if (o.id === ui.sel) sel = i;
       var T = o.liveT || o.T;
-      return { mesh: o.mesh, R: o.R, pivot: o.pivot, T: [T[0] + offs[i][0], T[1] + offs[i][1], T[2] + offs[i][2]], tex: o.tex };
+      return { mesh: o.mesh, R: o.R, pivot: o.pivot, T: [T[0] + offs[i][0], T[1] + offs[i][1], T[2] + offs[i][2]], tex: o.tex, hidden: isHidden(o.id) };
     });
     sc.res = M3.renderScene(objs, ui.cam, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
     sc.placed = objs; sc.scale = W / w;
@@ -1182,6 +1184,7 @@
     f.ring = null;
     if (sel < 0 || !f.res || snapState) return;
     var o = scene.objs[sel], po = objs[sel];
+    if (po.hidden) return;
     if (!o.rad) { var bb = M3.bbox(o.mesh.pos); o.rad = Math.hypot(bb.hi[0] - bb.lo[0], bb.hi[1] - bb.lo[1], bb.hi[2] - bb.lo[2]) / 2; }
     var c = f.res.project(M3.place(po, o.pivot)), e = f.res.project(M3.place(po, o.pivot).map(function (v, i) { return v + (i === f.v.h ? 1 : 0); }));
     var k = f.scale, r = Math.max(18 * k, Math.abs(e[0] - c[0]) * o.rad + 10 * k);
@@ -1561,7 +1564,7 @@
   function snapHover(xy, v) {
     v = v || view3d();
     var sc = scene, x = xy[0] * v.scale, y = xy[1] * v.scale, found = null;
-    var want = function (oi) { var id = sc.objs[oi].id; return snapState.step === 1 ? id === ui.sel : id !== ui.sel; };
+    var want = function (oi) { var id = sc.objs[oi].id; return !isHidden(id) && (snapState.step === 1 ? id === ui.sel : id !== ui.sel); };
     // The part under the cursor first. Failing that (the cursor is on the outline, or on the part
     // being moved, which may hide the spot it should go), the nearest corner or edge of any part
     // that can be picked.
@@ -1633,9 +1636,43 @@
     });
   }
 
+  // ── Parts list with eyes (2026-11-14, Chris) ──
+  // At the top of the arrange panel: the PL tree cut down to the Parts drawn in 3D and the assemblies
+  // holding them, each with an eye. A hidden Part isn't drawn, picked, turned, or snapped to in any
+  // view; an assembly's eye hides or shows everything drawn under it. Hiding is a view setting, kept
+  // per project with the page state (ui.hidden), never written to the project.
+  function hiddenSet() { var p = current(); ui.hidden = ui.hidden || {}; return (p && (ui.hidden[p.id] || (ui.hidden[p.id] = {}))) || {}; }
+  function isHidden(id) { return !!hiddenSet()[id]; }
+  function partsTree(t, selId) {
+    var ids = P.flatten(t), drawn = {}, rows = [];
+    sceneList(t, ids).parts.forEach(function (s) { drawn[s.id] = 1; });
+    var under = function (id) { var d = P.descendants(t, id); return Object.keys(d).filter(function (x) { return drawn[x]; }); };
+    ids.forEach(function (id) {
+      var n = t.nodes[id], parts = n.kind === 'assembly' ? under(id) : drawn[id] ? [id] : [];
+      if (!parts.length) return;
+      var off = parts.every(isHidden), some = !off && parts.some(isHidden);
+      rows.push('<div class="xs-tree-row' + (id === selId ? ' sel' : '') + (off ? ' off' : '') + (n.kind === 'assembly' ? ' asm' : '') + '" style="--d:' + (t.depth[id] || 0) + '">' +
+        '<button class="xs-eye' + (some ? ' some' : '') + '" data-act="xs-eye" data-id="' + esc(id) + '" title="' + (off ? 'Show' : 'Hide') + (n.kind === 'assembly' ? ' everything in it' : '') + '" aria-label="' + (off ? 'Show ' : 'Hide ') + esc(n.name || 'Unnamed') + '" aria-pressed="' + !off + '">' + (off ? ICON.eyeOff : ICON.eye) + '</button>' +
+        (n.kind === 'assembly' ? '<span class="xs-tree-name">' + esc(n.name || 'Unnamed') + '</span>'
+          : '<button class="xs-tree-name" data-act="select-node" data-id="' + esc(id) + '">' + esc(n.name || 'Unnamed') + '</button>') + '</div>');
+    });
+    var count = Object.keys(drawn).filter(isHidden).length;
+    return '<div class="xs-tree"><div class="field-label">Parts' + (count ? ' <span class="xs-tree-count">' + count + ' hidden · <button class="linkish" data-act="xs-eye-all">Show all</button></span>' : '') + '</div>' +
+      '<div class="xs-tree-list">' + rows.join('') + '</div></div>';
+  }
+  function toggleHidden(id) {
+    var p = current(), t = P.tree(p), set = hiddenSet(), drawn = {};
+    sceneList(t, P.flatten(t)).parts.forEach(function (s) { drawn[s.id] = 1; });
+    var parts = t.nodes[id] && t.nodes[id].kind === 'assembly' ? Object.keys(P.descendants(t, id)).filter(function (x) { return drawn[x]; }) : [id];
+    var hide = !parts.every(isHidden);
+    parts.forEach(function (x) { if (hide) set[x] = 1; else delete set[x]; });
+    saveUi(); renderPage();
+  }
+
   // The panel beside the 3D view: where the selected part is, and the tools that move it.
   function arrangePanel(p, t, id) {
     var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel' + (ui.xsFull ? ' xs-docked' : '') + '" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
+    html += partsTree(t, id);
     html += '<h2>' + esc(n.name || 'Unnamed') + '</h2><p class="map-ins-sub">' + esc([e && e.number || n.number || mpnOf(n), n.kind === 'assembly' ? 'Assembly' : ''].filter(Boolean).join(' · ')) + '</p>';
     if (n.kind !== 'part') return html + '<p class="map-ins-text">Assemblies aren’t drawn; arrange the Parts in them.</p></aside>';
     var list = sceneList(t, [id]), inScene = list.parts.length > 0, board = n.source === 'ee' && e && e.preview;
@@ -3318,6 +3355,8 @@
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
       case 'discard': discardChanges(); break;
+      case 'xs-eye': toggleHidden(id); break;
+      case 'xs-eye-all': (function () { var p = current(); if (p && ui.hidden) delete ui.hidden[p.id]; saveUi(); renderPage(); })(); break;
       case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;

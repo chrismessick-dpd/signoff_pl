@@ -181,6 +181,15 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   refit for another project or part count), saved a moment after a turn, pan, or zoom stops
   (`saveUiLater`) and on `pagehide`; back and forward (`placeHist`, 100 steps a project) are in storage
   too; `pageIdle` waits out a drag, turn, or snap, and `reloadWhenIdle` saves before reloading.
+  Pushed `7f8f7c4`.
+- **Parts list with eyes (2026-11-14, Chris).** At the top of the arrange panel (Chris chose there, so
+  it shows while a Part is selected), `partsTree` lists the PL tree cut down to the Parts drawn in 3D
+  (boards too) and the assemblies holding them, indented by depth; a name selects that Part. Each row's
+  eye hides or shows it; an assembly's eye does the same for everything drawn under it (a half-filled
+  eye when only some are hidden), and *Show all* clears them. Hidden is a view setting
+  (`ui.hidden[projectId]`, saved with the page state, never in the project): `drawScene` marks the
+  objects `hidden`, `model3d` `raster` skips them (so they're never drawn or picked and keep their
+  index), and the turn ring and snapping leave them out.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

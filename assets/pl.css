@@ -310,6 +310,24 @@ body.dragging [data-drop] { outline: 1px dashed var(--hair-2); outline-offset: 2
 .xs-tag span { font-weight: 500; color: var(--text-3); margin-left: 4px; }
 .xs-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); cursor: pointer; user-select: none; }
 .xs-link input { accent-color: var(--accent); margin: 0; }
+/* Parts list with eyes, at the top of the arrange panel */
+.xs-tree { display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--hair); margin-top: 4px; }
+.xs-tree .field-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: -4px; padding-right: 30px; }
+.xs-tree-count { font-weight: 500; color: var(--text-3); text-transform: none; letter-spacing: 0; }
+.xs-tree-count .linkish { font: inherit; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; }
+.xs-tree-list { max-height: 34vh; overflow: auto; display: flex; flex-direction: column; margin: 0 -6px; }
+.xs-tree-row { display: flex; align-items: center; gap: 4px; padding: 1px 6px 1px calc(6px + var(--d, 0) * 14px); border-radius: 7px; font-size: 13px; min-height: 28px; }
+.xs-tree-row.sel { background: var(--accent-soft); }
+.xs-tree-row.asm .xs-tree-name { font-weight: 600; color: var(--text-2); }
+.xs-tree-row.off .xs-tree-name { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--hair-2); }
+.xs-tree-name { flex: 1; min-width: 0; text-align: left; font: inherit; color: var(--text); background: none; border: none; padding: 4px 2px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+span.xs-tree-name { cursor: default; }
+.xs-tree-row button.xs-tree-name:hover { color: var(--accent); }
+.xs-eye { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border: none; border-radius: 6px; background: none; color: var(--text-2); cursor: pointer; padding: 0; }
+.xs-eye svg { width: 16px; height: 16px; }
+.xs-eye:hover { background: var(--bg-sunk); color: var(--text); }
+.xs-tree-row.off .xs-eye { color: var(--text-3); }
+.xs-eye.some svg circle { fill: currentColor; opacity: 0.35; }
 .xs-corner { position: absolute; right: 10px; top: 10px; z-index: 2; display: flex; gap: 6px; }
 .xs-corner .icon-btn { width: 32px; height: 32px; background: var(--bg-elev); border: 1px solid var(--hair); box-shadow: var(--shadow); }
 .xs-corner svg { width: 16px; height: 16px; }

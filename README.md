@@ -165,6 +165,9 @@ Nothing is read from GitHub.
     hasn't synced and takes each project as it is on GitHub. Opening PL, or a tool update reloading it,
     never syncs while anything is unsynced. The view (slider, Four views, zoom and pan) and Back and
     Forward are kept across reloads too.
+  - **Parts list:** the top of the panel lists every part drawn in 3D under its assemblies. Click a
+    name to select it; click an eye to hide or show that part, or everything in an assembly, in all
+    the views. Hidden parts can't be picked, turned, or snapped to; *Show all* brings them back.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.
