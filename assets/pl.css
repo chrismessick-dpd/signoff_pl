@@ -328,6 +328,9 @@ span.xs-tree-name { cursor: default; }
 .xs-eye:hover { background: var(--bg-sunk); color: var(--text); }
 .xs-tree-row.off .xs-eye { color: var(--text-3); }
 .xs-eye.some svg circle { fill: currentColor; opacity: 0.35; }
+.xs-color { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.xs-color input[type=color] { width: 44px; height: 30px; padding: 2px; border: 1px solid var(--hair-2); border-radius: 8px; background: var(--bg-elev); cursor: pointer; }
+.xs-color span { flex: 1; }
 .xs-corner { position: absolute; right: 10px; top: 10px; z-index: 2; display: flex; gap: 6px; }
 .xs-corner .icon-btn { width: 32px; height: 32px; background: var(--bg-elev); border: 1px solid var(--hair); box-shadow: var(--shadow); }
 .xs-corner svg { width: 16px; height: 16px; }

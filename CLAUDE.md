@@ -189,7 +189,15 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   eye when only some are hidden), and *Show all* clears them. Hidden is a view setting
   (`ui.hidden[projectId]`, saved with the page state, never in the project): `drawScene` marks the
   objects `hidden`, `model3d` `raster` skips them (so they're never drawn or picked and keep their
-  index), and the turn ring and snapping leave them out.
+  index), and the turn ring and snapping leave them out. Pushed `a58a6bc`.
+- **A Part's own color (2026-11-14, Chris).** A model's colors come from its STEP (each face's, else its
+  body's, else light gray `DEFAULT_RGB`, `fromOcct`). The arrange panel's *Color* (a color input, for
+  Parts drawn from a model; boards keep their Fabcheck pictures) sets `node.color` ('#rrggbb',
+  `P.cleanColor`), saved in the project and synced like `place`; *Use the STEP's colors* clears it.
+  Exploded draws it as a full tint (`tintOf`, model3d's `tint` with alpha 1), live while the picker is
+  open (`liveColor`). Stored pictures, the inspector's 3D view, and the large view still show the STEP's
+  colors. History says "color set" or "color back to its STEP". Exploded's note no longer lists the
+  Parts with no 3D (Chris); it still names boards that need a size.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

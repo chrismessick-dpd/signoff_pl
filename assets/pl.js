@@ -390,6 +390,9 @@
     });
     return out;
   }
+  // node.color = '#rrggbb' draws the Part's model in one color in the 3D view instead of its STEP's
+  // colors (2026-11-14, Chris). Anything else means the STEP's.
+  function cleanColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : null; }
   function cleanBoard(b) {
     if (!b) return null;
     var a = Array.isArray(b) ? b : [b.w, b.h, b.t];
@@ -531,6 +534,7 @@
     NODE_WORDS.forEach(function (w) { if (!same(w[0])) out.push(w[0] === 'name' ? 'renamed' : w[1] + ' changed'); });
     if (!same('model')) out.push(a.model ? (b.model ? '3D model replaced' : '3D model added') : '3D model removed');
     if (!same('place')) out.push('moved in 3D');
+    if (!same('color')) out.push(a.color ? 'color set' : 'color back to its STEP');
     return out.length ? out.join(', ') : 'edited';
   }
   function historyDiff(before, after) {
@@ -574,6 +578,6 @@
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
-    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanBoard: cleanBoard
+    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanBoard: cleanBoard
   };
 })(window.Signoff = window.Signoff || {});

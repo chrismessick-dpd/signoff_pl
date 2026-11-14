@@ -1106,8 +1106,7 @@
       (quad ? '<label class="xs-link" title="On: a pan or zoom in one flat view moves the other two, which stay lined up. Off: each zooms and pans on its own."><input type="checkbox" id="xs-link"' + (ui.xsLink ? ' checked' : '') + '> Link views</label>' : '') +
       '<button class="btn" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
       '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are laid out flat in a grid.' +
-      (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
-      (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
+      (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') + '</p></div>';
   }
 
   function sceneObjAt(id) { return scene && scene.objs.filter(function (o) { return o.id === id; })[0]; }
@@ -1151,7 +1150,7 @@
     var objs = sc.objs.map(function (o, i) {
       if (o.id === ui.sel) sel = i;
       var T = o.liveT || o.T;
-      return { mesh: o.mesh, R: o.R, pivot: o.pivot, T: [T[0] + offs[i][0], T[1] + offs[i][1], T[2] + offs[i][2]], tex: o.tex, hidden: isHidden(o.id) };
+      return { mesh: o.mesh, R: o.R, pivot: o.pivot, T: [T[0] + offs[i][0], T[1] + offs[i][1], T[2] + offs[i][2]], tex: o.tex, hidden: isHidden(o.id), tint: tintOf(o) };
     });
     sc.res = M3.renderScene(objs, ui.cam, W, H, { ss: fine && dpr < 2 && W * H < 1600000 ? 2 : 1, sel: sel });
     sc.placed = objs; sc.scale = W / w;
@@ -1455,6 +1454,21 @@
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); turnPart(o, 2); }
     });
   }
+  // A Part's own color (node.color), drawn over its STEP's colors; a live pick while the picker is open.
+  function tintOf(o) {
+    var c = o.liveColor || P.cleanColor(o.s.n.color);
+    return c ? [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16), 1] : null;
+  }
+  // The color most of a mesh is (by triangles), as #rrggbb, for the picker to start from.
+  function mainColor(mesh) {
+    var count = {}, best = '', n = 0;
+    for (var t = 0; t < mesh.col.length; t += 3) {
+      var k = '#' + [mesh.col[t], mesh.col[t + 1], mesh.col[t + 2]].map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join('');
+      count[k] = (count[k] || 0) + 1;
+      if (count[k] > n) { n = count[k]; best = k; }
+    }
+    return best || '#c4c7cc';
+  }
   function showHint(text, el) { el = el || (scene && scene.hint); if (el) { el.textContent = text; el.hidden = !text; } }
 
   function turnPart(o, axis) {
@@ -1669,6 +1683,14 @@
     saveUi(); renderPage();
   }
 
+  // Color, for a Part drawn from its model (boards keep their Fabcheck pictures).
+  function colorField(n, id, s) {
+    if (!s || s.kind !== 'model') return '';
+    var own = P.cleanColor(n.color), o = sceneObjAt(id), start = own || (o ? mainColor(o.mesh) : '#c4c7cc');
+    return '<div class="field-label">Color</div><div class="xs-color"><input type="color" id="xs-color" value="' + start + '" aria-label="Color of ' + esc(n.name || 'this part') + '">' +
+      '<span>' + (own ? 'Its own color' : 'From its STEP') + '</span>' + (own ? '<button class="btn" data-act="xs-color-reset" title="Draw it in its STEP file’s colors again">Use the STEP’s colors</button>' : '') + '</div>';
+  }
+
   // The panel beside the 3D view: where the selected part is, and the tools that move it.
   function arrangePanel(p, t, id) {
     var n = t.nodes[id], st = P.partStatus(n, index), e = st && st.entry, html = '<aside class="map-ins card xs-panel' + (ui.xsFull ? ' xs-docked' : '') + '" aria-label="Arrange ' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
@@ -1683,6 +1705,7 @@
       }).join('') + '<span class="xs-unit">mm</span></div>' +
         '<div class="field-label">Turn 90°</div><div class="seg full xs-turn">' + ['X', 'Y', 'Z'].map(function (a, i) { return '<button data-act="xs-turn" data-axis="' + i + '">' + a + '</button>'; }).join('') + '</div>' +
         (pl && (pl.rx || pl.ry || pl.rz) ? '<p class="note">Turned ' + [pl.rx, pl.ry, pl.rz].map(function (v, i) { return 'XYZ'[i] + ' ' + v + '°'; }).join(', ') + '</p>' : '') +
+        colorField(n, id, list.parts[0]) +
         '<div class="field-label">Snap</div>' +
         (snapState ? '<p class="xs-snap-step"></p><button class="btn" data-act="xs-snap-cancel">Cancel</button>'
           : '<button class="btn btn-primary" data-act="xs-snap">Snap to another part…</button><p class="note">Pick a corner, edge, hole, or flat face here, then one on another part. Faces become flush, edges and hole axes line up, corners meet.</p>');
@@ -1700,6 +1723,7 @@
     return html + '<div class="map-ins-acts"><button class="btn" data-act="edit-node" data-id="' + esc(id) + '">Edit Part</button></div></aside>';
   }
   document.addEventListener('input', function (e) {
+    if (e.target.id === 'xs-color') { var oc = sceneObjAt(ui.sel); if (oc) { oc.liveColor = P.cleanColor(e.target.value); sceneLater(); } return; }
     if (e.target.id !== 'xs-spread') return;
     ui.spread = Number(e.target.value);
     saveUiLater();
@@ -1710,6 +1734,11 @@
     if (e.target.dataset.xyz != null && o) {
       var T = o.T.slice(), v = Number(e.target.value);
       if (e.target.value !== '' && isFinite(v)) { T[Number(e.target.dataset.xyz)] = v; assembled(); commitPlace(o, T); }
+    }
+    if (e.target.id === 'xs-color' && ui.sel) {
+      var oc = sceneObjAt(ui.sel), c = P.cleanColor(e.target.value);
+      if (oc) oc.liveColor = null;
+      if (c) setNode(ui.sel, { color: c });
     }
     if (e.target.id === 'xs-link') { ui.xsLink = e.target.checked; saveUi(); if (scene) { fitFlats(drawnBounds(scene.objs)); drawScene(true); } }
   });
@@ -1726,6 +1755,7 @@
       case 'xs-full': ui.xsFull = !ui.xsFull; saveUi(); renderPage(); break;
       case 'xs-reset': if (scene) { fitCam(scene.objs, false); drawScene(true); } break;
       case 'xs-back': placeUndo(false); break;
+      case 'xs-color-reset': if (ui.sel) setNode(ui.sel, { color: null }); break;
       case 'xs-fwd': placeUndo(true); break;
       case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
@@ -3357,7 +3387,7 @@
       case 'discard': discardChanges(); break;
       case 'xs-eye': toggleHidden(id); break;
       case 'xs-eye-all': (function () { var p = current(); if (p && ui.hidden) delete ui.hidden[p.id]; saveUi(); renderPage(); })(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-quad': case 'xs-full': case 'xs-reset': case 'xs-back': case 'xs-fwd': case 'xs-color-reset': case 'xs-plane': case 'xs-turn': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;

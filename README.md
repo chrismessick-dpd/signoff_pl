@@ -165,6 +165,8 @@ Nothing is read from GitHub.
     hasn't synced and takes each project as it is on GitHub. Opening PL, or a tool update reloading it,
     never syncs while anything is unsynced. The view (slider, Four views, zoom and pan) and Back and
     Forward are kept across reloads too.
+  - **Color:** a Part drawn from its model can have its own color (*Color* in the panel); *Use the
+    STEP's colors* goes back to the file's colors. It syncs with the project.
   - **Parts list:** the top of the panel lists every part drawn in 3D under its assemblies. Click a
     name to select it; click an eye to hide or show that part, or everything in an assembly, in all
     the views. Hidden parts can't be picked, turned, or snapped to; *Show all* brings them back.
@@ -246,7 +248,8 @@ A PL project is one JSON document in the PL data repo (`projects/<id>.json`):
 
 **Placement.** `place` is where the 3D view puts a Part. It's a move in mm from the Part's own
 coordinates, after a turn in degrees about X, then Y, then Z, around the middle of its bounding
-box. All zeros means the CAD position; no `place` means the automatic grid. `boardMm` is a board's
+box. All zeros means the CAD position; no `place` means the automatic grid. `color` ('#rrggbb', optional)
+draws the Part's model in that one color in Exploded instead of its STEP's colors. `boardMm` is a board's
 size typed in PL (width, height, thickness). It wins over the size Fabcheck stores (`board` in its
 preview `index.json`). `pl.js` `cleanPlace` and `cleanBoard` check both.
 
