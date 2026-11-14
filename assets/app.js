@@ -1027,7 +1027,8 @@
       '<div class="xs-hint" hidden></div><div class="xs-load"><span class="spin" aria-hidden="true"></span>Loading 3D…</div></div>' +
       '<div class="xs-ctl"><div class="seg" role="group" aria-label="View">' + M3.VIEWS.map(function (v) { return '<button data-act="xs-view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
       '<button class="btn" data-act="xs-fit">Fit</button>' +
-      '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span></div>' +
+      '<label for="xs-spread">Assembled</label><input type="range" id="xs-spread" min="0" max="120" value="' + spread + '"><span>Exploded</span>' +
+      '<button class="btn xs-plane" data-act="xs-plane" title="Lay every part out flat on the X-Y floor in a grid, keeping turns; this saves each part’s place">In plane</button></div>' +
       '<p class="note">Drag to turn, Shift-drag to pan, scroll to zoom. Click a part to move, turn, or snap it. Parts you haven’t moved are stacked in structure order.' +
       (list.sizeless.length ? ' Boards that need a size first: ' + names(list.sizeless) + '.' : '') +
       (list.missing.length ? ' Not shown, no 3D yet: ' + names(list.missing) + '.' : '') + '</p></div>';
@@ -1163,6 +1164,42 @@
   function centerOn(o, target) {
     var b = boxOf(o), tb = boxOf(target);
     commitPlace(o, [o.T[0] + tb.c[0] - b.c[0], o.T[1] + tb.c[1] - b.c[1], o.T[2]]);
+  }
+  // In plane: every part laid out flat on the X-Y floor (z = 0 under each), turns kept, in rows
+  // of about a square overall, in structure order, read left to right and front row first from
+  // Top. Returns each part's translation; inPlane() saves them all in one change.
+  function planeLayout(objs) {
+    var boxes = objs.map(function (o) { return boxOf(o, [0, 0, 0]); });
+    if (!boxes.length) return [];
+    var big = Math.max.apply(null, boxes.map(function (b) { return Math.max(b.size[0], b.size[1]); }));
+    var gap = Math.max(5, big * 0.08), area = 0;
+    boxes.forEach(function (b) { area += (b.size[0] + gap) * (b.size[1] + gap); });
+    var width = Math.max(big, Math.sqrt(area) * 1.15), rows = [], row = null;
+    boxes.forEach(function (b, i) {
+      if (!row || (row.items.length && row.w + b.size[0] > width)) rows.push(row = { items: [], w: 0, d: 0 });
+      row.items.push({ i: i, x: row.w + b.size[0] / 2 });
+      row.w += b.size[0] + gap; row.d = Math.max(row.d, b.size[1]);
+    });
+    var out = [], y = 0, maxW = 0;
+    rows.forEach(function (r) {
+      r.items.forEach(function (it) { var b = boxes[it.i]; out[it.i] = [it.x - b.c[0], y - r.d / 2 - b.c[1], -b.lo[2]]; });
+      maxW = Math.max(maxW, r.w - gap); y -= r.d + gap;
+    });
+    var cx = maxW / 2, cy = (y + gap) / 2;
+    return out.map(function (T) { return [T[0] - cx, T[1] - cy, T[2]]; });
+  }
+  function inPlane() {
+    if (!scene || !scene.objs.length) return;
+    var placed = scene.objs.filter(function (o) { return o.placed; }).length;
+    if (placed && !confirm('Lay every part out flat in a grid? ' + plural(placed, 'part you’ve placed moves', 'parts you’ve placed move') + ' too; turns are kept.')) return;
+    var Ts = planeLayout(scene.objs), p = current(), round = function (v) { return Math.round(v * 100) / 100; };
+    scene.objs.forEach(function (o, i) {
+      var r = o.rot.map(function (v) { return ((v % 360) + 360) % 360; });
+      p.nodes[o.id] = M.stamp(Object.assign({}, p.nodes[o.id], { place: { x: round(Ts[i][0]), y: round(Ts[i][1]), z: round(Ts[i][2]), rx: r[0], ry: r[1], rz: r[2] } }), me());
+    });
+    assembled();
+    ui.cam = Object.assign(ui.cam || {}, { az: M3.VIEWS[0].az, el: M3.VIEWS[0].el, n: -1 });   // refit once the new places draw
+    touch(p);
   }
 
   // ── Snapping ─────────────────────────────────────────────
@@ -1349,6 +1386,7 @@
         if (v && ui.cam) { ui.cam.az = v.az; ui.cam.el = v.el; drawScene(true); }
         break;
       case 'xs-fit': if (scene) { fitCam(scene.objs, true); drawScene(true); } break;
+      case 'xs-plane': inPlane(); break;
       case 'xs-turn': if (o) { assembled(); turnPart(o, Number(el.dataset.axis)); } break;
       case 'xs-stack': if (o && target) { assembled(); stackOn(o, target); } break;
       case 'xs-center': if (o && target) { assembled(); centerOn(o, target); } break;
@@ -2942,7 +2980,7 @@
       case 'edit-node': nodeSheet(id); break;
       case 'asm-link': asmLinkSheet(id); break;
       case 'select-node': ui.sel = ui.sel === id ? '' : id; ui.pic = ''; snapState = null; saveUi(); renderPage(); break;
-      case 'xs-view': case 'xs-fit': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
+      case 'xs-view': case 'xs-fit': case 'xs-plane': case 'xs-turn': case 'xs-stack': case 'xs-center': case 'xs-auto': case 'xs-cad': case 'xs-snap': case 'xs-snap-cancel': case 'xs-size':
         sceneAction(act, el); break;
       case 'pic': ui.pic = el.dataset.key; renderPage(); break;
       case 'm3d-open': openModelView(id); break;
@@ -3104,6 +3142,6 @@
 
   // Hooks for driving the 3D view from the console or a test (clicking by coordinates is fragile).
   S.app = { sync: sync, render: render, attachModel: attachModel,
-    scene: { get: function () { return scene; }, draw: drawScene, commit: commitPlace, stackOn: stackOn, centerOn: centerOn, featureAt: featureAt, snapPick: snapPick,
+    scene: { get: function () { return scene; }, draw: drawScene, commit: commitPlace, stackOn: stackOn, centerOn: centerOn, planeLayout: planeLayout, inPlane: inPlane, featureAt: featureAt, snapPick: snapPick,
       startSnap: function () { snapState = { step: 1 }; renderPage(); } } };
 })(window.Signoff = window.Signoff || {});

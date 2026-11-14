@@ -124,7 +124,12 @@ it becoming CAD software. So it's translation snaps plus 90° turns, and no mate
   holds the snap rules and is unit-tested. Picking prefers visible features, but a part hidden only
   by the one being moved still counts.
 - **Placements.** `node.place` is written only for the Part that moved, never for every Part, so
-  concurrent edits survive merge. Unplaced Parts keep their slot in the auto stack.
+  concurrent edits survive merge. Unplaced Parts keep their slot in the auto stack. The one
+  exception is **In plane** (2026-11-14, Chris: a button at the right of the slider; save the
+  positions, not a view): `planeLayout` packs every part's X-Y footprint in rows (about square,
+  structure order, gap 8% of the largest part, at least 5 mm, bottoms at z = 0, turns kept, centered
+  on the origin) and `inPlane` writes `place` for all of them in one change, after a confirm when
+  some were placed. Test hooks `scene.planeLayout` and `scene.inPlane`.
 - **Board sizes.** They come from Fabcheck's preview `index.json` `board` (added to `pcb_dfm`
   `repo.js` 2026-11-01; real boards get it at their next Send) or from `node.boardMm`.
 - **Bottom pictures.** Fabcheck mirrors the bottom side left to right, and the slab maps it that

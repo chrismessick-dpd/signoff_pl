@@ -149,6 +149,9 @@ Nothing is read from GitHub.
   - **Where parts start:** a Part you haven't moved is stacked in structure order, first on top.
     **CAD position** puts a model where its STEP put it, so parts exported from one CAD assembly
     line up by themselves. **Back to stack** forgets a placement.
+  - **In plane** (right of the slider) lays every part flat on the X-Y floor in a grid, in
+    structure order, turns kept, and saves each part's place (it asks first when some were already
+    placed). Parts then move and snap from there.
   - **Click a part** to arrange it in the panel:
     - **Move:** drag it, or type X, Y, and Z (mm).
       - Seen from above, a drag moves it in X and Y; seen from the side, sideways and up or down.
