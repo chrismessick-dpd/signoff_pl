@@ -46,6 +46,24 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq(P.merge(older, mine).nodes[a.id].name, 'Main board rev B', 'the newer node record wins');
   eq(Object.keys(merged).sort(), ['createdAt', 'createdBy', 'id', 'meta', 'nodes', 'reqs', 'schema', 'slug'], 'a merged document carries only PL fields');
 
+  // ── History (P.historyDiff, P.historyRows) ──
+  var hA = JSON.parse(JSON.stringify(proj)), hB = JSON.parse(JSON.stringify(proj));
+  var elec = Object.assign({}, top, { id: 'nELEC', name: 'Electronics', parent: top.id, updatedAt: at('11:00:00'), updatedBy: 'Bo' });
+  hB.nodes.nELEC = elec;
+  hB.nodes[a.id] = Object.assign({}, a, { parent: 'nELEC', name: 'Main board rev C', updatedAt: at('11:01:00'), updatedBy: 'Bo' });
+  hB.nodes[b.id] = Object.assign({}, b, { deleted: true, updatedAt: at('11:02:00'), updatedBy: 'Bo' });
+  hB.meta = Object.assign({}, hA.meta, { updatedAt: at('11:02:00'), updatedBy: 'Bo' });
+  var hd = P.historyDiff(hA, hB);
+  eq(hd.map(function (r) { return r.kind + ':' + r.label + ':' + r.detail; }),
+    ['node:Housing:removed', 'node:Main board rev C:moved from Top to Electronics, renamed', 'node:Electronics:added under Top'],
+    'PL history: a node row says what changed in words, and a moved Part names both assemblies');
+  ok(hd.every(function (r) { return r.by === 'Bo' && r.before !== undefined; }), 'rows go by the record’s own stamp');
+  ok(!hd.some(function (r) { return r.kind === 'meta'; }), 'meta restamped by every edit is not a change; a changed name is');
+  hB.meta.name = 'Water Monitor 2';
+  eq(P.historyDiff(hA, hB).filter(function (r) { return r.kind === 'meta'; }).length, 1, 'a project detail that changed is a row');
+  eq(P.historyRows([{ doc: hB, commit: { sha: 'c2' } }, { doc: hA, commit: { sha: 'c1' } }]).map(function (r) { return r.commit.sha; }).filter(function (s) { return s !== 'c2'; }), [], 'historyRows: each change with the version that first had it; the oldest given is only a base');
+  eq(P.historyDiff(hB, hB), [], 'two equal versions have no changes');
+
   // ── Tree: order, orphans, cycles, moves ──
   var t = P.tree(proj);
   eq(t.roots, [top.id], 'one root');

@@ -381,6 +381,21 @@ Chris kept two layouts, as sub-tabs: **Person first** and **Tree with people**.
 - **Not tried live.** The first live Apply creates real repos and needs the owner's token; try a test
   product first. Removing someone doesn't touch their records in other PL projects' scopes.
 
+## History (2026-11-13, Chris)
+
+- **What it is:** *History…* in the ⋯ menu opens the project's changes, as in Signoff EE
+  (`../signoff/docs/history.md`).
+- **Code:** `P.historyDiff` and `P.historyRows` in `pl.js`, and `historySheet` in `app.js`, with the
+  engine's `fileHistory` and `historyBlocks` (vendored).
+- **Rows:**
+  - A node row says what changed in words: added under, moved from … to …, renamed, linked, quantity,
+    3D model, moved in 3D, and so on. Assembly names come from the version each side is in.
+  - The meta row counts only when a field changed, since every edit restamps meta (`touch`).
+- **Revert:** a Part or requirement goes back to its earlier version. An added requirement can be
+  removed. Removing an added Part would orphan its children, so that's left to the tree.
+- **The demo** lists each record's latest change only.
+- **Tests:** 246. Read-only against the real data repo: 2 projects, read whole.
+
 ## Next
 
 - **The requirements live write.** Try it on a test review with a real token, then add a PL test

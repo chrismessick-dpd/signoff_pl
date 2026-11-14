@@ -511,7 +511,63 @@
     });
   }
 
+  // ── History (Chris, 2026-11-13; ../signoff/docs/history.md) ──
+  // PL's version of the engine's recordDiff: the records whose stamp differs between two versions of a
+  // PL project, as rows { kind: 'meta' | 'node' | 'req', id, label, detail, at, by, deleted, before,
+  // after }. A node's detail says what changed in words ("moved from Housing to Electronics, renamed");
+  // assembly names come from the version each side is in. before null: every record is new. Rows go by
+  // each record's own stamp, never the commit's author. Values are untrusted: escape them.
+  var NODE_WORDS = [['name', 'renamed'], ['number', 'part number'], ['qty', 'quantity'], ['supplier', 'supplier'], ['mpn', 'MPN'],
+    ['massG', 'mass'], ['envelopeMm', 'envelope'], ['notes', 'notes'], ['kind', 'part or assembly']];
+  function nodeName(doc, id) { var n = doc && doc.nodes && doc.nodes[id]; return n ? n.name || n.number || 'Untitled' : id ? 'a removed assembly' : 'the top'; }
+  function nodeDetail(b, a, docB, docA) {
+    if (!b) return 'added' + (a.parent ? ' under ' + nodeName(docA, a.parent) : '');
+    if (a.deleted && !b.deleted) return 'removed';
+    if (!a.deleted && b.deleted) return 'brought back';
+    var out = [], same = function (k) { return JSON.stringify(b[k] == null ? null : b[k]) === JSON.stringify(a[k] == null ? null : a[k]); };
+    if ((b.parent || '') !== (a.parent || '')) out.push('moved from ' + nodeName(docB, b.parent) + ' to ' + nodeName(docA, a.parent));
+    else if (!same('order')) out.push('reordered');
+    if (!same('source') || refKey(b.ref) !== refKey(a.ref)) out.push(refKey(a.ref) ? (refKey(b.ref) ? 'linked to another design' : 'linked to a design') : refKey(b.ref) ? 'unlinked' : 'source changed');
+    NODE_WORDS.forEach(function (w) { if (!same(w[0])) out.push(w[0] === 'name' ? 'renamed' : w[1] + ' changed'); });
+    if (!same('model')) out.push(a.model ? (b.model ? '3D model replaced' : '3D model added') : '3D model removed');
+    if (!same('place')) out.push('moved in 3D');
+    return out.length ? out.join(', ') : 'edited';
+  }
+  function historyDiff(before, after) {
+    if (!after || !after.meta) return [];
+    var out = [], key = function (r) { return r && typeof r === 'object' ? String(r.updatedAt || '') + '|' + String(r.updatedBy || '') : ''; };
+    function add(kind, b, a, id, label, detail) {
+      if (!a || typeof a !== 'object' || (b && key(a) === key(b))) return;
+      out.push({ kind: kind, id: String(id || ''), label: label, detail: detail, at: typeof a.updatedAt === 'string' ? a.updatedAt : '',
+        by: typeof a.updatedBy === 'string' ? a.updatedBy : '', deleted: !!a.deleted, before: b || null, after: a });
+    }
+    // Every edit restamps meta (app.js touch), so it's a change only when a field other than the stamp differs.
+    var bare = function (m) { var o = Object.assign({}, m || {}); delete o.updatedAt; delete o.updatedBy; return M.stableStringify(o); };
+    if (!before || bare(before.meta) !== bare(after.meta)) add('meta', before && before.meta, after.meta, after.id, 'Project details', 'name, client, phase, or description');
+    Object.keys(after.nodes || {}).forEach(function (id) {
+      var a = after.nodes[id], b = before && (before.nodes || {})[id];
+      add('node', b, a, id, String((a && (a.name || a.number)) || 'Untitled'), a ? nodeDetail(b, a, before, after) : '');
+    });
+    Object.keys(after.reqs || {}).forEach(function (id) {
+      var a = after.reqs[id], b = before && (before.reqs || {})[id];
+      var d = !b ? 'added' : a.deleted && !b.deleted ? 'removed' : (b.verify || 'open') !== (a.verify || 'open') ? 'verify: ' + (b.verify || 'open') + ' → ' + (a.verify || 'open') : 'edited';
+      add('req', b, a, id, ((a && a.ref ? a.ref + ' ' : '') + String((a && a.text) || '')).trim().slice(0, 160) || 'Requirement', d);
+    });
+    return out.sort(function (x, y) { return x.at < y.at ? 1 : x.at > y.at ? -1 : 0; });
+  }
+  // versions newest first, [{ doc, commit }]; as model.historyRows.
+  function historyRows(versions, opts) {
+    var out = [], v = versions || [];
+    for (var i = 0; i < v.length; i++) {
+      var older = v[i + 1];
+      if (!older && !(opts && opts.complete)) break;
+      historyDiff(older ? older.doc : null, v[i].doc).forEach(function (r) { r.commit = v[i].commit || null; out.push(r); });
+    }
+    return out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+  }
+
   S.pl = {
+    historyDiff: historyDiff, historyRows: historyRows,
     SEVERITIES: SEVERITIES, sources: sources, toolById: toolById, isDrawing: isDrawing, adoptHarnesses: adoptHarnesses,
     linkStatus: linkStatus, isLinkedAssembly: isLinkedAssembly, isAssemblyDesign: isAssemblyDesign,
     claimFor: claimFor, claimPlanned: claimPlanned, claimedElsewhere: claimedElsewhere,
