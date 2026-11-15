@@ -22,6 +22,7 @@ FILES = [
     ("assets/model.js", "assets/vendor/model.js"),
     ("assets/github.js", "assets/vendor/github.js"),
     ("assets/auth.js", "assets/vendor/auth.js"),
+    ("assets/history.js", "assets/vendor/history.js"),
 ]
 
 

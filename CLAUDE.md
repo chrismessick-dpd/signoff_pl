@@ -466,8 +466,15 @@ Chris kept two layouts, as sub-tabs: **Person first** and **Tree with people**.
 
 - **What it is:** *History…* in the ⋯ menu opens the project's changes, as in Signoff EE
   (`../signoff/docs/history.md`).
-- **Code:** `P.historyDiff` and `P.historyRows` in `pl.js`, and `historySheet` in `app.js`, with the
-  engine's `fileHistory` and `historyBlocks` (vendored).
+- **Code:** `P.historyDiff` and `P.historyRows` in `pl.js`, and `historySheet` in `app.js`, an adapter for
+  the engine's History sheet (`vendor/history.js`, 2026-11-14: one engine for the suite), with its `fileHistory`
+  and `historyBlocks`.
+- **Version tags and Version comparison (2026-11-14, Chris):** as in Signoff EE (`../ee_design_review/CLAUDE.md`,
+  *History, version tags, and Version comparison*). Tags are records in `tags`, merged by `P.merge` (only when a
+  copy has one) and listed by `P.historyDiff` (kind `tag`). While the tagged side shows, `current()` returns the
+  copy and `touch()` refuses edits to it. Restore puts Parts, requirements, and the details back
+  (`M.restorePlan(…, { maps: ['nodes', 'reqs'] })`), removing what was added since; Undo in the toast (PL's
+  `toast` takes an action now).
 - **Rows:**
   - A node row says what changed in words: added under, moved from … to …, renamed, linked, quantity,
     3D model, moved in 3D, and so on. Assembly names come from the version each side is in.

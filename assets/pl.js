@@ -81,7 +81,7 @@
   function merge(local, remote) {
     if (!local) return remote;
     if (!remote) return local;
-    return Object.assign({}, local, remote, {
+    var out = Object.assign({}, local, remote, {
       schema: Math.max(local.schema || 1, remote.schema || 1),
       id: remote.id || local.id,
       slug: remote.slug || local.slug,
@@ -91,6 +91,9 @@
       nodes: M.mergeMaps(local.nodes, remote.nodes),
       reqs: M.mergeMaps(local.reqs || {}, remote.reqs || {})
     });
+    // Version tags (the engine's history.js), records like any other; only once either copy has one.
+    if (local.tags || remote.tags) out.tags = M.mergeMaps(local.tags || {}, remote.tags || {});
+    return out;
   }
 
   function liveNodes(project) {
@@ -563,6 +566,10 @@
       var a = after.reqs[id], b = before && (before.reqs || {})[id];
       var d = !b ? 'added' : a.deleted && !b.deleted ? 'removed' : (b.verify || 'open') !== (a.verify || 'open') ? 'verify: ' + (b.verify || 'open') + ' → ' + (a.verify || 'open') : 'edited';
       add('req', b, a, id, ((a && a.ref ? a.ref + ' ' : '') + String((a && a.text) || '')).trim().slice(0, 160) || 'Requirement', d);
+    });
+    Object.keys(after.tags || {}).forEach(function (id) {
+      var a = after.tags[id], b = before && (before.tags || {})[id];
+      if (a && typeof a === 'object') add('tag', b, a, id, '“' + String(a.note || '').slice(0, 120) + '”', a.deleted ? 'removed' : 'version ' + String(a.commit || '').slice(0, 7));
     });
     return out.sort(function (x, y) { return x.at < y.at ? 1 : x.at > y.at ? -1 : 0; });
   }

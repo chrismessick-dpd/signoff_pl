@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'access', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'vendor/history', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'access', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -63,6 +63,17 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   eq(P.historyDiff(hA, hB).filter(function (r) { return r.kind === 'meta'; }).length, 1, 'a project detail that changed is a row');
   eq(P.historyRows([{ doc: hB, commit: { sha: 'c2' } }, { doc: hA, commit: { sha: 'c1' } }]).map(function (r) { return r.commit.sha; }).filter(function (s) { return s !== 'c2'; }), [], 'historyRows: each change with the version that first had it; the oldest given is only a base');
   eq(P.historyDiff(hB, hB), [], 'two equal versions have no changes');
+  // Version tags (vendor/history.js): merged record by record, listed in History, and Restore (model.restorePlan).
+  var VT = window.SignoffHistory.tags, tA = JSON.parse(JSON.stringify(hB)), tB = JSON.parse(JSON.stringify(hB));
+  tA.tags = VT.set(tA, { commit: 'aaaaaaa' }, 'EVT', 'Ann'); tB.tags = VT.set(tB, { commit: 'bbbbbbb' }, 'DVT', 'Bo');
+  eq(VT.list(P.merge(tA, tB)).map(function (t) { return t.note; }).sort(), ['DVT', 'EVT'], 'PL’s merge keeps version tags from both copies');
+  eq(P.historyDiff(hB, tA).filter(function (r) { return r.kind === 'tag'; }).map(function (r) { return r.label + ' ' + r.detail; }), ['“EVT” version aaaaaaa'], 'History lists a version tag');
+  var rNow = JSON.parse(JSON.stringify(hB)), rId = Object.keys(rNow.nodes)[0];
+  rNow.nodes[rId] = Object.assign({}, rNow.nodes[rId], { name: 'Renamed since', updatedAt: '2099-01-01T00:00:00.000Z', updatedBy: 'Bo' });
+  rNow.nodes.nNew = { id: 'nNew', name: 'Added since', updatedAt: '2099-01-01T00:00:00.000Z', updatedBy: 'Bo' };
+  rNow.tags = tA.tags;
+  var rDone = M.restoreApply(JSON.parse(JSON.stringify(rNow)), M.restorePlan(rNow, hB, 'Cy', { maps: ['nodes', 'reqs'] }));
+  eq([rDone.nodes[rId].name, rDone.nodes.nNew.deleted, VT.list(rDone).length], [hB.nodes[rId].name, true, 1], 'Restore puts Parts back, removes ones added since, and keeps the tags');
 
   // ── Tree: order, orphans, cycles, moves ──
   var t = P.tree(proj);
