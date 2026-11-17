@@ -59,6 +59,7 @@ Notes on behavior:
   - Purchased Parts, and Parts whose source has no Signoff tool, are left out of progress.
   - Mass is the sum of `massG × qty` (grams).
   - A missing summary means "not summarized yet", never 0%.
+- **`CACHE_V` 11** (2026-11-16): `summary.rework`, a board's bring-up rework counts, shown as *Bring-up reworks* in the Part inspector (`reworkHtml`). The `me-send` branch now takes 12.
 - **`CACHE_V` 10** (2026-11-09, branch `scribe-fixes`): `summary.spec` keeps up to 40 gists and `more`
   (the inspector's *What it does* says "and N more sections"; 9), and `notes`, the review notes (10). The
   `me-send` branch takes 11 when it merges after this.

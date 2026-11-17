@@ -2080,6 +2080,16 @@
     }).join('') + '</div>';
   }
 
+  // A board's bring-up reworks (summary.rework, Signoff EE's Bring-up › Rework): how many, and how many
+  // are still planned, done but not verified, or to fix in the next revision.
+  function reworkHtml(rw) {
+    if (!rw || !rw.total) return '';
+    var bits = [rw.planned ? rw.planned + ' planned' : '', rw.done ? rw.done + ' done, not verified' : '', rw.verified ? rw.verified + ' verified' : '',
+      rw.notneeded ? rw.notneeded + ' not needed' : ''].filter(Boolean);
+    return '<div class="map-ins-revs"><div class="ins-eyebrow">Bring-up reworks</div><p class="note" style="margin:0">' + esc(plural(rw.total, 'rework') + ': ' + bits.join(', ')) +
+      (rw.next ? '. ' + esc(rw.next + ' to fix in the next revision') : '') + '</p></div>';
+  }
+
   // What a design does, from its description (summary.spec, Scribe in Signoff EE and FW): the
   // top-level gists, and how much of it isn't tied to requirements yet.
   function specHtml(sp) {
@@ -2115,7 +2125,7 @@
       html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
       var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
       if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
-      html += revisionsHtml(s.revisions);
+      html += revisionsHtml(s.revisions) + reworkHtml(s.rework);
       var top = (s.open || []).slice().sort(function (a, b) { return P.SEVERITIES.indexOf(a.severity) - P.SEVERITIES.indexOf(b.severity); }).slice(0, 4);
       if (top.length) {
         html += '<div class="map-ins-issues">' + top.map(function (i) {

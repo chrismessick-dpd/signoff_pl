@@ -88,6 +88,12 @@
         return { label: str(r.label).slice(0, 40), status: REV_STATUS.indexOf(r.status) >= 0 ? r.status : '', sentAt: str(r.sentAt).slice(0, 20) };
       });
     }
+    // summary.rework: counts of a board's bring-up reworks (Signoff EE's Bring-up › Rework; EE README).
+    if (s.rework && typeof s.rework === 'object') {
+      var rw = {};
+      ['total', 'planned', 'done', 'verified', 'notneeded', 'next'].forEach(function (k) { var v = Math.floor(Number(s.rework[k])); rw[k] = v >= 0 && v < 100000 ? v : 0; });
+      if (rw.total) out.rework = rw;
+    }
     // summary.spec: a firmware description's top-level gists and gaps (EE README, "The project summary").
     if (s.spec && typeof s.spec === 'object') {
       var sp = s.spec;
@@ -186,8 +192,8 @@
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
   // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind; 8: pct 100 with nothing to review;
-  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes).
-  var CACHE_V = 10;
+  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes; 11: summary.rework).
+  var CACHE_V = 11;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

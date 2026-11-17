@@ -336,6 +336,9 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var cs = Signoff.plReader.cleanSummary(badSum);
   ok(cs.pct === 100 && cs.total === 0 && cs.issues.open.critical === 0 && cs.issues.open.major === 2 && cs.issues.fixed === 0 && cs.open[0].severity === 'minor' && cs.checklists.a.pct === 100 && cs.name === '',
     'a summary from a review file is rebuilt with numbers and known severities only', JSON.stringify(cs));
+  var rwSum = Signoff.plReader.cleanSummary({ pct: 50, rework: { total: 3, planned: BAD, done: 1, verified: 2, notneeded: -4, next: 1, extra: 9 } });
+  eq(rwSum.rework, { total: 3, planned: 0, done: 1, verified: 2, notneeded: 0, next: 1 }, 'summary.rework keeps known counts, as numbers only');
+  ok(!('rework' in Signoff.plReader.cleanSummary({ pct: 50, rework: { total: 0 } })) && !('rework' in Signoff.plReader.cleanSummary({ pct: 50 })), 'no reworks: no rework field');
   var dirtyIx = { entries: { 'ee:p1': { tool: 'ee', id: 'p1', name: 'Main', summary: badSum } } };
   eq(Signoff.plReader.cleanIndex(dirtyIx).entries['ee:p1'].summary.pct, 100, 'an index stored in the browser is cleaned the same way (no checks reads as 100%)');
   hub.makeRepo('own/review-ee-evil', { 'projects/p1.json': file('p1', 'Planted', summary(100, 99, { critical: 0, major: 0, minor: 0 })), 'projects/p7.json': file('p2', 'Renamed', null) }, ['own']);
