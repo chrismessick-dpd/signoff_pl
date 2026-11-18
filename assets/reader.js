@@ -34,7 +34,7 @@
     return new S.GitHubStore({ owner: this.owner, repo: repo, branch: this.branch, dataPath: '', token: this.token }, this.fetch);
   };
 
-  var SEVERITIES = ['critical', 'major', 'minor'], REV_STATUS = ['sent', 'built', 'withdrawn'];
+  var SEVERITIES = ['critical', 'major', 'minor'], REV_STATUS = ['sent', 'built', 'withdrawn'], REL_STATE = ['draft', 'released', 'withdrawn'];
   function str(v) { return v == null || typeof v === 'object' ? '' : String(v); }
   function num(v, max) { v = Math.max(0, Math.round(Number(v)) || 0); return max ? Math.min(v, max) : v; }
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
@@ -87,6 +87,14 @@
       out.revisions = s.revisions.filter(function (r) { return r && typeof r === 'object'; }).slice(0, 50).map(function (r) {
         return { label: str(r.label).slice(0, 40), status: REV_STATUS.indexOf(r.status) >= 0 ? r.status : '', sentAt: str(r.sentAt).slice(0, 20) };
       });
+    }
+    // summary.releases: a firmware target's releases, oldest first (Signoff FW's Releases tab; EE README).
+    if (Array.isArray(s.releases)) {
+      out.releases = s.releases.filter(function (r) { return r && typeof r === 'object'; }).slice(-50).map(function (r) {
+        return { version: str(r.version).slice(0, 40), state: REL_STATE.indexOf(r.state) >= 0 ? r.state : 'draft', releasedAt: str(r.releasedAt).slice(0, 10),
+          via: r.via === 'passthrough' ? 'passthrough' : 'usb', board: str(r.board).slice(0, 48) };
+      });
+      if (!out.releases.length) delete out.releases;
     }
     // summary.rework: counts of a board's bring-up reworks (Signoff EE's Bring-up › Rework; EE README).
     if (s.rework && typeof s.rework === 'object') {
@@ -192,8 +200,8 @@
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
   // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind; 8: pct 100 with nothing to review;
-  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes; 11: summary.rework).
-  var CACHE_V = 11;
+  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes; 11: summary.rework; 12: summary.releases).
+  var CACHE_V = 12;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {

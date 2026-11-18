@@ -120,8 +120,8 @@
 .map-ins-revs { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .map-rev { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 8px; border-radius: 7px; background: var(--hair); }
 .map-rev span { color: var(--text-3); }
-.map-rev.built { background: var(--accent-soft); }
-.map-rev.built span { color: var(--accent-ink); }
+.map-rev.built, .map-rev.released { background: var(--accent-soft); }
+.map-rev.built span, .map-rev.released span { color: var(--accent-ink); }
 .map-rev.withdrawn b { text-decoration: line-through; color: var(--text-3); }
 .map-ins-spec { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
 .map-ins-spec .ins-eyebrow { margin-bottom: 0; }

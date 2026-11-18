@@ -2080,6 +2080,17 @@
     }).join('') + '</div>';
   }
 
+  // A firmware target's releases (summary.releases, Signoff FW's Releases tab), newest first. Drafts are left
+  // out: they're for the bench. States read as words; a withdrawn one is also struck through.
+  function releasesHtml(rels) {
+    var list = (rels || []).filter(function (r) { return r.state !== 'draft'; }).slice().reverse();
+    if (!list.length) return '';
+    var said = { released: 'Released', withdrawn: 'Withdrawn' };
+    return '<div class="map-ins-revs"><div class="ins-eyebrow">Firmware releases</div>' + list.slice(0, 8).map(function (r) {
+      return '<div class="map-rev ' + esc(r.state) + '"><b>' + esc(r.version || '?') + '</b><span>' + esc([said[r.state], r.releasedAt].filter(Boolean).join(' · ')) + '</span></div>';
+    }).join('') + (list.length > 8 ? '<p class="note">and ' + esc(plural(list.length - 8, 'older release')) + '</p>' : '') + '</div>';
+  }
+
   // A board's bring-up reworks (summary.rework, Signoff EE's Bring-up › Rework): how many, and how many
   // are still planned, done but not verified, or to fix in the next revision.
   function reworkHtml(rw) {
@@ -2125,7 +2136,7 @@
       html += '<div class="map-ins-row">' + ring(s.pct, 56, 6, pct(s.pct) + '%') + '<div><b>' + pct(s.pct) + '% reviewed</b><br>' + (total ? sevs(open) : '<span class="muted">No open issues</span>') + '</div></div>';
       var lists = Object.keys(s.checklists || {}).map(function (k) { return s.checklists[k]; });
       if (lists.length) html += '<div class="map-ins-lists">' + lists.map(function (c) { return '<div class="map-cl"><span>' + esc(c.name) + '</span>' + pbar(c.pct) + '</div>'; }).join('') + '</div>';
-      html += revisionsHtml(s.revisions) + reworkHtml(s.rework);
+      html += revisionsHtml(s.revisions) + releasesHtml(s.releases) + reworkHtml(s.rework);
       var top = (s.open || []).slice().sort(function (a, b) { return P.SEVERITIES.indexOf(a.severity) - P.SEVERITIES.indexOf(b.severity); }).slice(0, 4);
       if (top.length) {
         html += '<div class="map-ins-issues">' + top.map(function (i) {

@@ -1428,7 +1428,46 @@ window.SIGNOFF_PL_DEMO_DESIGNS = {
      "undescribed": 1,
      "flagged": 2,
      "notes": 0
-    }
+    },
+    "releases": [
+     {
+      "id": "r3-0",
+      "version": "0.8.0",
+      "state": "withdrawn",
+      "releasedAt": "2026-11-10",
+      "via": "usb",
+      "board": "tstat-main",
+      "kind": "elf",
+      "size": 1462316,
+      "sha256": "0b266816660693bc0a94f75dd8305b2a871130e141675e04e832eac1e7288a7e",
+      "path": "releases/fdemo3/r3-0/release.json",
+      "withdrawnWhy": "The display flickers after an OTA reboot; use 0.9.0."
+     },
+     {
+      "id": "r3-1",
+      "version": "0.9.0",
+      "state": "released",
+      "releasedAt": "2026-11-14",
+      "via": "usb",
+      "board": "tstat-main",
+      "kind": "elf",
+      "size": 1478504,
+      "sha256": "2da56c96d6eda6874da072cd5a4ae496ab4374d7e894752e2d202476056629d1",
+      "path": "releases/fdemo3/r3-1/release.json"
+     },
+     {
+      "id": "r3-2",
+      "version": "0.9.1",
+      "state": "draft",
+      "releasedAt": "",
+      "via": "usb",
+      "board": "tstat-main",
+      "kind": "hex",
+      "size": 4158210,
+      "sha256": "13ba673b4d167b1221934c8ad11344a4e864158d605d313e9159d8eea9c516af",
+      "path": "releases/fdemo3/r3-2/release.json"
+     }
+    ]
    }
   }
  }

@@ -32,7 +32,8 @@
       var d = SNAP.designs[key], at = key.indexOf(':');
       var summary = d.summary ? Object.assign({}, d.summary, { at: shifted(d.summary.at),
         recent: (d.summary.recent || []).map(function (c) { return Object.assign({}, c, { at: shifted(c.at) }); }) },
-        d.summary.revisions ? { revisions: d.summary.revisions.map(function (r) { return r.sentAt ? Object.assign({}, r, { sentAt: shifted(r.sentAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {}) : null;
+        d.summary.revisions ? { revisions: d.summary.revisions.map(function (r) { return r.sentAt ? Object.assign({}, r, { sentAt: shifted(r.sentAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {},
+        d.summary.releases ? { releases: d.summary.releases.map(function (r) { return r.releasedAt ? Object.assign({}, r, { releasedAt: shifted(r.releasedAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {}) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
       // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo). The demo
