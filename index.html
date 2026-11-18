@@ -15,10 +15,11 @@
 <link rel="manifest" href="../signoff/manifest.webmanifest">
 <link rel="apple-touch-icon" href="../signoff/assets/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Signoff">
-<link rel="stylesheet" href="assets/suite.css?v=9d73d929c610">
-<link rel="stylesheet" href="assets/reqs.css?v=9d73d929c610">
-<link rel="stylesheet" href="assets/pl.css?v=9d73d929c610">
-<link rel="stylesheet" href="assets/access.css?v=9d73d929c610">
+<link rel="stylesheet" href="assets/suite.css?v=9fbb91f4a0d0">
+<link rel="stylesheet" href="assets/reqs.css?v=9fbb91f4a0d0">
+<link rel="stylesheet" href="assets/pl.css?v=9fbb91f4a0d0">
+<link rel="stylesheet" href="assets/access.css?v=9fbb91f4a0d0">
+<link rel="stylesheet" href="assets/structure.css?v=9fbb91f4a0d0">
 </head>
 <body>
 <div id="demo-banner" class="demo-banner" hidden></div>
@@ -66,6 +67,10 @@
         <span>All tools<small>Dovetail Signoff home</small></span>
       </a>
     </div>
+    <button type="button" class="side-link" id="structure-link" data-act="structure" title="Tool Structure: how the Signoff tools pass data to each other">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="2.5" width="5" height="4" rx="1"/><rect x="2.5" y="13.5" width="5" height="4" rx="1"/><rect x="12.5" y="13.5" width="5" height="4" rx="1"/><path d="M10 6.5v3M5 13.5c0-2.5 2-4 5-4s5 1.5 5 4"/></svg>
+      Tool Structure
+    </button>
     <button type="button" class="side-link" id="people-link" data-people-open title="People and access in Signoff PL, EE, ME, and FW" hidden>
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7.5" cy="7" r="2.8"/><path d="M2.5 16.5c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/><circle cx="14" cy="7.8" r="2.2"/><path d="M13.6 12.3c2 .1 3.4 1.4 3.9 3.7"/></svg>
       People &amp; access
@@ -98,22 +103,23 @@
 <div class="report" id="report" hidden></div>
 <div class="toasts" id="toasts"></div>
 
-<script src="assets/config.js?v=9d73d929c610"></script>
-<script src="assets/version.js?v=9d73d929c610"></script>
-<script src="assets/vendor/model.js?v=9d73d929c610"></script>
-<script src="assets/vendor/auth.js?v=9d73d929c610"></script>
-<script src="assets/vendor/github.js?v=9d73d929c610"></script>
-<script src="assets/vendor/history.js?v=9d73d929c610"></script>
-<script src="assets/pl.js?v=9d73d929c610"></script>
-<script src="assets/plreqs.js?v=9d73d929c610"></script>
-<script src="assets/model3d.js?v=9d73d929c610"></script>
-<script src="assets/reader.js?v=9d73d929c610"></script>
-<script src="assets/share.js?v=9d73d929c610"></script>
-<script src="assets/access.js?v=9d73d929c610"></script>
-<script src="assets/access-view.js?v=9d73d929c610"></script>
-<script src="assets/demo-designs.js?v=9d73d929c610"></script>
-<script src="assets/demo.js?v=9d73d929c610"></script>
-<script src="assets/reqs.js?v=9d73d929c610"></script>
+<script src="assets/config.js?v=9fbb91f4a0d0"></script>
+<script src="assets/version.js?v=9fbb91f4a0d0"></script>
+<script src="assets/vendor/model.js?v=9fbb91f4a0d0"></script>
+<script src="assets/vendor/auth.js?v=9fbb91f4a0d0"></script>
+<script src="assets/vendor/github.js?v=9fbb91f4a0d0"></script>
+<script src="assets/vendor/history.js?v=9fbb91f4a0d0"></script>
+<script src="assets/pl.js?v=9fbb91f4a0d0"></script>
+<script src="assets/plreqs.js?v=9fbb91f4a0d0"></script>
+<script src="assets/model3d.js?v=9fbb91f4a0d0"></script>
+<script src="assets/reader.js?v=9fbb91f4a0d0"></script>
+<script src="assets/share.js?v=9fbb91f4a0d0"></script>
+<script src="assets/access.js?v=9fbb91f4a0d0"></script>
+<script src="assets/access-view.js?v=9fbb91f4a0d0"></script>
+<script src="assets/demo-designs.js?v=9fbb91f4a0d0"></script>
+<script src="assets/structure.js?v=9fbb91f4a0d0"></script>
+<script src="assets/demo.js?v=9fbb91f4a0d0"></script>
+<script src="assets/reqs.js?v=9fbb91f4a0d0"></script>
 <!-- People & access: signoff/assets/people.js opens it as a sheet over this page. -->
 <script src="../signoff/assets/people.js"></script>
 <!-- Tickets: signoff/assets/tickets.js (FTEs; the ⋯ menu and the Tickets link above People & access). -->
@@ -122,7 +128,7 @@
 <script src="../signoff/assets/invites.js"></script>
 <!-- The sidebar foot shared with the hub and the other tools: PL uses only its tools fold. -->
 <script src="../signoff/assets/sidefoot.js"></script>
-<script src="assets/app.js?v=9d73d929c610"></script>
+<script src="assets/app.js?v=9fbb91f4a0d0"></script>
 <!-- Demo tour: signoff/assets/tour.js does nothing outside ?demo, or before the hub starts the tour. -->
 <script src="../signoff/assets/tour.js"></script>
 <!-- Animated logo: signoff/assets/mark.js swaps the sidebar's static mark for the animated one. -->

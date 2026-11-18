@@ -92,7 +92,7 @@
     return linked;
   }
   claimAll();
-  function saveUi() { save('ui', { slug: ui.slug, view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
+  function saveUi() { save('ui', { slug: ui.slug, page: ui.page || '', view: ui.view, closed: ui.closed, sideCollapsed: !!ui.sideCollapsed, layout: ui.layout, sel: ui.sel, bomMode: ui.bomMode, bomCols: ui.bomCols,
     rqLayout: ui.rqLayout, rqFilter: ui.rqFilter, rqOpen: ui.rqOpen, rqSel: ui.rqSel, rqDep: !!ui.rqDep, xsLink: !!ui.xsLink,
     // Exploded's view (2026-11-14, Chris: a tool update's reload put the slider back to Exploded and
     // the views back to fit, which looked like his arrangement was gone): kept across reloads.
@@ -268,7 +268,7 @@
       .sort(function (a, b) { return (b.meta.updatedAt || '').localeCompare(a.meta.updatedAt || ''); });
     var html = list.filter(function (p) { return !p.meta.archived; }).map(function (p) {
       var r = P.rollup(p, index)[''];
-      return '<button class="proj' + (p.slug === ui.slug ? ' active' : '') + '" data-act="open-project" data-slug="' + esc(p.slug) + '" title="' + esc(p.meta.name) + '">' +
+      return '<button class="proj' + (p.slug === ui.slug && !ui.page ? ' active' : '') + '" data-act="open-project" data-slug="' + esc(p.slug) + '" title="' + esc(p.meta.name) + '">' +
         ring(r.pct, 26, 3.5) + '<span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span>' +
         '<span class="proj-sub">' + esc([p.meta.number, p.meta.phase].filter(Boolean).join(' · ')) + '</span></span>' +
         (dirty[p.id] ? '<span class="proj-dirty" title="Not synced yet"></span>' : '') + '</button>';
@@ -281,6 +281,7 @@
     // A contractor with a project already open may be invited to another (the locked page shows it otherwise).
     if (allowed()) html = inviteCard() + html;
     $('#project-list').innerHTML = html;
+    $('#structure-link').classList.toggle('active', ui.page === 'structure');
     // A contractor has no data repo to put a new project in, and People & access is for FTEs.
     $('.side-head [data-act="new-project"]').hidden = !(DEMO || isFte());
     // People & access lives in Signoff EE, whose list decides who's an FTE across the suite.
@@ -337,6 +338,10 @@
 
   // ── Toolbar ──────────────────────────────────────────────
   function renderToolbar() {
+    if (ui.page === 'structure') {
+      $('#toolbar-title').textContent = 'Tool Structure'; $('#view-seg').innerHTML = '';
+      $('#toolbar-actions').innerHTML = ticketsOn() ? moreButton() : ''; return;
+    }
     var p = current();
     $('#toolbar-title').textContent = p ? p.meta.name : '';
     if (!p) { $('#view-seg').innerHTML = ''; $('#toolbar-actions').innerHTML = ticketsOn() ? moreButton() : ''; return; }
@@ -371,6 +376,7 @@
   function renderPage() {
     var p = current(), page = $('#page'), scroll = $('#main').scrollTop;
     renderToolbar();
+    if (ui.page === 'structure') { page.innerHTML = ''; page.appendChild(structurePage()); return; }
     if (!p) { page.innerHTML = allowed() ? emptyPage() : lockedPage(); return; }
     if (ui.view === 'issues') page.innerHTML = issuesPage(p);
     else if (ui.view === 'reqs') page.innerHTML = reqsView().page(p);
@@ -380,6 +386,23 @@
     loadPictures(page);
     loadViewers(page);
     initScene(page);
+  }
+
+  // Tool Structure (sidebar, above People & access): how the suite's tools pass data to each other, over the
+  // made-up thermostat demo, from assets/structure.js. Built once, so its view, selection, and story survive
+  // a re-render; it leaves out the Project tree, which is PL's own System tab.
+  var structureEl = null;
+  function structurePage() {
+    if (structureEl) return structureEl;
+    structureEl = document.createElement('div');
+    structureEl.className = 'page page-structure';
+    structureEl.innerHTML = '<div class="eyebrow">Dovetail Signoff</div><h1 class="page-title">Tool Structure</h1>' +
+      '<div class="page-sub"><span>How the tools pass data to each other and keep track of a whole product, shown on the made-up Smart Thermostat demo. ' +
+      'Click a tool, a line, or a stage to see what moves along it.</span></div><div class="structure-root"></div>';
+    window.SignoffStructure.mount(structureEl.querySelector('.structure-root'), {
+      img: 'assets/demo-previews/', views: ['graph', 'life', 'store', 'matrix'], storeKey: 'signoff.pl.structure.view'
+    });
+    return structureEl;
   }
 
   function emptyPage() {
@@ -3376,7 +3399,7 @@
     if (!el && blankClick(e)) { closeDetails(); return; }
     if (!el || el.closest('#sheet')) return;
     var act = el.dataset.act, id = el.dataset.id;
-    if (!allowed() && ['nav', 'theme', 'settings', 'sync', 'accept-invites'].indexOf(act) < 0) return;
+    if (!allowed() && ['nav', 'theme', 'settings', 'sync', 'accept-invites', 'structure'].indexOf(act) < 0) return;
     switch (act) {
       case 'nav': toggleSidebar(); break;
       case 'theme':
@@ -3388,7 +3411,8 @@
       case 'accept-invites': acceptInvites(); break;
       case 'invites-accept-all': if (window.SignoffInvites) window.SignoffInvites.acceptAll(); break;
       case 'new-project': projectSheet(null); break;
-      case 'open-project': ui.slug = el.dataset.slug; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
+      case 'open-project': ui.slug = el.dataset.slug; ui.page = ''; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
+      case 'structure': ui.page = 'structure'; $('#app').classList.remove('nav-open'); saveUi(); render(); break;
       case 'view': ui.view = el.dataset.view; saveUi(); renderPage(); break;
       case 'add-node': nodeSheet(null, {}); break;
       case 'edit-project': projectSheet(current()); break;
