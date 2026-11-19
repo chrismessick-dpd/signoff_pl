@@ -3001,7 +3001,7 @@
   // waiting model files, Fabcheck's runs and hand-offs). Only the theme stays. Unsynced changes
   // would be lost, so they're counted first.
   var SUITE_NS = ['signoff.v1.', 'signoff-me.v1.', 'signoff-fw.v1.', 'signoff-pl.v1.', 'fabcheck.v1.'];
-  var SUITE_DBS = ['fabcheck', 'dovetail-handoff', 'dovetail-handoff-demo', 'signoff-pl-pictures', 'signoff-pl-uploads'];
+  var SUITE_DBS = ['fabcheck', 'dovetail-handoff', 'dovetail-handoff-demo', 'signoff-pl-pictures', 'signoff-pl-uploads', 'signoff-local-signoff.v1.', 'signoff-local-signoff-me.v1.', 'signoff-local-signoff-fw.v1.'];
   function signOut() {
     var unsynced = 0;
     SUITE_NS.forEach(function (ns) {
