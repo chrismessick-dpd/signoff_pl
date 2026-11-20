@@ -63,7 +63,10 @@ sync has confirmed that for the token in use:
    - It rebuilds the project-to-repo map every time, so a Part keeps working when its review
      moves into a shared repo.
    - It reads the pictures a checker stored next to each review: Fabcheck's board previews,
-     `fabcheck/<id>/preview/index.json` (EE's `docs/fabcheck-link.md`, *Board previews*). Only the
+     `fabcheck/<id>/preview/index.json` (EE's `docs/fabcheck-link.md`, *Board previews*), and
+     Partcheck's part pictures and models, `partcheck/<id>/preview/index.json`
+     (`../partcheck/docs/send-to-signoff-me.md`), where each ME Part takes the stored part with its
+     own part number. Only the
      image names and blob shas go in the index. A tile fetches its image the first time it shows
      it, and the image is kept in IndexedDB (`signoff-pl-pictures`) by sha.
 

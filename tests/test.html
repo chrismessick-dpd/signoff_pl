@@ -15,7 +15,7 @@
 <div id="out"></div>
 <script>
 // Load fresh on every run, so a browser cache never tests old code.
-['config', 'vendor/model', 'vendor/github', 'vendor/history', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'access', 'demo-designs', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
+['config', 'vendor/model', 'vendor/github', 'vendor/history', 'pl', 'plreqs', 'model3d', 'reader', 'share', 'access', 'demo-designs', 'demo-partcheck', 'demo'].forEach(function (n) { document.write('<script src="../assets/' + n + '.js?t=' + Date.now() + '"><\/script>'); });
 document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
 </script>
 <script>
@@ -329,6 +329,49 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var forged = Signoff.plReader.cleanIndex({ entries: { 'ee:x': { tool: 'ee', id: 'x', preview: { images: [{ key: 'top', src: 'https://evil.example/a.svg' }, { key: 'b', src: 'javascript:alert(1)' }] } } } });
   ok(!forged.entries['ee:x'].preview, 'a stored preview can only point at the demo pictures');
   eq(Signoff.plReader.designs(ix6, 'ee').map(function (d) { return d.id; }).sort(), ['p1', 'p2'], 'designs() lists one tool’s projects');
+
+  // Partcheck's part pictures and models stored next to an ME review (partcheck/docs/send-to-signoff-me.md):
+  // one review, two parts, each with its views and a PLM1 mesh.
+  function pcViews(k) { return { iso: k + '-iso', top: k + '-top', front: k + '-front', right: k + '-right' }; }
+  var pcIndex = { v: 1, tool: 'partcheck', runId: 'k1', at: '2026-11-08T00:00:00Z', hero: 'fc-iso', images: [], parts: [
+    { key: 'fc', partNumber: '2100410-011', revision: 'B', name: 'FRONT COVER', views: pcViews('fc'), mesh: { file: 'fc.plm.gz', size: 4, tris: 12, srcTris: 12, bboxMm: [90, 90, 14] }, massG: 25.46, material: 'PC/ABS' },
+    { key: 'bc', partNumber: '2100410-012', revision: 'B', name: 'BACK COVER', views: pcViews('bc'), mesh: { file: '../bc.plm.gz', size: 4, tris: 8 }, massG: 'heavy' },
+    { key: 'BAD KEY', partNumber: 'x', views: pcViews('fc') }] };
+  var pcFiles = { 'projects/m1.json': file('m1', 'Enclosure', summary(100, 50, { critical: 0, major: 0, minor: 0 })), 'partcheck/m1/preview/fc.plm.gz': 'MESH', 'partcheck/m1/preview/bc.plm.gz': 'MESH2' };
+  ['fc', 'bc'].forEach(function (k) { ['iso', 'top', 'front', 'right'].forEach(function (v) {
+    pcIndex.images.push({ key: k + '-' + v, file: k + '-' + v + '.webp', type: 'image/webp', w: 480, h: 360 });
+    pcFiles['partcheck/m1/preview/' + k + '-' + v + '.webp'] = k.toUpperCase() + v;
+  }); });
+  pcFiles['partcheck/m1/preview/index.json'] = JSON.stringify(pcIndex);
+  var mhub = new FakeHub();
+  mhub.makeRepo('own/ee_design_review_data', { 'README.md': '#' }, ['own']);
+  mhub.makeRepo('own/me_design_review_data', { 'README.md': '#' }, ['own']);
+  mhub.makeRepo('own/review-me-enclosure', pcFiles, ['own']);
+  ok(Signoff.config.tools.filter(function (t) { return t.id === 'me'; })[0].previews === 'partcheck/', 'Signoff PL reads Signoff ME’s Partcheck folder');
+  var mix = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: mhub.fetchFor('tok-own') }).refresh(null), mpv = mix.entries['me:m1'] && mix.entries['me:m1'].preview;
+  ok(mpv && mpv.repo === 'own/review-me-enclosure' && mpv.images.length === 8 && mpv.hero === 'fc-iso', 'an ME review’s Partcheck pictures are read from its own repo');
+  eq(mpv && mpv.parts.map(function (x) { return [x.key, x.partNumber, Object.keys(x.views).length, !!x.mesh, x.massG]; }), [['fc', '2100410-011', 4, true, 25.46], ['bc', '2100410-012', 4, false, null]],
+    'its parts keep their views; a mesh outside the folder and a bad key or mass are dropped');
+  ok(mpv.parts[0].mesh.sha && mpv.parts[0].mesh.bboxMm.join() === '90,90,14' && mpv.parts[0].mesh.tris === 12, 'a part’s mesh is kept by blob sha, with its size and triangles');
+  var mkept = Signoff.plReader.cleanIndex(JSON.parse(JSON.stringify(mix))).entries['me:m1'].preview;
+  ok(M.stableStringify(mkept.parts) === M.stableStringify(mpv.parts), 'a stored index keeps the parts');
+  var me = mix.entries['me:m1'];
+  var pFront = { kind: 'part', source: 'me', number: ' 2100410-011 ' }, pBack = { kind: 'part', source: 'me', number: '2100410-012' }, pOther = { kind: 'part', source: 'me', number: '9' };
+  ok(P.checkerPart(pFront, me).key === 'fc' && P.checkerPart(pBack, me).key === 'bc', 'each ME Part takes the stored part with its own part number');
+  ok(P.checkerPart(pOther, me) === null && P.checkerPart({ kind: 'part', source: 'ee', number: '2100410-011' }, me) === null, '…none when no number matches in a review of several parts, and never for another tool');
+  var hv = P.partViews(mpv, P.heroPart(mpv));
+  ok(P.heroPart(mpv).key === 'fc' && hv.hero === 'iso' && hv.images.map(function (i) { return i.key; }).join() === 'iso,top,front,right' && hv.images[0].sha === mpv.images[0].sha,
+    'the hero part’s views stand for the review, keyed by view');
+  var one = { preview: Object.assign({}, mpv, { parts: [mpv.parts[1]] }) };
+  ok(P.checkerPart(pOther, one).key === 'bc', 'a review of one part gives it to every Part linked to it');
+  ok(!Signoff.plReader.cleanIndex({ entries: { 'me:x': { tool: 'me', id: 'x', preview: { images: [{ key: 'a', type: 'image/webp', sha: '1'.repeat(40) }], parts: [{ key: 'p', views: { iso: 'zz' }, mesh: { sha: 'nope' } }] } } } }).entries['me:x'].preview.parts,
+    'a stored part needs a real view or mesh');
+  // The demo's ME reviews show Partcheck's Send of its demo packages, read the same way.
+  var dm = Signoff.plDemo.build(), d5 = dm.index.entries['me:mdemo5'].preview, d13 = dm.index.entries['me:mdemo13'].preview;
+  ok(d5 && d5.parts.length === 2 && d13 && d13.parts.length === 1 && d5.parts.every(function (x) { return x.mesh && Signoff.plDemo.file(x.mesh.sha); }),
+    'the demo’s Enclosure and Wall Bracket have Partcheck’s parts, with their meshes served from the page');
+  var dNodes = Object.keys(dm.project.nodes).map(function (k) { return dm.project.nodes[k]; }).filter(function (n) { return n.source === 'me'; });
+  ok(dNodes.length === 3 && dNodes.every(function (n) { return !n.model && P.checkerPart(n, dm.index.entries[n.ref.tool + ':' + n.ref.id]); }), 'every demo ME Part takes its model from Partcheck, none attached');
 
   // Review repos are contractor-writable: planted files and hostile summaries.
   var BAD = '"><img src=x onerror=alert(1)>';

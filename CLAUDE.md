@@ -35,15 +35,16 @@ This repo is public: no client data, tokens, or commit messages naming clients.
 | File | What it does |
 | --- | --- |
 | `assets/pl.js` | Pure model: documents, merge, tree (breaks loops, flags orphans), part status, roll-up, issues |
-| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 4 since Loom harnesses, 2026-11-07). A tool with an empty `prefix` reads only its data repo (Loom's is `review-loom-` since sharing). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
+| `assets/reader.js` | Reads `meta` and `summary` from each tool's data repo and its `review-<tool>-*` repos, cached by blob sha (`CACHE_V` 13 since Partcheck's ME previews, merged 2026-11-19). A tool with an empty `prefix` reads only its data repo (Loom's is `review-loom-` since sharing). The project-to-repo map is rebuilt on every refresh. A board's `summary.revisions` shows as *Fab revisions* in the Part inspector. |
 | `assets/share.js` | Sharing (`S.PLSharer`): the per-tool share routine (`shareOne`), `plan`, `shareProject`, `revokeProject`, and `syncAll`, PL's sync across the data repo and the shared repos. See *Sharing* below. |
 | `assets/access.js`, `assets/access-view.js`, `assets/access.css` | People & access: the model (`S.PLAccess`: people from every roster, modes, cells, `plan`, `run`, the demo's `simulate` and `demoRosters`, live `load`) and PL's tab in the suite's People sheet (`S.plAccessView`). See *People & access* below |
 | `assets/plreqs.js` | Requirements model: System requirements, flow-down, roll-up (fail, risk, gap, open, pass), the inbox, the overlay of unsummarized writes, the compliance CSV |
 | `assets/reqs.js`, `assets/reqs.css` | The Requirements tab, created from `app.js` with `S.plReqsView(ctx)`. Its controls use `data-rq`, outside `app.js`'s click handler |
 | `assets/app.js` | UI: System (Map tree, Gallery, Exploded, List; inspector; client-project tray; drag to place; status panels underneath), BOM (print, CSV), Issues; sheets with a design picker and STEP attach; pictures (IndexedDB cache); model uploads; sync |
-| `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js` |
+| `assets/model3d.js`, `assets/occt-worker.js` | STEP → simplified mesh (≤ 60k triangles, `PLM1` gzipped), pictures, 3D view. The worker is copied from Partcheck; the occt-import-js hashes match Partcheck's `libs.js`. Partcheck vendors `model3d.js` for its Send: after changing it, run `python tools/sync_vendor.py` in `../partcheck` and regenerate the demo files with `../partcheck/tools/pl_demo.html` |
 | `assets/config.js` | Repos, `tools` (the linkable Signoff tools), phases, demo product |
 | `assets/demo.js`, `assets/demo-designs.js`, `tools/demo_designs.html` | The demo, built from the EE, ME, and FW demos' summaries |
+| `assets/demo-partcheck.js`, `assets/demo-partcheck/` | The demo ME reviews' Partcheck previews, made by `../partcheck/tools/pl_demo.html` |
 | `assets/vendor/*`, `assets/suite.css` | Copies from EE; never edit them |
 
 Notes on behavior:
@@ -59,17 +60,17 @@ Notes on behavior:
   - Purchased Parts, and Parts whose source has no Signoff tool, are left out of progress.
   - Mass is the sum of `massG × qty` (grams).
   - A missing summary means "not summarized yet", never 0%.
-- **`CACHE_V` 12** (2026-11-17): `summary.releases`, a firmware target's releases (Signoff FW's Releases tab), the released and withdrawn ones shown as *Firmware releases* in the Part inspector (`releasesHtml`; drafts left out). The demo snapshot carries `fdemo3`'s three, with `releasedAt` shifted like revisions. The `me-send` branch now takes 13.
+- **`CACHE_V` 12** (2026-11-17): `summary.releases`, a firmware target's releases (Signoff FW's Releases tab), the released and withdrawn ones shown as *Firmware releases* in the Part inspector (`releasesHtml`; drafts left out). The demo snapshot carries `fdemo3`'s three, with `releasedAt` shifted like revisions.
+- **`CACHE_V` 13** (2026-11-19): Signoff ME's Partcheck previews, `partcheck/<id>/preview/`, with their `parts` and meshes (merged from `me-send`; see *ME pictures and models from Partcheck*).
 - **`CACHE_V` 11** (2026-11-16): `summary.rework`, a board's bring-up rework counts, shown as *Bring-up reworks* in the Part inspector (`reworkHtml`).
 - **`CACHE_V` 10** (2026-11-09, branch `scribe-fixes`): `summary.spec` keeps up to 40 gists and `more`
-  (the inspector's *What it does* says "and N more sections"; 9), and `notes`, the review notes (10). The
-  `me-send` branch takes 11 when it merges after this.
+  (the inspector's *What it does* says "and N more sections"; 9), and `notes`, the review notes (10).
 
 ## Before committing
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (213 tests as of 2026-11-08, after waiting Parts; 200 after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS (265 tests as of 2026-11-19, after Partcheck's ME previews; 213 as of 2026-11-08, after waiting Parts; 200 after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME, and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
@@ -84,20 +85,30 @@ Chris asked for PL to be visual and easy to build, "Apple, but technical". Map s
 layout; Gallery and Exploded show stored pictures and models only, never made-up ones (Exploded
 names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE, or ME (Chris, 2026-11-01).
 Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
-next time each is sent from Fabcheck. Real ME parts have none until a mechanical checker exists (see
-`../me_fabcheck_exploration/report.md`), which would write the same `preview/` layout; until then a
-STEP attached in PL gives a Part its pictures.
+next time each is sent from Fabcheck. ME parts get theirs from Partcheck's Send to Signoff ME
+(2026-11-08), `partcheck/<id>/preview/`, the same layout plus a `parts` list; a STEP attached in PL
+still wins for its Part.
 
-**Demo ME models (2026-11-08, Chris: the mechanical parts had no models).** The demo's Front cover,
-Back cover (both Parts link `me:mdemo5`, the Enclosure review, so it counts once) and Wall Bracket carry
-models as an attached STEP stores them: PL's own meshes and renders of Partcheck's made-up demo STEPs,
-in `assets/demo-models/<tree key>.plm.gz` and `<key>-<view>.webp`, listed in `config.demo.models` by
-blob sha; `demo.js` gives the Parts their `model` and `app.js` `fileBlob` serves those shas from the
-page (`S.plDemo.file`). `config.demo.previews` also has the ME designs' pictures for the tray and picker
-(`demo-previews/mdemo5-*`, the closed enclosure). Every 3D Part has a `place` in the demo tree, where it
-sits assembled (+z faces the room): front cover 0, display board 5, main PCBA −5, back cover −10,
-bracket −16 mm, so Exploded spreads them front to wall in that order. To remake the files, run
-`model3d.readStep`/`simplify`/`encode`/`png` on the Partcheck STEPs in the page, then `gitBlobShaBytes`.
+**ME pictures and models from Partcheck (2026-11-08, Chris; merged to `main` 2026-11-19).** Partcheck's Send to
+Signoff ME stores each part's views and a PLM1 mesh with the ME review (`../partcheck/docs/send-to-signoff-me.md`).
+The ME tool in `config.tools` has `previews: 'partcheck/'`, and `reader.js` keeps the index's `parts`.
+- **Matching (`pl.js`).** An ME Part takes the stored part with its own part number
+  (`P.checkerPart`). A review of one part gives that part to every Part. Otherwise the Part shows the
+  hero part's views (`P.heroPart`, `P.partViews`).
+- **3D.** `app.js` `checkerModel` puts the mesh in Exploded and the inspector's 3D view, read from the
+  review's repo (`loadMesh(sha, repo)`).
+- **Attached STEP.** A STEP attached in PL wins. The Part sheet says when Partcheck's model applies.
+- **Mass.** Partcheck's mass shows in the inspector line. It is never written to the Part.
+- **The demo** shows exactly what that Send stores for Partcheck's demo packages (Chris: the demo should
+  always match real behavior). The files come from `../partcheck/tools/pl_demo.html`:
+  - `assets/demo-partcheck.js` holds each review's `index.json` and its files' blob shas.
+  - `assets/demo-partcheck/<review>/` holds the files.
+  - `demo.js` runs them through `reader.js` `cleanPreview` and serves them by sha (`S.plDemo.file`).
+  - The demo Parts carry no `model`.
+  - Partcheck's tests fail while these files are stale.
+- **Places.** Every 3D Part has a `place` in the demo tree, where it sits assembled (+z faces the
+  room): front cover 0, display board 5, main PCBA −5, back cover −10, bracket −16 mm. Exploded
+  spreads them front to wall in that order.
 
 ## 3D models and BOM (2026-11-01)
 
@@ -234,7 +245,7 @@ down already worked that way), for the inspector's `viewer` and Exploded alike. 
   update waits until it's closed (`pageIdle`), so a push doesn't reload PL during a review. Not tried
   yet: full screen (it needs a real click) and touch, which can only turn it (no pinch to zoom).
 - `render()`'s defaults didn't change, so stored pictures and Partcheck's `pl_demo` output are the same.
-  Partcheck's `me-send` vendor copy of `model3d.js` hasn't been synced.
+  Partcheck's vendor copy of `model3d.js` was re-synced when `me-send` merged (2026-11-19).
 
 ## System tab and tree Map (2026-11-01)
 
@@ -349,8 +360,7 @@ as one more tool in `config.tools` with `prefix: ''` (no shared repos) and `revi
   a purchased Part to another kind keeps its supplier, MPN, envelope, and model on the node, hidden
   (`modelOf` and `mpnOf` in `app.js`, the BOM in `pl.js`), so switching back brings them back. EE, ME, and FW
   list them too (the engine's From Signoff PL, `config.pl`; see `ee_design_review/CLAUDE.md`), and Start
-  there writes the same `summary.plPart`. Tests: 213. Not tried live. The `me-send` branch also set `CACHE_V` to 5:
-  make it 6 when merging.
+  there writes the same `summary.plPart`. Tests: 213. Not tried live.
 - **Drawings (2026-11-09, Chris; pushed `edca05e`, with `loom` `6f25017`).** A harness with wires has a picture of its wiring diagram, which Loom
   stores at sync next to the harness (`drawing/<id>/preview/`, Fabcheck's preview layout; `loom/CLAUDE.md`).
   The Loom tool in `config.js` has `previews: 'drawing/'`, so the reader attaches it as the entry's

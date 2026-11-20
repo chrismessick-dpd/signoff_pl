@@ -159,7 +159,28 @@
       if (!/^[a-z0-9-]{1,32}$/.test(key) || !/^[a-z0-9-]{1,32}\.(webp|png)$/.test(file) || !IMAGE_TYPES[type] || !shas[dir + file]) return null;
       return { key: key, type: type, w: num(i.w, 4096), h: num(i.h, 4096), sha: shas[dir + file] };
     }).filter(Boolean);
-    return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images, board: doc.board }) : null;
+    // Partcheck's parts (partcheck/docs/send-to-signoff-me.md): one review, several parts, each with
+    // its views (image keys) and a PLM1 mesh stored beside them.
+    var parts = (Array.isArray(doc.parts) ? doc.parts : []).map(function (x) {
+      var m = obj(obj(x).mesh), file = str(m.file);
+      return Object.assign({}, obj(x), { mesh: /^[a-z0-9-]{1,32}\.plm\.gz$/.test(file) && shas[dir + file] ? Object.assign({}, m, { sha: shas[dir + file] }) : null });
+    });
+    return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images, board: doc.board, parts: parts }) : null;
+  }
+  // One part of a preview, from known fields only. `has(key)`: the preview has that image.
+  var PART_VIEWS = ['iso', 'top', 'front', 'right'];
+  function cleanPart(x, has) {
+    x = obj(x);
+    var key = str(x.key), views = {}, v = obj(x.views), m = obj(x.mesh);
+    if (!/^[a-z0-9-]{1,32}$/.test(key)) return null;
+    PART_VIEWS.forEach(function (k) { if (has(str(v[k]))) views[k] = str(v[k]); });
+    var mm = function (a) { var n = Number(a); return isFinite(n) && n > 0 ? Math.round(Math.min(n, 1e6) * 10) / 10 : 0; };
+    var mesh = /^[0-9a-f]{40}$/.test(str(m.sha)) ? { sha: str(m.sha), size: num(m.size), tris: num(m.tris, 1e7), srcTris: num(m.srcTris, 1e9),
+      bboxMm: Array.isArray(m.bboxMm) && m.bboxMm.length === 3 ? m.bboxMm.map(mm) : null } : null;
+    if (!Object.keys(views).length && !mesh) return null;
+    var g = Number(x.massG);
+    return { key: key, partNumber: str(x.partNumber).slice(0, 80), revision: str(x.revision).slice(0, 20), name: str(x.name).slice(0, 160),
+      views: views, mesh: mesh, massG: isFinite(g) && g > 0 ? Math.round(g * 100) / 100 : null, material: str(x.material).slice(0, 80) };
   }
   // A preview as stored in the index: images by blob sha, or (demo only) by a file under
   // assets/demo-previews/.
@@ -176,7 +197,12 @@
     var hero = images.some(function (i) { return i.key === str(p.hero); }) ? str(p.hero) : images[0].key;
     // board: the board's size in mm as Fabcheck measured it ({ w, h, t }), for the 3D Exploded view.
     var board = S.pl && S.pl.cleanBoard(p.board);
-    return { repo: /^[\w.-]+\/[\w.-]+$/.test(str(p.repo)) ? str(p.repo) : '', runId: str(p.runId), at: str(p.at), hero: hero, images: images, board: board };
+    var keys = {};
+    images.forEach(function (i) { keys[i.key] = 1; });
+    var parts = (Array.isArray(p.parts) ? p.parts : []).slice(0, 100).map(function (x) { return cleanPart(x, function (k) { return keys[k] === 1; }); }).filter(Boolean);
+    var out = { repo: /^[\w.-]+\/[\w.-]+$/.test(str(p.repo)) ? str(p.repo) : '', runId: str(p.runId), at: str(p.at), hero: hero, images: images, board: board };
+    if (parts.length) out.parts = parts;
+    return out;
   }
   // A stored index (localStorage) goes through the same cleaning before it is shown.
   function cleanIndex(index) {
@@ -200,8 +226,9 @@
   // a file whose blob hasn't changed is otherwise never read again, so the field would stay missing
   // (2: summary.reqList, which a cache from before the Requirements tab dropped; 3: summary.revisions;
   // 4: Loom harnesses, meta.number, summary.identAt and summary.harness; 5: summary.plPart; 6: summary.spec; 7: summary.kind; 8: pct 100 with nothing to review;
-  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes; 11: summary.rework; 12: summary.releases).
-  var CACHE_V = 12;
+  // 9: summary.spec keeps 40 gists and more; 10: summary.spec.notes; 11: summary.rework; 12: summary.releases;
+  // 13: Signoff ME's Partcheck previews, partcheck/<id>/preview/, with their parts and meshes).
+  var CACHE_V = 13;
 
   // Resolves a new index. `prev` (the last index) supplies the blob cache, if it has this shape.
   Reader.prototype.refresh = function (prev) {
@@ -295,5 +322,5 @@
   };
 
   S.PLReader = Reader;
-  S.plReader = { CACHE_V: CACHE_V, designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex };
+  S.plReader = { CACHE_V: CACHE_V, designs: designs, cleanSummary: cleanSummary, cleanIndex: cleanIndex, cleanPreview: cleanPreview };
 })(window.Signoff = window.Signoff || {});

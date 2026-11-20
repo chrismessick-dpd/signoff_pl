@@ -380,6 +380,30 @@
     return out;
   }
 
+  // Partcheck's stored parts (partcheck/docs/send-to-signoff-me.md): an ME review can cover several
+  // parts, each with its views and a mesh. A Part takes the one with its part number; a review of one
+  // part gives that part to every Part linked to it.
+  function checkerPart(n, entry) {
+    var pv = entry && entry.preview, parts = pv && pv.parts;
+    if (!n || n.source !== 'me' || !parts) return null;
+    var num = String(n.number || '').trim().toLowerCase();
+    var hit = num ? parts.filter(function (x) { return x.partNumber.trim().toLowerCase() === num; })[0] : null;
+    return hit || (parts.length === 1 ? parts[0] : null);
+  }
+  // The review's hero part: the one whose views include the preview's hero picture.
+  function heroPart(pv) {
+    return (pv.parts || []).filter(function (x) { return Object.keys(x.views).some(function (v) { return x.views[v] === pv.hero; }); })[0] || null;
+  }
+  // One part's views, in the shape of a preview, keyed by view (iso, top, front, right).
+  function partViews(pv, part) {
+    if (!part) return null;
+    var images = Object.keys(part.views).map(function (v) {
+      var img = pv.images.filter(function (i) { return i.key === part.views[v]; })[0];
+      return img && Object.assign({}, img, { key: v });
+    }).filter(Boolean);
+    return images.length ? { repo: pv.repo, runId: pv.runId, at: pv.at, hero: images.some(function (i) { return i.key === 'iso'; }) ? 'iso' : images[0].key, images: images } : null;
+  }
+
   // ── Arranging (the 3D Exploded view) ─────────────────────
   // node.place = { x, y, z (mm), rx, ry, rz (degrees) } moves a Part from where its own
   // coordinates put it: all zeros is its CAD position. A Part without one is laid out in a grid
@@ -592,6 +616,7 @@
     newProject: newProject, newNode: newNode, nextOrder: nextOrder, merge: merge, liveNodes: liveNodes,
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
-    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanOrigin: cleanOrigin, cleanBoard: cleanBoard
+    tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanOrigin: cleanOrigin, cleanBoard: cleanBoard,
+    checkerPart: checkerPart, heroPart: heroPart, partViews: partViews
   };
 })(window.Signoff = window.Signoff || {});

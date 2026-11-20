@@ -65,7 +65,7 @@
   // The demo is rebuilt when its data changes (a new snapshot of the EE/ME demos, or a new
   // product in config.js), so a browser that saw an older demo doesn't keep it.
   var DEMO_VERSION = (S.plDemo.snapshot.generatedAt || '') + '|' + ((C.demo || {}).project || {}).name + '|' + JSON.stringify((C.demo || {}).previews || {}) + JSON.stringify((C.demo || {}).boardsMm || {}) + JSON.stringify((C.demo || {}).requirements || []) +
-    JSON.stringify((C.demo || {}).models || {}) + JSON.stringify((C.demo || {}).tree || []);
+    JSON.stringify(Object.keys(window.SIGNOFF_PL_DEMO_PARTCHECK || {}).map(function (k) { return window.SIGNOFF_PL_DEMO_PARTCHECK[k].shas; })) + JSON.stringify((C.demo || {}).tree || []);
   if (DEMO && (!Object.keys(projects).length || load('demoVersion', '') !== DEMO_VERSION)) {
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
@@ -670,24 +670,44 @@
     return { repo: homeOf(current()), hero: 'iso', model: true,
       images: m.views.map(function (v) { return { key: v.key, type: 'image/png', w: v.w, h: v.h, sha: v.sha }; }) };
   }
-  // The picture set a Part shows: its attached model's, else its design's stored preview.
+  var checkerPart = P.checkerPart, heroPart = P.heroPart, partViews = P.partViews;
+  // The model Partcheck stored for an ME Part, in the shape of modelOf's (plus the repo it's in).
+  function checkerModel(n, entry) {
+    var x = checkerPart(n, entry);
+    if (!x || !x.mesh) return null;
+    return { file: '', size: 0, srcTris: x.mesh.srcTris || x.mesh.tris, tris: x.mesh.tris, bboxMm: x.mesh.bboxMm, step: null, views: [],
+      mesh: { sha: x.mesh.sha, size: x.mesh.size }, repo: entry.preview.repo, partcheck: { at: entry.preview.at, massG: x.massG, material: x.material, number: x.partNumber } };
+  }
+  // The picture set a Part shows: its attached model's, else its design's stored preview (for a
+  // Partcheck review, the Part's own part, else the hero part).
   // A board keeps its Fabcheck pictures on tiles even with a model; the model is for the 3D view.
   function previewFor(n, entry) {
     var pv = entry && entry.preview;
-    return (n && n.source === 'ee' && pv) || modelPreview(n) || pv || null;
+    if (n && n.source === 'ee' && pv) return pv;
+    var own = modelPreview(n);
+    if (own) return own;
+    if (pv && pv.parts) return partViews(pv, checkerPart(n, entry) || heroPart(pv)) || pv;
+    return pv || null;
   }
 
   function fmtBytes(b) { return b >= 1048576 ? (Math.round(b / 104857.6) / 10).toLocaleString() + ' MB' : Math.max(1, Math.round(b / 1024)).toLocaleString() + ' kB'; }
   function storedBytes(m) { return (m.mesh.size || 0) + ((m.step && m.step.size) || 0) + m.views.reduce(function (a, v) { return a + (v.size || 0); }, 0); }
+  // A Partcheck model's line: when it was sent, size, triangles, and its mass if Partcheck had one.
+  function checkerLine(m) {
+    var c = m.partcheck;
+    return esc(['From Partcheck' + (c.at ? ', sent ' + relTime(c.at) : ''), m.bboxMm && m.bboxMm.join(' × ') + ' mm', m.tris.toLocaleString() + ' triangles',
+      c.massG != null && fmtMass(c.massG) + (c.material ? ' ' + c.material : '') + ' by Partcheck'].filter(Boolean).join(' · '));
+  }
   function modelLine(m) {
     return esc([m.file, m.bboxMm && m.bboxMm.join(' × ') + ' mm', m.tris.toLocaleString() + ' triangles' + (m.srcTris > m.tris ? ' (simplified from ' + m.srcTris.toLocaleString() + ')' : '')].filter(Boolean).join(' · '));
   }
 
   // The rotatable view in the inspector, from the stored mesh (decoded once per sha).
+  // A Partcheck model is read from the ME review's repo (`repo`); an attached one from PL's.
   var meshes = {};
-  function loadMesh(sha) {
+  function loadMesh(sha, repo) {
     if (!meshes[sha]) {
-      meshes[sha] = fileBlob(homeOf(current()), { sha: sha, type: 'application/octet-stream' })
+      meshes[sha] = fileBlob(repo || homeOf(current()), { sha: sha, type: 'application/octet-stream' })
         .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
         .then(function (buf) { return S.model3d.decode(new Uint8Array(buf)); });
       meshes[sha].catch(function () { delete meshes[sha]; });
@@ -696,9 +716,9 @@
   }
   function loadViewers(root) {
     (root || document).querySelectorAll('canvas.m3d[data-mesh]').forEach(function (cv) {
-      var sha = cv.dataset.mesh;
+      var sha = cv.dataset.mesh, repo = cv.dataset.repo || '';
       cv.removeAttribute('data-mesh');
-      loadMesh(sha).then(function (mesh) { if (cv.isConnected) cv.m3d = S.model3d.viewer(cv, mesh); }, function () { toast('Couldn’t load the 3D model'); });
+      loadMesh(sha, repo).then(function (mesh) { if (cv.isConnected) cv.m3d = S.model3d.viewer(cv, mesh); }, function () { toast('Couldn’t load the 3D model'); });
     });
   }
 
@@ -715,14 +735,14 @@
     return (cv && cv.m3d) || null;
   }
   function openModelView(id) {
-    var p = current(), n = p && p.nodes[id], mdl = n && modelOf(n);
+    var p = current(), n = p && p.nodes[id], mdl = n && (modelOf(n) || checkerModel(n, P.partStatus(n, index).entry));
     if (!mdl) return;
     closeModelView();
     var e = P.partStatus(n, index).entry || {}, sub = [e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision].filter(Boolean).map(esc).join(' · ');
     var wrap = document.createElement('div');
     wrap.className = 'm3x-wrap'; wrap.id = 'm3x';
     wrap.innerHTML = '<div class="m3x" role="dialog" aria-modal="true" aria-label="' + esc((n.name || 'Part') + ' in 3D') + '">' +
-      '<div class="m3x-head"><div class="m3x-title"><h2>' + esc(n.name || 'Unnamed') + '</h2><p>' + sub + (sub ? ' · ' : '') + modelLine(mdl) + '</p></div>' +
+      '<div class="m3x-head"><div class="m3x-title"><h2>' + esc(n.name || 'Unnamed') + '</h2><p>' + sub + (sub ? ' · ' : '') + (mdl.partcheck ? checkerLine(mdl) : modelLine(mdl)) + '</p></div>' +
       '<div class="seg m3x-views" role="group" aria-label="View">' + BIG_VIEWS.map(function (v) { return '<button data-m3x="view" data-key="' + v.key + '">' + v.label + '</button>'; }).join('') + '</div>' +
       '<button class="btn" data-m3x="fit" title="Center it and fit it to the window (0)">Fit</button>' +
       (document.fullscreenEnabled ? '<button class="icon-btn" data-m3x="full" title="Full screen (F)" aria-label="Full screen">' + ICON.full + '</button>' : '') +
@@ -754,7 +774,7 @@
       else if (act === 'view' && v && b.h) { b.h.view(v.az, v.el); light(v.key); }
     });
     cv.focus({ preventScroll: true });
-    loadMesh(mdl.mesh.sha).then(function (mesh) {
+    loadMesh(mdl.mesh.sha, mdl.repo).then(function (mesh) {
       if (bigView !== b) return;
       wrap.querySelector('.xs-load').remove();
       b.h = S.model3d.viewer(cv, mesh);
@@ -957,6 +977,8 @@
       if (n.kind !== 'part') return;
       var e = P.partStatus(n, index).entry, m = modelOf(n), pv = e && e.preview;
       if (m) { parts.push({ id: id, n: n, kind: 'model', model: m }); return; }
+      var cm = checkerModel(n, e);
+      if (cm) { parts.push({ id: id, n: n, kind: 'model', model: cm }); return; }
       if (n.source === 'ee' && pv) {
         var size = boardSize(n, e);
         if (size) parts.push({ id: id, n: n, kind: 'board', size: size, pv: pv }); else sizeless.push(id);
@@ -993,7 +1015,7 @@
   }
   function sceneObjects(list) {
     return Promise.all(list.parts.map(function (s) {
-      var made = s.kind === 'model' ? loadMesh(s.model.mesh.sha).then(function (mesh) { return { mesh: mesh, tex: null }; })
+      var made = s.kind === 'model' ? loadMesh(s.model.mesh.sha, s.model.repo).then(function (mesh) { return { mesh: mesh, tex: null }; })
         : Promise.all([loadTexture(s.pv, 'top'), loadTexture(s.pv, 'bottom')]).then(function (tx) { return { mesh: M3.slab(s.size[0], s.size[1], s.size[2]), tex: { 1: tx[0], 2: tx[1] } }; });
       return made.then(function (o) {
         var b = M3.bbox(o.mesh.pos);
@@ -2118,9 +2140,9 @@
     var n = t.nodes[id], st = P.partStatus(n, index), tool = P.toolById(n.source);
     var html = '<aside class="map-ins card" aria-label="' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
     var e = st.entry || {}, s = st.summary;
-    var pv = previewFor(n, st.entry), mdl = modelOf(n), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
+    var pv = previewFor(n, st.entry), mdl = modelOf(n) || checkerModel(n, st.entry), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
     var turn = mdl && ui.pic === '3d';
-    html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '" aria-label="3D view: drag to turn, right-drag to pan, scroll to zoom"></canvas>' : art(n, true, e, side)) +
+    html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '"' + (mdl.repo ? ' data-repo="' + esc(mdl.repo) + '"' : '') + ' aria-label="3D view: drag to turn, right-drag to pan, scroll to zoom"></canvas>' : art(n, true, e, side)) +
       (pv && (sides(pv).length > 1 || mdl) ? '<div class="seg map-ins-flip">' + sides(pv).map(function (i) {
         return '<button class="' + (!turn && (side || pv.hero) === i.key ? 'on' : '') + '" data-act="pic" data-key="' + esc(i.key) + '">' + esc(cap(i.key)) + '</button>';
       }).join('') + (mdl ? '<button class="' + (turn ? 'on' : '') + '" data-act="pic" data-key="3d" title="Drag to turn, right-drag to pan, scroll to zoom">3D</button>' : '') + '</div>' : '') +
@@ -2150,7 +2172,8 @@
       html += '<p class="map-ins-text">' + stateChip(st) + ' ' + esc(STATE_TEXT[st.state][2]) + '</p>';
     }
     if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
-    if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
+    if (mdl && mdl.partcheck) html += '<p class="note">' + checkerLine(mdl) + '</p>';
+    else if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
     if (P.isAssemblyDesign(st.entry)) {
       html += '<div class="ins-own"><p class="map-ins-text">' + srcChip(n.source) + ' ' + esc(tool.name) + ' reviews this as an assembly. Link it to an assembly here and the review shows on that branch, counted with the Parts inside it.</p>' +
         '<button class="btn" data-act="asm-link" data-id="' + esc(id) + '">Link to an assembly…</button></div>';
@@ -2730,6 +2753,8 @@
           '<span>Stored: ' + fmtBytes(storedBytes(mdl)) + (mdl.step ? ', original STEP included' : ', model and pictures only') + '</span></div></div>' +
           '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
       }
+      var pc = id && source === 'me' ? checkerModel(Object.assign({}, n, { source: source }), P.partStatus(n, index).entry) : null;
+      if (pc) return '<div class="m-drop">' + pick + '<span class="note">From Partcheck (sent ' + esc(relTime(pc.partcheck.at)) + '): its model and pictures show here. A STEP attached here would show instead.</span></div>';
       return '<div class="m-drop">' + pick + '<span class="note">Read in this browser. PL stores a simplified model (at most ' + S.model3d.MAX_TRIS.toLocaleString() + ' triangles) and pictures in its data repo; the original STEP too if you choose, compressed. It shows on the map, in Gallery and Exploded, and turns in 3D in the inspector.</span></div>';
     }
     var prepUrls = [];

@@ -52,11 +52,12 @@ function FakeHub() {
         });
         return res(204);
       }
-      var m = /^\/repos\/([^/]+)\/([^/]+)(\/.*)$/.exec(u.split('?')[0]);
+      var m = /^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/.exec(u.split('?')[0]);
       if (!m) return res(404, { message: 'Not Found: ' + u });
-      var full2 = m[1] + '/' + m[2], repo = hub.repos[full2], path = m[3];
+      var full2 = m[1] + '/' + m[2], repo = hub.repos[full2], path = m[3] || '';
       if (!repo || repo.collaborators.indexOf(login) < 0) return res(404, { message: 'Not Found' });
       var admin = full2.split('/')[0] === login;
+      if (!path) return res(200, { full_name: full2, private: true, permissions: { pull: true, push: true, admin: admin } });
       if (method === 'GET' && /^\/git\/ref\/heads\//.test(path)) return res(200, { object: { sha: repo.head } });
       if (method === 'GET' && /^\/git\/commits\//.test(path)) return res(200, { tree: { sha: repo.commits[path.split('/').pop()].tree } });
       if (method === 'GET' && /^\/git\/trees\//.test(path)) {

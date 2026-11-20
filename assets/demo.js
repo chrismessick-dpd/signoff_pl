@@ -7,13 +7,23 @@
   var P = S.pl, M = S.model;
   var D = (S.config || {}).demo || {};
   var SNAP = window.SIGNOFF_PL_DEMO_DESIGNS || { designs: {} };
-  // The files those models name, by blob sha: assets/demo-models/<key>.plm.gz and <key>-<view>.webp.
+  // The demo ME reviews' Partcheck previews: what Partcheck's Send to Signoff ME stores for its demo
+  // packages (assets/demo-partcheck.js and assets/demo-partcheck/<review>/, made by
+  // partcheck/tools/pl_demo.html), served by blob sha like a repo's files (app.js fileBlob).
+  var PCK = window.SIGNOFF_PL_DEMO_PARTCHECK || {};
   var demoFiles = {};
-  Object.keys(D.models || {}).forEach(function (k) {
-    var m = D.models[k];
-    demoFiles[m.mesh[0]] = 'assets/demo-models/' + k + '.plm.gz';
-    m.views.forEach(function (v) { demoFiles[v[1]] = 'assets/demo-models/' + k + '-' + v[0] + '.webp'; });
+  Object.keys(PCK).forEach(function (id) {
+    Object.keys(PCK[id].shas || {}).forEach(function (f) { demoFiles[PCK[id].shas[f]] = 'assets/demo-partcheck/' + id + '/' + f; });
   });
+  // A demo review's preview, read the way reader.js reads partcheck/<id>/preview/index.json in a repo.
+  function partcheckPreview(id) {
+    var d = PCK[id], R = S.plReader;
+    if (!d || !R || !R.cleanPreview) return null;
+    var dir = 'partcheck/' + id + '/preview/', shas = {};
+    Object.keys(d.shas || {}).forEach(function (f) { shas[dir + f] = d.shas[f]; });
+    // Sent two days before the visit.
+    return R.cleanPreview(Object.assign({}, d.index, { at: new Date(Date.now() - 2 * 864e5).toISOString() }), dir, shas, '');
+  }
 
   // The snapshot's edit times, moved forward by its age, so "edited 1 d ago" stays true.
   function shifted(iso) {
@@ -36,13 +46,13 @@
         d.summary.releases ? { releases: d.summary.releases.map(function (r) { return r.releasedAt ? Object.assign({}, r, { releasedAt: shifted(r.releasedAt + 'T12:00:00.000Z').slice(0, 10) }) : r; }) } : {}) : null;
       index.entries[key] = { tool: key.slice(0, at), id: key.slice(at + 1), repo: '', path: '', sha: '', name: d.name, number: d.number || '',
         revision: d.revision || '', stage: d.stage || '', archived: !!d.archived, summary: summary };
-      // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo). The demo
-      // ME parts' are PL's own renders (model3d.png, 640 × 480) of Partcheck's made-up demo STEPs
-      // (partcheck/demo; the enclosure is the front cover with the back cover 10 mm behind it), as a
-      // Partcheck send to Signoff ME would one day store them. Nothing writes ME pictures yet.
+      // The demo boards' pictures: Fabcheck's previews of the demo boards (pcb_dfm/demo). The demo ME
+      // reviews' pictures and models: Partcheck's Send of its demo packages (partcheckPreview).
       var pv = (D.previews || {})[key];
       var mm = (D.boardsMm || {})[key];
-      if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], board: mm ? P.cleanBoard(mm) : null, images: pv.map(function (x) {
+      var pck = key.slice(0, at) === 'me' ? partcheckPreview(key.slice(at + 1)) : null;
+      if (pck) index.entries[key].preview = pck;
+      else if (pv) index.entries[key].preview = { repo: '', runId: '', at: '', hero: pv[0][0], board: mm ? P.cleanBoard(mm) : null, images: pv.map(function (x) {
         return { key: x[0], w: x[1], h: x[2], src: 'assets/demo-previews/' + key.slice(at + 1) + '-' + x[0] + '.webp' };
       }) };
     });
@@ -60,18 +70,9 @@
       ids[r.key] = n.id;
       project.nodes[n.id] = n;
     });
-    // The demo ME Parts' models, as an attached STEP stores them (app.js modelRecord): a mesh and four
-    // views, named by blob sha and served from assets/demo-models (demoFiles, read by app.js fileBlob).
-    // They are PL's own renders of Partcheck's made-up demo STEPs (partcheck/demo). The enclosure's
-    // review is two Parts, its front and back covers, so Exploded can put the boards between them.
-    Object.keys(D.models || {}).forEach(function (k) {
-      var m = D.models[k], n = project.nodes[ids[k]];
-      if (!n) return;
-      n.model = { file: m.file, size: 0, srcTris: m.tris, tris: m.tris, bboxMm: m.bboxMm, dir: 'models/' + project.id + '/' + n.id + '/',
-        at: M.now(), by: user, step: null, mesh: { sha: m.mesh[0], size: m.mesh[1] },
-        views: m.views.map(function (v) { return { key: v[0], sha: v[1], w: 640, h: 480, size: v[2] }; }) };
-      if (!n.envelopeMm) n.envelopeMm = m.bboxMm.join(' × ');
-    });
+    // The demo ME Parts have no attached models: their pictures and 3D come from the Enclosure's and
+    // Wall Bracket's Partcheck previews, each Part by its part number. The enclosure's review is two
+    // Parts, its front and back covers, so Exploded can put the boards between them.
     // Requirements: System ones in the project (and any firmware ones held in PL), and the
     // EE/ME/FW demo requirements given the parent links PL would have written into those reviews.
     var R = S.plReqs, reqIds = {};
@@ -100,7 +101,7 @@
     return { project: project, index: index };
   }
 
-  // A demo file by blob sha (the ME parts' models and pictures), or null.
+  // A demo file by blob sha (the ME reviews' Partcheck models and pictures), or null.
   function file(sha) { return demoFiles[sha] || null; }
   S.plDemo = { build: build, snapshot: SNAP, file: file };
 })(window.Signoff = window.Signoff || {});
