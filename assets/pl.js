@@ -390,6 +390,16 @@
     var hit = num ? parts.filter(function (x) { return x.partNumber.trim().toLowerCase() === num; })[0] : null;
     return hit || (parts.length === 1 ? parts[0] : null);
   }
+  // A mechanical part's model lives with its ME review (docs/part-models.md). A Part linked to one may still carry
+  // PL's own copy (node.model); the review's shows instead when it was stored at the same time or later (a model
+  // moved into the review keeps its time, and is the same model).
+  function storedWins(n, entry) {
+    if (!n || n.kind !== 'part' || n.source !== 'me' || !n.ref) return false;
+    var x = checkerPart(n, entry);
+    if (!x || !(x.mesh || Object.keys(x.views || {}).length)) return false;
+    var own = cleanModel(n.model), at = x.at || (entry.preview && entry.preview.at) || '';
+    return !own || at >= (own.at || '');
+  }
   // The review's hero part: the one whose views include the preview's hero picture.
   function heroPart(pv) {
     return (pv.parts || []).filter(function (x) { return Object.keys(x.views).some(function (v) { return x.views[v] === pv.hero; }); })[0] || null;
@@ -617,6 +627,6 @@
     tree: tree, flatten: flatten, descendants: descendants, canMove: canMove, path: path, topAssembly: topAssembly, soloPart: soloPart,
     refKey: refKey, partStatus: partStatus, rollup: rollup, issues: issues, unlistedIssues: unlistedIssues,
     tokenTag: tokenTag, canSee: canSee, isFte: isFte, lockOut: lockOut, cleanModel: cleanModel, modelFiles: modelFiles, bom: bom, cleanPlace: cleanPlace, cleanColor: cleanColor, cleanOrigin: cleanOrigin, cleanBoard: cleanBoard,
-    checkerPart: checkerPart, heroPart: heroPart, partViews: partViews
+    checkerPart: checkerPart, heroPart: heroPart, partViews: partViews, storedWins: storedWins
   };
 })(window.Signoff = window.Signoff || {});

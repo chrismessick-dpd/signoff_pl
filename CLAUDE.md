@@ -3,8 +3,9 @@
 Signoff PL (project lead) is the product-level tool. A PL project is a whole product: a tree of
 assemblies and **Parts**. Each Part links to a Signoff EE, ME, or FW review by `{tool, id}`, or is
 purchased. PL rolls up progress, issues, stages, and mass from each review's
-`summary`. The one thing it writes into EE or ME is requirement records, from the Requirements
-tab (Chris, 2026-11-01; see *Requirements tab* below).
+`summary`. It writes two things into EE or ME: requirement records, from the Requirements
+tab (Chris, 2026-11-01; see *Requirements tab* below), and, since 2026-11-19, an ME Part's model, kept
+with its review (see *Part models kept with the ME review* below).
 
 **Serial comma** (Chris, 2026-11-08): use the Oxford comma in every list of three or more, in UI text, docs, demo data, checklists, and commit messages: "A, B, and C". Never change check ids or data keys to fit it.
 
@@ -70,7 +71,7 @@ Notes on behavior:
 
 1. Run `python tools/sync_vendor.py --check`, then `python tools/stamp_version.py`. PL uses
    `stamp_version.py`, not a `build.py`.
-2. Serve the tools folder and open `tests/test.html`. It should show PASS (265 tests as of 2026-11-19, after Partcheck's ME previews; 213 as of 2026-11-08, after waiting Parts; 200 after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
+2. Serve the tools folder and open `tests/test.html`. It should show PASS but for the demo snapshot (277 tests as of 2026-11-19, after part models kept with the ME review; 265 after Partcheck's ME previews; 213 as of 2026-11-08, after waiting Parts; 200 after People & access; 148 as of 2026-11-07, after Loom harnesses; 138 as of
    2026-11-04, after `summary.revisions`).
    - The snapshot test compares `assets/demo-designs.js` with the live EE, ME, and FW demos.
    - If that test fails, regenerate the snapshot with `tools/demo_designs.html` and save the
@@ -86,8 +87,8 @@ layout; Gallery and Exploded show stored pictures and models only, never made-up
 names Parts with no 3D). The new look stays in PL: don't port it to the hub, EE, or ME (Chris, 2026-11-01).
 Board pictures come from Fabcheck's stored runs (`fabcheck/<id>/preview/`); real boards get them the
 next time each is sent from Fabcheck. ME parts get theirs from Partcheck's Send to Signoff ME
-(2026-11-08), `partcheck/<id>/preview/`, the same layout plus a `parts` list; a STEP attached in PL
-still wins for its Part.
+(2026-11-08), `partcheck/<id>/preview/`, the same layout plus a `parts` list; since 2026-11-19 PL and ME
+write that folder too, and the newest model shows (*Part models kept with the ME review*).
 
 **ME pictures and models from Partcheck (2026-11-08, Chris; merged to `main` 2026-11-19).** Partcheck's Send to
 Signoff ME stores each part's views and a PLM1 mesh with the ME review (`../partcheck/docs/send-to-signoff-me.md`).
@@ -97,7 +98,8 @@ The ME tool in `config.tools` has `previews: 'partcheck/'`, and `reader.js` keep
   hero part's views (`P.heroPart`, `P.partViews`).
 - **3D.** `app.js` `checkerModel` puts the mesh in Exploded and the inspector's 3D view, read from the
   review's repo (`loadMesh(sha, repo)`).
-- **Attached STEP.** A STEP attached in PL wins. The Part sheet says when Partcheck's model applies.
+- **Attached STEP.** Since 2026-11-19 a STEP attached to an ME-linked Part goes into this folder too; see
+  *Part models kept with the ME review*.
 - **Mass.** Partcheck's mass shows in the inspector line. It is never written to the Part.
 - **The demo** shows exactly what that Send stores for Partcheck's demo packages (Chris: the demo should
   always match real behavior). The files come from `../partcheck/tools/pl_demo.html`:
@@ -109,6 +111,26 @@ The ME tool in `config.tools` has `previews: 'partcheck/'`, and `reader.js` keep
 - **Places.** Every 3D Part has a `place` in the demo tree, where it sits assembled (+z faces the
   room): front cover 0, display board 5, main PCBA −5, back cover −10, bracket −16 mm. Exploded
   spreads them front to wall in that order.
+
+## Part models kept with the ME review (2026-11-19, Chris)
+
+Chris: a model given to a part in PL should reach ME, and the other way round. The design and his decisions
+are `docs/part-models.md`. In short:
+- **One folder.** A mechanical part's model lives next to its ME review, `partcheck/<review>/preview/`
+  (Partcheck's layout), written by Partcheck's Send, PL, and ME's Attach a model, through
+  `model3d.parts.put` and `remove` (`model3d.js`, vendored into Partcheck and the engine). Parts carry
+  `source`, `at`, `by`, `file`, and an optional `step`; a write replaces the part with the same number.
+- **PL.** Attach STEP (the Part sheet, or `Signoff.app.attachModel`) on a Part linked to an ME review writes
+  there at once (`saveToReview`: the review's home from ME's shared map, `reviewHome`), clears the Part's
+  own `model`, and rebuilds the review's preview in PL's index (`refreshFolder`). Remove takes the part out.
+  A Part's own model shows only while it's newer than the review's (`P.storedWins`, used by `modelFor`
+  everywhere: tiles, inspector, large view, Exploded, Download STEP). The inspector line says who stored it
+  (`storedBy`). In the demo the folder is kept in this browser (`demoHome`, `demoFolders`, cleared with
+  the demo; `S.plDemo.folder`).
+- **Who sees it.** Whoever the ME review is shared with (Chris: fine).
+- **Purchased Parts** keep their models in PL's repo, as before.
+- **Models attached before this** (on ME-linked Parts) move into their reviews by a one-off script outside the
+  repo (see the suite notes), only after this code is live.
 
 ## 3D models and BOM (2026-11-01)
 

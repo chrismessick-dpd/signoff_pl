@@ -373,6 +373,48 @@ document.write('<script src="fake-hub.js?t=' + Date.now() + '"><\/script>');
   var dNodes = Object.keys(dm.project.nodes).map(function (k) { return dm.project.nodes[k]; }).filter(function (n) { return n.source === 'me'; });
   ok(dNodes.length === 3 && dNodes.every(function (n) { return !n.model && P.checkerPart(n, dm.index.entries[n.ref.tool + ':' + n.ref.id]); }), 'every demo ME Part takes its model from Partcheck, none attached');
 
+  // One model per part, kept with the ME review (docs/part-models.md): Signoff PL and Signoff ME write the same
+  // folder as Partcheck's Send, through model3d.parts, and the latest write for a part number wins.
+  var PM = Signoff.model3d.parts, pmDir = 'partcheck/m1/preview/';
+  var pmStore = new Signoff.GitHubStore({ owner: 'own', repo: 'review-me-enclosure', branch: 'main', dataPath: '', token: 'tok-own' }, mhub.fetchFor('tok-own'));
+  function fakePrep(name, n) {
+    return { name: name, size: 100, srcTris: 20, tris: 10, bboxMm: [1, 2, 3], meshGz: new Uint8Array([1, 2, 3, n]), stepGz: new Uint8Array([9, 9, n]), stepFits: true,
+      views: ['iso', 'top', 'front', 'right'].map(function (k, i) { return { key: k, blob: new Blob([new Uint8Array([7, i, n])], { type: 'image/png' }), w: 480, h: 360 }; }) };
+  }
+  function pmFiles() { return Object.keys(mhub.files('own/review-me-enclosure')).filter(function (k) { return k.indexOf(pmDir) === 0; }).map(function (k) { return k.slice(pmDir.length); }).sort(); }
+  function pmIndex() { var v = mhub.files('own/review-me-enclosure')[pmDir + 'index.json']; return JSON.parse(typeof v === 'string' ? v : new TextDecoder().decode(v)); }
+  var pmPut = await PM.put(pmStore, pmDir, { prep: fakePrep('front.step', 1), partNumber: ' 2100410-011 ', name: 'FRONT COVER', source: 'pl', by: 'Chris', keepStep: true, at: '2026-11-19T10:00:00Z' });
+  var pmIx = pmIndex(), pmFc = pmIx.parts.filter(function (x) { return x.partNumber === '2100410-011'; });
+  ok(pmPut && pmFc.length === 1 && pmFc[0].key === 'fc' && pmFc[0].source === 'pl' && pmFc[0].by === 'Chris' && pmFc[0].step.file === 'fc.step.gz' && pmFc[0].file === 'front.step',
+    'a PL attach replaces Partcheck’s part with the same number, keeping its key, with who, when, and the STEP');
+  ok(pmIx.parts.some(function (x) { return x.key === 'bc' && !x.source; }) && pmIx.hero === 'fc-iso', '…the other parts stay as Partcheck stored them, and the hero stays');
+  var pmF = pmFiles();
+  ok(pmF.indexOf('fc-iso.png') >= 0 && pmF.indexOf('fc-iso.webp') < 0 && pmF.indexOf('fc.step.gz') >= 0 && pmF.indexOf('bc-iso.webp') >= 0, '…its old pictures are removed and the new ones and the STEP written');
+  ok(Object.keys(PM.named(pmIx)).indexOf('fc.step.gz') >= 0, 'named() counts a kept STEP, so Partcheck’s Send keeps it');
+  await PM.put(pmStore, pmDir, { prep: fakePrep('bracket.step', 2), partNumber: '2100410-030', source: 'me', by: 'Dana', keepStep: false });
+  pmIx = pmIndex();
+  var pmNew = pmIx.parts.filter(function (x) { return x.partNumber === '2100410-030'; })[0];
+  ok(pmNew && pmNew.key === '2100410-030' && !pmNew.step && pmNew.source === 'me' && pmFiles().indexOf('2100410-030.step.gz') < 0, 'a new number gets its own key; no STEP when not kept');
+  await PM.remove(pmStore, pmDir, '2100410-030');
+  ok(!pmIndex().parts.some(function (x) { return x.partNumber === '2100410-030'; }) && !pmFiles().some(function (f) { return f.indexOf('2100410-030') === 0; }), 'remove takes the part and its files out');
+  ok((await PM.remove(pmStore, pmDir, 'nope')) === null, 'removing a part that isn’t there writes nothing');
+  // A repo that moved on between the read and the write is read again.
+  var pmCalls = 0, pmRacy = Object.create(pmStore);
+  pmRacy.putFiles = function (files, opts) { pmCalls++; if (pmCalls === 1) { var e = new Error('moved'); e.code = 'moved'; return Promise.reject(e); } return pmStore.putFiles(files, opts); };
+  await PM.put(pmRacy, pmDir, { prep: fakePrep('front2.step', 3), partNumber: '2100410-011', source: 'pl', by: 'Chris', keepStep: true, at: '2026-11-19T11:00:00Z' });
+  ok(pmCalls === 2 && pmIndex().parts.filter(function (x) { return x.partNumber === '2100410-011'; })[0].file === 'front2.step', 'a write on a moved repo is read and written again');
+  // PL's reader sees who wrote it, and the STEP.
+  var pmRead = await new Signoff.PLReader({ owner: 'own', tools: tools, token: 'tok-own', fetch: mhub.fetchFor('tok-own') }).refresh(null);
+  var pmPart = pmRead.entries['me:m1'].preview.parts.filter(function (x) { return x.partNumber === '2100410-011'; })[0];
+  ok(pmPart && pmPart.source === 'pl' && pmPart.by === 'Chris' && pmPart.step && /^[0-9a-f]{40}$/.test(pmPart.step.sha) && pmPart.at === '2026-11-19T11:00:00Z', 'the reader keeps the source, who, when, and the STEP');
+  ok(pmRead.entries['me:m1'].preview.parts.filter(function (x) { return x.key === 'bc'; })[0].source === 'partcheck', '…and a Partcheck part reads as Partcheck');
+  // The newer model shows: the review's, unless the Part's own copy is newer.
+  var pmEntry = pmRead.entries['me:m1'], pmNode = { kind: 'part', source: 'me', number: '2100410-011', ref: { tool: 'me', id: 'm1' } };
+  var pmOwn = function (at) { return Object.assign({}, pmNode, { model: { mesh: { sha: '1'.repeat(40) }, at: at } }); };
+  ok(P.storedWins(pmNode, pmEntry) && P.storedWins(pmOwn('2026-11-19T10:30:00Z'), pmEntry) && P.storedWins(pmOwn('2026-11-19T11:00:00Z'), pmEntry) && !P.storedWins(pmOwn('2026-11-19T12:00:00Z'), pmEntry),
+    'a linked ME Part shows the review’s model unless its own copy is newer (a tie goes to the review)');
+  ok(!P.storedWins(Object.assign({}, pmNode, { source: 'purchased' }), pmEntry), '…and a purchased Part keeps its own');
+
   // Review repos are contractor-writable: planted files and hostile summaries.
   var BAD = '"><img src=x onerror=alert(1)>';
   var badSum = { pct: BAD, total: BAD, issues: { open: { critical: BAD, major: 2 }, fixed: BAD }, open: [{ id: 'x', severity: BAD, text: 't' }], checklists: { a: { pct: 250, name: 'A' } }, name: { toString: 1 } };

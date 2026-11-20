@@ -599,6 +599,89 @@
     var l = Array.isArray(specCfg().links) ? specCfg().links.filter(function (w) { return typeof w === 'string' && /^[A-Za-z][A-Za-z ]*$/.test(w); }) : [];
     return l.length ? l : ['Uses'];
   }
+  // The link words offered for new links: the configured ones less config.spec.legacyLinks, which are still read
+  // (EE's Supplies, 2026-11-19: power is the Power line now, and a supply is a connection).
+  function specOfferWords() {
+    var old = (Array.isArray(specCfg().legacyLinks) ? specCfg().legacyLinks : []).map(function (w) { return String(w).toLowerCase(); });
+    var l = specLinkWords().filter(function (w) { return old.indexOf(w.toLowerCase()) < 0; });
+    return l.length ? l : specLinkWords();
+  }
+  // ── Power (EE, config.spec.power; Chris, 2026-11-19) ──
+  // A block's "Power:" line lists the rails it uses (sink) or makes (source): "Power: 16.4V (sink), 3V0 (source)".
+  // A rail without a role is a sink. The diagram puts a bar over the block for each sink rail and a circle for
+  // each source rail, and a connection that carries a rail the far block sinks (or this one sources) is a power
+  // link: a line within one section, the flags alone across sections.
+  function specPowerOn() { return !!specCfg().power; }
+  function specPowerItems(text) {
+    return specLinkItems(text).map(function (it) {
+      var role = /^\s*source\s*$/i.test(it.label || '') ? 'source' : 'sink';
+      return { rail: it.name.trim(), role: role };
+    }).filter(function (x) { return x.rail; });
+  }
+  function specPowerText(items) {
+    var seen = {};
+    return items.filter(function (x) { var k = x.rail.toLowerCase() + '|' + x.role; if (!x.rail || seen[k]) return false; seen[k] = 1; return true; })
+      .map(function (x) { return (/[,()"]/.test(x.rail) ? '"' + x.rail.replace(/"/g, '') + '"' : x.rail) + ' (' + (x.role === 'source' ? 'source' : 'sink') + ')'; }).join(', ');
+  }
+  function specPowerOf(body) {
+    var m = specPowerOn() && String(body || '').split('\n').filter(function (l) { return /^\s*power\s*:/i.test(l); })[0];
+    return m ? specPowerItems(m.replace(/^\s*power\s*:\s*/i, '')) : [];
+  }
+  // Supplies lines to Connects and Power (2026-11-19, Chris: "supplies" becomes "connects to", and power its own
+  // line). For each "Supplies: B (rail)" on block A: B gets the rail as a sink, A gets "B (rail)" on its Connects
+  // line, and A sources the rail unless A also sinks it (a block passing a rail on, such as a connector's VBUS).
+  // A supply without a rail uses A's title as the rail, as its flag did. The diagram's kept shapes, ports, and
+  // labels move from "<id>|supplies" to "<id>|connects". Returns the changed section records, unstamped.
+  function specPowerConvert(project) {
+    var sw = specLinkWord('supplies'), cw = specLinkWord('connects');
+    if (!sw || !cw) return [];
+    var ctx = specContext(project), secs = liveSpec(project), sinks = {}, sources = {}, adds = {}, has = {};
+    secs.forEach(function (sec) {
+      specUsesItems(sec.body, sw).forEach(function (it) {
+        var to = specUseId(ctx, it), rail = (it.label || '').trim() || sec.title;
+        // A name no block has stays on the Connects line, as it was on Supplies; it just powers nothing.
+        if (!to) { (adds[sec.id] = adds[sec.id] || []).push({ name: it.name, label: it.label || '', dir: it.dir }); return; }
+        if (to === sec.id) return;
+        (sinks[to] = sinks[to] || []).push(rail);
+        (sources[sec.id] = sources[sec.id] || []).push(rail);
+        (adds[sec.id] = adds[sec.id] || []).push({ name: it.name, label: rail, dir: it.dir });
+        has[sec.id] = has[sec.id] || 1; has[to] = has[to] || 1;
+      });
+    });
+    var swl = '|' + sw.toLowerCase(), cwl = '|' + cw.toLowerCase();
+    function moveKeys(map) {
+      if (!map || typeof map !== 'object') return { map: map, moved: false };
+      var out = {}, moved = false;
+      Object.keys(map).forEach(function (k) {
+        var nk = k.slice(-swl.length).toLowerCase() === swl ? k.slice(0, -swl.length) + cwl : k;
+        if (nk !== k) moved = true;
+        if (nk !== k && map[nk] !== undefined) { out[k] = map[k]; return; }   // the connection's own entry wins
+        out[nk] = map[k];
+      });
+      return { map: out, moved: moved };
+    }
+    var recs = [];
+    secs.forEach(function (sec) {
+      var raw = (project.spec || {})[sec.id] || sec, body = sec.body, changed = false, rec = Object.assign({}, raw);   // the stored record, every field kept
+      if (adds[sec.id]) {
+        var cur = specUsesItems(body, cw), names = cur.map(function (x) { return specUseId(ctx, x) || x.name.toLowerCase(); });
+        adds[sec.id].forEach(function (a) { var id = specUseId(ctx, a) || a.name.toLowerCase(); if (names.indexOf(id) < 0) { cur.push(a); names.push(id); } });
+        body = specSetLine(body, cw, specLinkText(cur));
+        body = specSetLine(body, sw, '');
+        changed = true;
+      }
+      if (sinks[sec.id] || sources[sec.id]) {
+        var mine = specPowerOf(body), sk = (sinks[sec.id] || []), lower = sk.map(function (r) { return r.toLowerCase(); });
+        var items = mine.concat(sk.map(function (r) { return { rail: r, role: 'sink' }; }),
+          (sources[sec.id] || []).filter(function (r) { return lower.indexOf(r.toLowerCase()) < 0; }).map(function (r) { return { rail: r, role: 'source' }; }));
+        body = specSetLine(body, 'power', specPowerText(items));
+        changed = true;
+      }
+      ['routes', 'ports', 'labels'].forEach(function (k) { var m = moveKeys(raw[k]); if (m.moved) { rec[k] = m.map; changed = true; } });
+      if (changed) { rec.body = body; recs.push(rec); }
+    });
+    return recs;
+  }
   // The configured spelling of a link word ('uses' -> 'Uses'), or '' when the tool has no such word.
   function specLinkWord(w) { w = String(w || '').toLowerCase(); return specLinkWords().filter(function (x) { return x.toLowerCase() === w; })[0] || ''; }
   // The link a new connection from a block of this kind makes (EE: power blocks supply).
@@ -883,7 +966,7 @@
   // it matched. Items: { mode: 'change', at, text, was } or { mode: 'add', after (-1: first), text }.
   // specResolveApply(sectionBody, plan, picks) writes the picked items (picks[i] true) into the body.
   // Only lines it changes are rebuilt; every other line keeps its bytes.
-  var SPEC_LINE_KEYS = /^\s*(?:>|[-*+]\s|\d+[.)]\s|\||#|(?:parts|supplies|connects|uses|check)\s*:)/i;
+  var SPEC_LINE_KEYS = /^\s*(?:>|[-*+]\s|\d+[.)]\s|\||#|(?:parts|power|supplies|connects|uses|check)\s*:)/i;
   function specPieces(body) {
     var lines = String(body || '').split('\n'), pieces = [];
     lines.forEach(function (line, li) {
@@ -979,8 +1062,40 @@
   }
   // A sentence as plain words: marks unwrapped, @req taken out. A space before punctuation goes only
   // where the punctuation ends a word ("pulse @req." -> "pulse."), so "the .cfg file" keeps its space.
+  // Bold, italic, and struck words in Scribe text (2026-11-19, Chris: rich text in Scribe): **bold**, *italic*,
+  // ~~struck~~. A marker opens only before a non-space with a closing marker later in the text, and closes only
+  // after a non-space, so "5 * 3" and a lone "**" stay as typed; a backslash keeps a * or ~ as itself.
+  // [{ t, b, i, s }], runs in order.
+  function specRich(text) {
+    text = String(text || '');
+    var out = [], st = { b: false, i: false, s: false }, buf = '';
+    function flush() { if (buf) out.push({ t: buf, b: st.b, i: st.i, s: st.s }); buf = ''; }
+    function closes(from, tok) {
+      for (var j = from; j < text.length; j++) {
+        if (text[j] === '\\') { j++; continue; }
+        if (tok === '*' && text.substr(j, 2) === '**') { j++; continue; }
+        if (text.substr(j, tok.length) === tok && j > from && !/\s/.test(text[j - 1])) return true;
+      }
+      return false;
+    }
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (ch === '\\' && (text[i + 1] === '*' || text[i + 1] === '~')) { buf += text[++i]; continue; }
+      var two = text.substr(i, 2), k = two === '**' ? 'b' : two === '~~' ? 's' : ch === '*' ? 'i' : '';
+      if (k) {
+        var tok = k === 'i' ? '*' : two, nx = text[i + tok.length] || '', pv = text[i - 1] || '';
+        if (st[k] ? pv && !/\s/.test(pv) : nx && !/\s/.test(nx) && !(k === 'i' && /\w/.test(pv)) && closes(i + tok.length, tok)) {
+          flush(); st[k] = !st[k]; i += tok.length - 1; continue;
+        }
+      }
+      buf += ch;
+    }
+    flush();
+    return out;
+  }
+  function specRichPlain(text) { return specRich(text).map(function (r) { return r.t; }).join(''); }
   function specPlain(raw) {
-    return specSpanReplace(raw, function (all, txt) { return txt; }).replace(new RegExp(SPEC_TAG.source, 'ig'), '$1').replace(/[ \t]{2,}/g, ' ')
+    return specRichPlain(specSpanReplace(raw, function (all, txt) { return txt; })).replace(new RegExp(SPEC_TAG.source, 'ig'), '$1').replace(/[ \t]{2,}/g, ' ')
       .replace(/\s+([.!?,;:])(?=$|[\s.!?,;:)"'’”\]])/g, '$1').trim();
   }
 
@@ -1113,8 +1228,23 @@
     return cells;
   }
 
-  // A section body as blocks: p and li (with sentence units), gist, uses, table (rows with marks are
-  // units), code.
+  var SPEC_LIST_MAX = 5;
+  // The numbers of a run of list blocks: 1., then 1.1 and 1.2 a level in, 1.1.1 further; a bullet keeps the
+  // count above it and restarts the ones below. [label or '' per block].
+  function specListNumbers(lis) {
+    var c = [];
+    return lis.map(function (b) {
+      var lv = b.lv || 0;
+      if (!b.num) { c.length = Math.min(c.length, lv + 1); return ''; }
+      c.length = lv + 1;
+      for (var i = 0; i < lv; i++) c[i] = c[i] || 0;
+      c[lv] = (c[lv] || 0) + 1;
+      var path = c.filter(function (n) { return n > 0; });
+      return path.join('.') + (path.length === 1 ? '.' : '');
+    });
+  }
+  // A section body as blocks: p and li (with sentence units; li with lv and num), gist, uses, table (rows with
+  // marks are units), code.
   function specBlocks(body, ctx) {
     body = String(body || '');
     var out = [], lines = [], pos = 0;
@@ -1162,6 +1292,11 @@
         var items = specLinkItems(trim.replace(specLinkRe(lw), ''));
         out.push({ type: 'uses', word: lw, items: items, names: items.map(function (x) { return x.name; }) }); i++; continue;
       }
+      var pw = specPowerOn() && /^power:\s*(.*)$/i.exec(trim);
+      if (pw) {
+        endPara();
+        out.push({ type: 'power', items: specPowerItems(pw[1]) }); i++; continue;
+      }
       var pm = /^parts:\s*(.*)$/i.exec(trim);
       if (pm) {
         endPara();
@@ -1172,12 +1307,15 @@
         var gs = L.s + t.indexOf('>') + 1;
         out.push({ type: 'gist', text: specPlain(body.slice(gs, L.e)) }); i++; continue;
       }
-      var lm = /^(\s*[-*]\s+)/.exec(t);
+      // A list line: "- " or "* " a bullet, "1. " or "1) " numbered (numbers are drawn by level, 1., 1.1,
+      // 1.1.1, whatever digits were typed); two leading spaces (or a tab) a level, up to SPEC_LIST_MAX.
+      var lm = /^(\s*)([-*]|\d+[.)])\s+/.exec(t);
       if (lm) {
         endPara();
-        var a = L.s + lm[1].length, b = L.e;
+        var a = L.s + lm[0].length, b = L.e;
         while (b > a && /\s/.test(body[b - 1])) b--;
-        out.push({ type: 'li', start: a, end: b, units: b > a ? [specUnit(body, a, b, ctx)] : [] }); i++; continue;
+        out.push({ type: 'li', start: a, end: b, lv: Math.min(SPEC_LIST_MAX, Math.floor(lm[1].replace(/\t/g, '  ').length / 2)), num: /\d/.test(lm[2]),
+          units: b > a ? [specUnit(body, a, b, ctx)] : [] }); i++; continue;
       }
       // A "Check:" line starts its own paragraph, so notes typed one per line stay apart.
       if (para && SPEC_NOTE.test(trim)) endPara();
@@ -1195,8 +1333,9 @@
     var ctx = specContext(project), secs = liveSpec(project), use = {}, tags = [];
     var totals = { sections: secs.length, units: 0, linked: 0, std: 0, tag: 0, untraced: 0, note: 0 };
     var out = secs.map(function (s, si) {
-      var blocks = specBlocks(s.body, ctx), c = { linked: 0, std: 0, tag: 0, untraced: 0, note: 0 }, gist = '', uses = [], links = [], edges = [], parts = [], notes = [];
+      var blocks = specBlocks(s.body, ctx), c = { linked: 0, std: 0, tag: 0, untraced: 0, note: 0 }, gist = '', uses = [], links = [], edges = [], parts = [], notes = [], power = [];
       blocks.forEach(function (bk) {
+        if (bk.type === 'power') bk.items.forEach(function (r) { if (!power.some(function (q) { return q.rail.toLowerCase() === r.rail.toLowerCase() && q.role === r.role; })) power.push(r); });
         if (bk.type === 'gist' && !gist) gist = bk.text;
         if (bk.type === 'uses') bk.items.forEach(function (it) {
           var id = specUseId(ctx, it);
@@ -1219,7 +1358,7 @@
         gist = first.length ? first[0].text : '';
       }
       // uses: ids of the sections its link lines name; edges: each with its link word and label.
-      return { sec: s, index: si, blocks: blocks, counts: c, gaps: c.untraced + c.tag, notes: notes, gist: gist, uses: uses, edges: edges, parts: parts, links: links };
+      return { sec: s, index: si, blocks: blocks, counts: c, gaps: c.untraced + c.tag, notes: notes, gist: gist, uses: uses, edges: edges, parts: parts, power: power, links: links };
     });
     // Parents: the nearest earlier section with a smaller level.
     out.forEach(function (x, i) {
@@ -2636,7 +2775,7 @@
     liveComments: liveComments, retiredItems: retiredItems, changesSince: changesSince, recordDiff: recordDiff, historyRows: historyRows, historyBlocks: historyBlocks,
     restorePlan: restorePlan, restoreApply: restoreApply,
     isRevNote: isRevNote, stripRevNote: stripRevNote, revNotes: revNotes,
-    specKinds: specKinds, specKindInfo: specKindInfo, specLinkWords: specLinkWords, specLinkWord: specLinkWord, specKindLink: specKindLink, specLinkItems: specLinkItems, specLinkText: specLinkText, specLinkDir: specLinkDir, specUsesItems: specUsesItems, specEnabled: specEnabled, liveSpec: liveSpec, newSection: newSection, specStamp: specStamp, mergeSpec: mergeSpec, specResolvePlan: specResolvePlan, specResolveApply: specResolveApply, specBase: specBase, specStampKey: specStampKey, specHeading: specHeading, specHeadingLine: specHeadingLine, specPlain: specPlain,
+    specKinds: specKinds, specKindInfo: specKindInfo, specLinkWords: specLinkWords, specLinkWord: specLinkWord, specKindLink: specKindLink, specLinkItems: specLinkItems, specLinkText: specLinkText, specLinkDir: specLinkDir, specUsesItems: specUsesItems, specEnabled: specEnabled, liveSpec: liveSpec, newSection: newSection, specStamp: specStamp, mergeSpec: mergeSpec, specResolvePlan: specResolvePlan, specResolveApply: specResolveApply, specBase: specBase, specStampKey: specStampKey, specHeading: specHeading, specHeadingLine: specHeadingLine, specPlain: specPlain, specRich: specRich, specRichPlain: specRichPlain, specListNumbers: specListNumbers, specRange: specRange, specOfferWords: specOfferWords, specPowerOn: specPowerOn, specPowerItems: specPowerItems, specPowerText: specPowerText, specPowerOf: specPowerOf, specPowerConvert: specPowerConvert, SPEC_LIST_MAX: SPEC_LIST_MAX,
     specSpans: specSpans, specCells: specCells, specUseIs: specUseIs, specUseId: specUseId, specRemoveUnit: specRemoveUnit, specBrokenMarks: specBrokenMarks, SPEC_BODY_MAX: SPEC_BODY_MAX, specTooLong: specTooLong, specKindLabel: specKindLabel, specKindPlural: specKindPlural, specSentences: specSentences, specContext: specContext, specBlocks: specBlocks, specAnalysis: specAnalysis, specEdit: specEdit,
     specToEditor: specToEditor, specFromEditor: specFromEditor, specSplit: specSplit, specSave: specSave, specToText: specToText, specSaveAll: specSaveAll, specSetLine: specSetLine, specUsesNames: specUsesNames, specRenameUses: specRenameUses, specRename: specRename, specAddBlock: specAddBlock, specMoveBlock: specMoveBlock, specNest: specNest, specGroup: specGroup, specUngroup: specUngroup, specCommentTags: specCommentTags, specMarkdown: specMarkdown, specSummary: specSummary, specTemplate: specTemplate,
     newer: newer, mergeMaps: mergeMaps, mergeProjects: mergeProjects, mergeLocalCopies: mergeLocalCopies,

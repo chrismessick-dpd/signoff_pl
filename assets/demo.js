@@ -103,5 +103,7 @@
 
   // A demo file by blob sha (the ME reviews' Partcheck models and pictures), or null.
   function file(sha) { return demoFiles[sha] || null; }
-  S.plDemo = { build: build, snapshot: SNAP, file: file };
+  // A demo review's stored folder as files and their blob shas (app.js keeps a copy to write into).
+  function folder(id) { return PCK[id] ? { index: JSON.parse(JSON.stringify(PCK[id].index)), shas: Object.assign({}, PCK[id].shas) } : null; }
+  S.plDemo = { build: build, snapshot: SNAP, file: file, folder: folder };
 })(window.Signoff = window.Signoff || {});

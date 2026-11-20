@@ -70,7 +70,7 @@
     var demo = S.plDemo.build();
     projects = {}; projects[demo.project.slug] = demo.project;
     index = demo.index; dirty = {}; ui.slug = demo.project.slug; ui.closed = {};
-    save('projects', projects); save('index', index); save('dirty', dirty); save('demoVersion', DEMO_VERSION);
+    save('projects', projects); save('index', index); save('dirty', dirty); save('demoVersion', DEMO_VERSION); save('demoFolders', {});
     save('reqOverlay', {}); save('reqSeen', {});   // the Requirements tab's demo writes belong to the old demo
     save('accessDemo', null);                       // People & access: the demo's rosters start over too
   }
@@ -675,16 +675,24 @@
   function checkerModel(n, entry) {
     var x = checkerPart(n, entry);
     if (!x || !x.mesh) return null;
-    return { file: '', size: 0, srcTris: x.mesh.srcTris || x.mesh.tris, tris: x.mesh.tris, bboxMm: x.mesh.bboxMm, step: null, views: [],
-      mesh: { sha: x.mesh.sha, size: x.mesh.size }, repo: entry.preview.repo, partcheck: { at: entry.preview.at, massG: x.massG, material: x.material, number: x.partNumber } };
+    return { file: x.file || '', size: 0, srcTris: x.mesh.srcTris || x.mesh.tris, tris: x.mesh.tris, bboxMm: x.mesh.bboxMm, step: x.step || null, views: [],
+      mesh: { sha: x.mesh.sha, size: x.mesh.size }, repo: entry.preview.repo,
+      partcheck: { at: x.at || entry.preview.at, massG: x.massG, material: x.material, number: x.partNumber, source: x.source || 'partcheck', by: x.by || '' } };
   }
+  // A mechanical part's model lives with its Signoff ME review (docs/part-models.md): Partcheck, PL, and ME
+  // all write it there. A Part linked to an ME review may still carry PL's own copy (`node.model`, from before,
+  // or another browser's unsynced attach); it shows only while it's newer than the review's.
+  function meLinked(n) { return !!(n && n.kind === 'part' && n.source === 'me' && n.ref && n.ref.tool === 'me' && n.ref.id); }
+  function ownWins(n, entry) { return !!modelOf(n) && !(meLinked(n) && P.storedWins(n, entry)); }
+  // The model a Part shows: its own, or the one stored with its review.
+  function modelFor(n, entry) { return ownWins(n, entry) ? modelOf(n) : checkerModel(n, entry); }
   // The picture set a Part shows: its attached model's, else its design's stored preview (for a
   // Partcheck review, the Part's own part, else the hero part).
   // A board keeps its Fabcheck pictures on tiles even with a model; the model is for the 3D view.
   function previewFor(n, entry) {
     var pv = entry && entry.preview;
     if (n && n.source === 'ee' && pv) return pv;
-    var own = modelPreview(n);
+    var own = ownWins(n, entry) ? modelPreview(n) : null;
     if (own) return own;
     if (pv && pv.parts) return partViews(pv, checkerPart(n, entry) || heroPart(pv)) || pv;
     return pv || null;
@@ -693,9 +701,14 @@
   function fmtBytes(b) { return b >= 1048576 ? (Math.round(b / 104857.6) / 10).toLocaleString() + ' MB' : Math.max(1, Math.round(b / 1024)).toLocaleString() + ' kB'; }
   function storedBytes(m) { return (m.mesh.size || 0) + ((m.step && m.step.size) || 0) + m.views.reduce(function (a, v) { return a + (v.size || 0); }, 0); }
   // A Partcheck model's line: when it was sent, size, triangles, and its mass if Partcheck had one.
+  var STORED_BY = { partcheck: ['From Partcheck', 'sent'], pl: ['Attached in Signoff PL', 'attached'], me: ['Attached in Signoff ME', 'attached'] };
+  function storedBy(c) {
+    var w = STORED_BY[c.source] || STORED_BY.partcheck;
+    return w[0] + (c.at ? ', ' + w[1] + ' ' + relTime(c.at) : '') + (c.by && c.source !== 'partcheck' ? ' by ' + c.by : '');
+  }
   function checkerLine(m) {
     var c = m.partcheck;
-    return esc(['From Partcheck' + (c.at ? ', sent ' + relTime(c.at) : ''), m.bboxMm && m.bboxMm.join(' × ') + ' mm', m.tris.toLocaleString() + ' triangles',
+    return esc([storedBy(c), m.file, m.bboxMm && m.bboxMm.join(' × ') + ' mm', m.tris.toLocaleString() + ' triangles',
       c.massG != null && fmtMass(c.massG) + (c.material ? ' ' + c.material : '') + ' by Partcheck'].filter(Boolean).join(' · '));
   }
   function modelLine(m) {
@@ -735,7 +748,7 @@
     return (cv && cv.m3d) || null;
   }
   function openModelView(id) {
-    var p = current(), n = p && p.nodes[id], mdl = n && (modelOf(n) || checkerModel(n, P.partStatus(n, index).entry));
+    var p = current(), n = p && p.nodes[id], mdl = n && modelFor(n, P.partStatus(n, index).entry);
     if (!mdl) return;
     closeModelView();
     var e = P.partStatus(n, index).entry || {}, sub = [e.number || n.number || mpnOf(n), e.revision && 'Rev ' + e.revision].filter(Boolean).map(esc).join(' · ');
@@ -831,15 +844,16 @@
     e.preventDefault();
   }
   function downloadStep(id) {
-    var m = modelOf(current().nodes[id]);
+    var n = current().nodes[id], m = modelFor(n, P.partStatus(n, index).entry);
     if (!m || !m.step) return;
-    fileBlob(homeOf(current()), { sha: m.step.sha, type: 'application/gzip' })
+    var name = m.file || ((m.partcheck && m.partcheck.number) || 'model') + '.step';
+    fileBlob(m.repo || homeOf(current()), { sha: m.step.sha, type: 'application/gzip' })
       .then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); })
       .then(function (buf) { return S.model3d.gzip(new Uint8Array(buf), 'gunzip'); })
       .then(function (bytes) {
         var a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/step' }));
-        a.download = m.file; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        a.download = name; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
       }, function () { toast('Couldn’t get the STEP file'); });
   }
 
@@ -866,10 +880,96 @@
       })).then(function () { return rec; });
     });
   }
+  // ── A model kept with a Signoff ME review (docs/part-models.md) ──
+  // The review's folder, and a store that writes it: the review's home repo, resolved fresh from the tool's
+  // shared map (as the Requirements write does), or in the demo a folder kept in this browser.
+  function folderOf(entry) { return (P.toolById(entry.tool).previews || 'partcheck/') + entry.id + '/preview/'; }
+  function reviewHome(entry) {
+    var tool = P.toolById(entry.tool), token = getToken();
+    var data = new S.GitHubStore({ owner: settings.owner, repo: tool.dataRepo, branch: settings.branch, dataPath: '', token: token });
+    return data.snapshot().then(function (snap) {
+      var u = snap.entries.filter(function (e) { return e.path === 'users.json'; })[0];
+      return u ? data.blob(u.sha).then(function (txt) { return M.sharedRepo(JSON.parse(txt), entry.id); }) : '';
+    }, function (err) {
+      if ((err.status === 404 || err.status === 403) && entry.repo) return entry.repo;
+      throw err;
+    }).then(function (shared) {
+      var full = shared || settings.owner + '/' + tool.dataRepo;
+      return { full: full, store: new S.GitHubStore({ owner: full.split('/')[0], repo: full.split('/')[1], branch: settings.branch, dataPath: '', token: token }) };
+    });
+  }
+  // The demo's folders: what Partcheck's demo Send stored, plus what was attached here since.
+  var demoFolders = DEMO ? load('demoFolders', {}) || {} : {};
+  function demoHome(entry) {
+    var dir = folderOf(entry), f = demoFolders[entry.id] || (S.plDemo.folder && S.plDemo.folder(entry.id)) || { index: null, shas: {} };
+    var store = {
+      snapshot: function () {
+        var entries = Object.keys(f.shas).map(function (name) { return { type: 'blob', path: dir + name, sha: f.shas[name] }; });
+        if (f.index) entries.push({ type: 'blob', path: dir + 'index.json', sha: 'demo-index' });
+        return Promise.resolve({ head: 'demo', entries: entries });
+      },
+      blobBytes: function (sha) {
+        if (sha === 'demo-index') return Promise.resolve(new TextEncoder().encode(JSON.stringify(f.index)));
+        return fileBlob('', { sha: sha }).then(function (b) { if (!b) throw new Error('not found'); return b.arrayBuffer(); }).then(function (b) { return new Uint8Array(b); });
+      },
+      putFiles: function (files) {
+        return Promise.all(files.map(function (x) {
+          var name = x.path.slice(dir.length);
+          if (name === 'index.json') { f.index = x.remove ? null : JSON.parse(x.text); return; }
+          if (x.remove) { delete f.shas[name]; return; }
+          return S.github.gitBlobShaBytes(x.bytes).then(function (sha) { f.shas[name] = sha; return pvPut(sha, new Blob([x.bytes])); });
+        })).then(function () { demoFolders[entry.id] = f; save('demoFolders', demoFolders); return { pushed: files.length }; });
+      }
+    };
+    return Promise.resolve({ full: '', store: store });
+  }
+  // After a write: the review's preview in PL's index, rebuilt from what was written, so the Part shows it
+  // before the next read of the designs.
+  function refreshFolder(key, entry, home) {
+    var dir = folderOf(entry);
+    return home.store.snapshot().then(function (snap) {
+      var shas = {}, idx = null, at = snap.entries.filter(function (e) { return e.path === dir + 'index.json'; })[0];
+      snap.entries.forEach(function (e) { shas[e.path] = e.sha; });
+      return (at ? home.store.blobBytes(at.sha).then(function (b) { return JSON.parse(new TextDecoder().decode(b)); }) : Promise.resolve(null)).then(function (doc) {
+        idx = doc;
+        var pv = idx ? S.plReader.cleanPreview(idx, dir, shas, home.full) : null;
+        index.entries[key] = Object.assign({}, index.entries[key], { preview: pv || undefined });
+        if (!pv) delete index.entries[key].preview;
+        index = S.plReader.cleanIndex(index);
+        save('index', index);
+      });
+    });
+  }
+  /* Put a read STEP (prep) with the Part's ME review, or take its part out (prep null). Clears the Part's own
+     copy, since the review's is the one now. Resolves once written and shown. */
+  function saveToReview(nodeId, prep, keep, number) {
+    var p = current(), n = p.nodes[nodeId], key = P.refKey(n.ref), entry = index && index.entries[key];
+    if (!entry) return Promise.reject(new Error('PL hasn’t read that review yet. Sync, then try again.'));
+    if (!DEMO && !getToken()) return Promise.reject(new Error('Sign in first.'));
+    var what = prep ? 'Saving the model with ' + (entry.name || 'the review') + '…' : 'Removing the model from ' + (entry.name || 'the review') + '…';
+    toast(what);
+    return (DEMO ? demoHome(entry) : reviewHome(entry)).then(function (home) {
+      var dir = folderOf(entry), msg = 'Signoff PL: model for ' + (number || entry.name || 'a part') + (prep ? '' : ' removed') + ' (' + me() + ')';
+      var job = prep ? S.model3d.parts.put(home.store, dir, { prep: prep, partNumber: number, name: n.name || '', source: 'pl', by: me(), keepStep: keep, message: msg })
+        : S.model3d.parts.remove(home.store, dir, number, msg);
+      return job.then(function () { return refreshFolder(key, entry, home); });
+    }).then(function () {
+      if (p.nodes[nodeId] && p.nodes[nodeId].model) setNode(nodeId, { model: null });
+      else render();
+      toast(prep ? 'Saved with ' + (entry.name || 'the review') + ': Signoff ME and Partcheck see it too' : 'Removed from ' + (entry.name || 'the review'));
+    });
+  }
+
   // Attach a STEP to a Part without the sheet (also handy from the console): reads it, stores
   // what PL keeps, and fills an empty envelope from its size.
   function attachModel(nodeId, name, bytes, keepStep) {
-    var p = current();
+    var p = current(), n0 = p.nodes[nodeId];
+    if (meLinked(n0)) {
+      return S.model3d.prepare(name, bytes).then(function (prep) {
+        var e = index && index.entries[P.refKey(n0.ref)];
+        return saveToReview(nodeId, prep, keepStep !== false, n0.number || (e && e.number) || '');
+      });
+    }
     return S.model3d.prepare(name, bytes).then(function (prep) { return modelRecord(p, nodeId, prep, keepStep !== false); }).then(function (rec) {
       var n = p.nodes[nodeId], f = { model: rec };
       if (!n.envelopeMm && rec.bboxMm) f.envelopeMm = rec.bboxMm.join(' × ');
@@ -975,10 +1075,8 @@
     ids.forEach(function (id) {
       var n = t.nodes[id];
       if (n.kind !== 'part') return;
-      var e = P.partStatus(n, index).entry, m = modelOf(n), pv = e && e.preview;
+      var e = P.partStatus(n, index).entry, m = modelFor(n, e), pv = e && e.preview;
       if (m) { parts.push({ id: id, n: n, kind: 'model', model: m }); return; }
-      var cm = checkerModel(n, e);
-      if (cm) { parts.push({ id: id, n: n, kind: 'model', model: cm }); return; }
       if (n.source === 'ee' && pv) {
         var size = boardSize(n, e);
         if (size) parts.push({ id: id, n: n, kind: 'board', size: size, pv: pv }); else sizeless.push(id);
@@ -2140,7 +2238,7 @@
     var n = t.nodes[id], st = P.partStatus(n, index), tool = P.toolById(n.source);
     var html = '<aside class="map-ins card" aria-label="' + esc(n.name) + '"><button class="icon-btn map-ins-close" data-act="close-ins" aria-label="Close">×</button>';
     var e = st.entry || {}, s = st.summary;
-    var pv = previewFor(n, st.entry), mdl = modelOf(n) || checkerModel(n, st.entry), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
+    var pv = previewFor(n, st.entry), mdl = modelFor(n, st.entry), side = pv && pv.images.some(function (i) { return i.key === ui.pic; }) ? ui.pic : '';
     var turn = mdl && ui.pic === '3d';
     html += '<div class="map-ins-art">' + (turn ? '<canvas class="m3d" data-mesh="' + esc(mdl.mesh.sha) + '"' + (mdl.repo ? ' data-repo="' + esc(mdl.repo) + '"' : '') + ' aria-label="3D view: drag to turn, right-drag to pan, scroll to zoom"></canvas>' : art(n, true, e, side)) +
       (pv && (sides(pv).length > 1 || mdl) ? '<div class="seg map-ins-flip">' + sides(pv).map(function (i) {
@@ -2172,7 +2270,7 @@
       html += '<p class="map-ins-text">' + stateChip(st) + ' ' + esc(STATE_TEXT[st.state][2]) + '</p>';
     }
     if (n.notes) html += '<p class="map-ins-text">' + esc(n.notes) + '</p>';
-    if (mdl && mdl.partcheck) html += '<p class="note">' + checkerLine(mdl) + '</p>';
+    if (mdl && mdl.partcheck) html += '<p class="note">' + checkerLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
     else if (mdl) html += '<p class="note">' + modelLine(mdl) + (mdl.step ? ' · <a href="#" data-act="get-step" data-id="' + esc(id) + '">Download STEP</a>' : '') + '</p>';
     if (P.isAssemblyDesign(st.entry)) {
       html += '<div class="ins-own"><p class="map-ins-text">' + srcChip(n.source) + ' ' + esc(tool.name) + ' reviews this as an assembly. Link it to an assembly here and the review shows on that branch, counted with the Parts inside it.</p>' +
@@ -2735,7 +2833,14 @@
     }
     // A STEP is read here when picked and stored on Save. `mdl` is the Part's model (null once
     // removed); `prep` a newly read one.
-    var mdl = id && n.kind === 'part' ? P.cleanModel(n.model) : null, prep = null, keepStep = true, reading = '';
+    var mdl = id && n.kind === 'part' ? P.cleanModel(n.model) : null, prep = null, keepStep = true, reading = '', folderGone = false;
+    // A Part linked to an ME review keeps its model with the review (docs/part-models.md).
+    function toReview() { return kind === 'part' && source === 'me' && mode === 'design' && !!linked && !isAsmKey(linked); }
+    function folderModel() {
+      if (!toReview() || folderGone) return null;
+      var e = index && index.entries[linked];
+      return e ? checkerModel(Object.assign({}, n, { source: 'me', number: val(w, '#f-number') || n.number || '' }), e) : null;
+    }
     function modelField() {
       if (reading) return '<div class="m-busy"><span class="spin" aria-hidden="true"></span>' + esc(reading) + '</div>';
       var pick = '<label class="btn m-pick"><input type="file" accept=".step,.stp" id="f-step" hidden>' + (prep || mdl ? 'Replace…' : 'Attach STEP…') + '</label>';
@@ -2748,13 +2853,18 @@
             (prep.stepFits ? ' (' + fmtBytes(prep.stepGz.length) + ' compressed)' : ': too big, over ' + fmtBytes(S.model3d.STEP_CAP) + ' compressed') + '</label></div></div>' +
           '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
       }
+      var fm = !prep ? folderModel() : null;
+      if (fm && (!mdl || !ownWins(n, index && index.entries[linked]))) {
+        return '<div class="m-row"><div class="m-info"><b>' + esc(fm.file || fm.partcheck.number || 'Model') + '</b><span>' + checkerLine(fm) + '</span>' +
+          '<span>Kept with the Signoff ME review: Signoff ME, Partcheck, and anyone the review is shared with see it.</span></div></div>' +
+          '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
+      }
       if (mdl) {
         return '<div class="m-row"><div class="m-thumb map-art">' + art(n, false) + '</div><div class="m-info"><b>' + esc(mdl.file) + '</b><span>' + modelLine(mdl).replace(esc(mdl.file) + ' · ', '') + '</span>' +
           '<span>Stored: ' + fmtBytes(storedBytes(mdl)) + (mdl.step ? ', original STEP included' : ', model and pictures only') + '</span></div></div>' +
           '<div class="m-acts">' + pick + '<button type="button" class="btn" data-model="remove">Remove</button></div>';
       }
-      var pc = id && source === 'me' ? checkerModel(Object.assign({}, n, { source: source }), P.partStatus(n, index).entry) : null;
-      if (pc) return '<div class="m-drop">' + pick + '<span class="note">From Partcheck (sent ' + esc(relTime(pc.partcheck.at)) + '): its model and pictures show here. A STEP attached here would show instead.</span></div>';
+      if (toReview()) return '<div class="m-drop">' + pick + '<span class="note">Read in this browser, then kept with the Signoff ME review (at most ' + S.model3d.MAX_TRIS.toLocaleString() + ' triangles, pictures, and the STEP if you choose, compressed): Signoff ME, Partcheck, and anyone the review is shared with see it. It replaces any model of this part number there.</span></div>';
       return '<div class="m-drop">' + pick + '<span class="note">Read in this browser. PL stores a simplified model (at most ' + S.model3d.MAX_TRIS.toLocaleString() + ' triangles) and pictures in its data repo; the original STEP too if you choose, compressed. It shows on the map, in Gallery and Exploded, and turns in 3D in the inspector.</span></div>';
     }
     var prepUrls = [];
@@ -2800,7 +2910,10 @@
       if (pl) { source = lastPlanned = pl.dataset.plan; partFields(); return; }
       var s = e.target.closest('[data-source]');
       if (s) { source = lastGeneric = s.dataset.source; partFields(); return; }
-      if (e.target.closest('[data-model="remove"]')) { prep = null; mdl = null; refreshModel(); return; }
+      if (e.target.closest('[data-model="remove"]')) {
+        if (!prep && !mdl && folderModel()) folderGone = true;
+        prep = null; mdl = null; refreshModel(); return;
+      }
       var pk = e.target.closest('[data-pick]');
       if (pk) {
         linked = linked === pk.dataset.pick ? '' : pk.dataset.pick;
@@ -2869,7 +2982,14 @@
       if (reading) { toast('Still reading the STEP…'); return; }
       // A newly read STEP is stored once the Part exists (its files are named under its id).
       var pr = kind === 'part' && MODEL_SOURCES[source] ? prep : null, keep = keepStep;
+      // A linked ME Part's model goes to the review (and its own copy, if any, is cleared there).
+      var review = toReview() && (pr || folderGone), partNo = val(w, '#f-number') || ((index && index.entries[linked]) || {}).number || '';
+      if (review) fields.model = null;
       function attach(nodeId) {
+        if (review) {
+          saveToReview(nodeId, pr, keep, partNo).catch(function (err) { toast('Couldn’t save the model with the review: ' + err.message); });
+          return;
+        }
         if (!pr) return;
         modelRecord(p, nodeId, pr, keep).then(function (rec) {
           var f = { model: rec };

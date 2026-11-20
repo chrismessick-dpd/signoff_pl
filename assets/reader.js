@@ -162,8 +162,10 @@
     // Partcheck's parts (partcheck/docs/send-to-signoff-me.md): one review, several parts, each with
     // its views (image keys) and a PLM1 mesh stored beside them.
     var parts = (Array.isArray(doc.parts) ? doc.parts : []).map(function (x) {
-      var m = obj(obj(x).mesh), file = str(m.file);
-      return Object.assign({}, obj(x), { mesh: /^[a-z0-9-]{1,32}\.plm\.gz$/.test(file) && shas[dir + file] ? Object.assign({}, m, { sha: shas[dir + file] }) : null });
+      var m = obj(obj(x).mesh), file = str(m.file), s = obj(obj(x).step), sf = str(s.file);
+      return Object.assign({}, obj(x), { mesh: /^[a-z0-9-]{1,32}\.plm\.gz$/.test(file) && shas[dir + file] ? Object.assign({}, m, { sha: shas[dir + file] }) : null,
+        // A STEP kept by Signoff PL or Signoff ME (docs/part-models.md).
+        step: /^[a-z0-9-]{1,32}\.step\.gz$/.test(sf) && shas[dir + sf] ? Object.assign({}, s, { sha: shas[dir + sf] }) : null });
     });
     return images.length ? keepPreview({ repo: repo, runId: doc.runId, at: doc.at, hero: doc.hero, images: images, board: doc.board, parts: parts }) : null;
   }
@@ -178,9 +180,13 @@
     var mesh = /^[0-9a-f]{40}$/.test(str(m.sha)) ? { sha: str(m.sha), size: num(m.size), tris: num(m.tris, 1e7), srcTris: num(m.srcTris, 1e9),
       bboxMm: Array.isArray(m.bboxMm) && m.bboxMm.length === 3 ? m.bboxMm.map(mm) : null } : null;
     if (!Object.keys(views).length && !mesh) return null;
-    var g = Number(x.massG);
+    var g = Number(x.massG), st = obj(x.step);
+    // Who wrote it (docs/part-models.md): Partcheck's Send (no source), Signoff PL, or Signoff ME.
+    var source = { pl: 'pl', me: 'me' }[str(x.source)] || 'partcheck';
     return { key: key, partNumber: str(x.partNumber).slice(0, 80), revision: str(x.revision).slice(0, 20), name: str(x.name).slice(0, 160),
-      views: views, mesh: mesh, massG: isFinite(g) && g > 0 ? Math.round(g * 100) / 100 : null, material: str(x.material).slice(0, 80) };
+      views: views, mesh: mesh, massG: isFinite(g) && g > 0 ? Math.round(g * 100) / 100 : null, material: str(x.material).slice(0, 80),
+      source: source, at: str(x.at).slice(0, 40), by: str(x.by).slice(0, 80), file: str(x.file).slice(0, 160),
+      step: /^[0-9a-f]{40}$/.test(str(st.sha)) ? { sha: str(st.sha), size: num(st.size) } : null };
   }
   // A preview as stored in the index: images by blob sha, or (demo only) by a file under
   // assets/demo-previews/.
